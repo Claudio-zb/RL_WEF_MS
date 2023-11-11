@@ -2,15 +2,30 @@
 
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+from PPO_EMS import PPO_EMS
+from EMS_env import EMS_env
+import torch
+import numpy as np
+from Funciones.funcionesEMS import *
+from json import load
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+def train():
+
+    environment = EMS_env()
+    rl_model = PPO_EMS(environment, options)
+    rl_model.learn(200)
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    print_hi('PyCharm')
+    try:
+        with open('./train_options.json', 'r') as file:
+            options = load(file)
+        print(options)
+        print("Options loaded")
+    except Exception as e:
+        print(e)
+    train()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

@@ -1,11 +1,15 @@
 import pandas as pd
 import numpy as np
+from typing import Union, List, Tuple
 
 PATH = r'C:\Users\wenap\PycharmProjects\PPO_project\Data\EMS'
 
 
 def get_demand() -> np.ndarray:
-    """Read the demand data from the csv file and returns it as a numpy array"""
+    """
+    Read the demand data from the csv file and returns it as a numpy array
+    :return: Demand data as a numpy array
+    """
 
     hourly_demand = pd.read_csv(PATH + r'\consumption.csv', sep=',', decimal='.', index_col=0)
     hourly_demand = hourly_demand.values
@@ -19,8 +23,13 @@ def get_demand() -> np.ndarray:
     return demand
 
 
-def get_temperatura(season: str) -> np.ndarray:
-    """Read the temperature data from the csv file and returns it as a numpy array"""
+def get_temperatura(season: str = 'inv') -> np.ndarray:
+    """
+    Read the temperature data from the csv file and returns it as a numpy array
+
+    :param season: 'ver' for summer and 'inv' for winter
+    :return: Temperature data as a numpy array
+    """
     if season == 'ver':
         pass
     else:
@@ -30,8 +39,14 @@ def get_temperatura(season: str) -> np.ndarray:
     return temperatura
 
 
-def get_rad(season: str) -> np.ndarray:
-    """Read the radiation data from the csv file and returns it as a numpy array"""
+def get_rad(season: str = 'inv') -> np.ndarray:
+    """
+    Read the radiation data from the csv file and returns it as a numpy array
+
+    :param season: 'ver' for summer and 'inv' for winter
+    :return: Radiation data as a numpy array
+
+    """
     if season == 'ver':
         pass
     else:
@@ -48,7 +63,22 @@ def get_ref() -> np.ndarray:
     return refs
 
 
-def get_reward(E_residual, d_I_2, d_I_1, I_1, I_2, V_1, V_2, V_1_ref, V_2_ref, d_Qp, Qp):
+def get_reward(E_residual, d_I_2, d_I_1, I_1, I_2, V_1, V_2, V_1_ref, V_2_ref, d_Qp, Qp) -> float:
+    """
+    Computes the reward for the current state of the system
+    :param E_residual: Difference between the energy produced and the energy consumed
+    :param d_I_2: Change in the irrigation in the second day
+    :param d_I_1: Change in the irrigation in the first day
+    :param I_1: Irrigation in the first day
+    :param I_2: Irrigation in the second day
+    :param V_1: Water volume fulfilled the first day
+    :param V_2: Water volume fulfilled the second day
+    :param V_1_ref: Water volume demand the first day
+    :param V_2_ref: Water volume demand the second day
+    :param d_Qp: Change in the power of the pump
+    :param Qp: Power of the pump
+    :return: reward r(t)
+    """
     I_max = 1 / 1000
     I_min = 0
     Q_max = 1 / 1000
@@ -61,8 +91,8 @@ def get_reward(E_residual, d_I_2, d_I_1, I_1, I_2, V_1, V_2, V_1_ref, V_2_ref, d
         E_sell = 0
         E_buy = -E_residual
 
-    economic_component = 100 * E_buy - 25 * E_sell
-    actuator_penalty = 100 * d_I_1 ** 2 + 100 * d_I_2 ** 2 + 100 * d_Qp ** 2
+    economic_component = 25 * E_sell - 100 * E_buy
+    actuator_penalty = 1e4 * np.abs(d_I_1) + 1e4 * np.abs(d_I_2) + 1e4 * np.abs(d_Qp)
 
     constraints_penalty = 0
 
@@ -88,8 +118,15 @@ def get_reward(E_residual, d_I_2, d_I_1, I_1, I_2, V_1, V_2, V_1_ref, V_2_ref, d
     return reward
 
 
-def solar_power(rad: float, temp: float) -> float:
-    """Computes the solar power in kW given the radiation in W/m2 and the temperature in C """
+def solar_power(rad: Union[float, np.ndarray], temp: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    """
+    Computes the solar power in kW given the radiation in W/m2 and the temperature in C.
+
+    :parameter rad: Radiation in W/m2
+    :parameter temp: Temperature in C
+    :return: Solar power in kW
+
+    """
     Pn = 90 * 600 / 3600
     a_fv = -.0045
     Tn = 25
