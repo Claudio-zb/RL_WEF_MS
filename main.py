@@ -3,10 +3,7 @@
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 from PPO_EMS import PPO_EMS
-from EMS_env import EMS_env
-import torch
-import numpy as np
-from Funciones.funcionesEMS import *
+from environments.EMS_env import EMS_env
 from json import load
 
 

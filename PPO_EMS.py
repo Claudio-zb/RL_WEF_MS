@@ -4,11 +4,7 @@ from torch.distributions import MultivariateNormal
 from torch.optim import Adam
 from torch import nn
 import numpy as np
-import pickle
-from EMS_env import EMS_env
-from IPython.display import display, clear_output
-import matplotlib.pyplot as plt
-from Funciones.train_utils import sample_trajectory
+from environments.EMS_env import EMS_env
 from Funciones.train_utils import get_action
 
 
@@ -17,27 +13,22 @@ class PPO_EMS:
     This class implements the PPO algorithm for the EMS problem
     """
     def __init__(self, env: EMS_env, options=None):
-
         self._init_hyperparameters(options)
         self.env = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
-
-        self.policy = ActorNN(self.obs_dim, self.action_dim).cuda()
+        policy_low = self.env.action_low
+        policy_high = self.env.action_high
+        self.policy = ActorNN(self.obs_dim, self.action_dim, policy_low, policy_high).cuda()
         self.value = ValueNN(self.obs_dim).cuda()
 
         # creating covariance matrix to use get_action() method
-        self.cov_var = torch.full(size=(self.action_dim,), fill_value=0.65)
+        self.cov_var = torch.full(size=(self.action_dim,), fill_value=20.0)
         self.cov_mat = torch.diag(self.cov_var).cuda()
         self.policy_optim = Adam(self.policy.parameters(), lr=self.lr)
         self.critic_optim = Adam(self.value.parameters(), lr=self.lr)
         self.stats = {}
 
-        # create the real-time plots
-        fig, axs = plt.subplots(3, 1, figsize=(10, 10))
-        fig.set_size_inches(10, 10)
-        self.fig = fig
-        self.axs = axs
         self.scheduled = False
 
         if torch.cuda.is_available():
@@ -45,13 +36,14 @@ class PPO_EMS:
             self.value.cuda()
             self.cov_mat.cuda()
 
-    def learn(self, max_iter):
+    def learn(self, max_iter: int):
         """
         This method implements the PPO algorithm
         :param max_iter: number of iterations to run the algorithm
         :return:
         """
         self.value.train()
+        self.policy.train()
 
         # if GPU is to be used
         exploration_decay = 0.075 ** (1 / max_iter)
@@ -69,8 +61,13 @@ class PPO_EMS:
         best_reward_std = np.inf
         best_ep_reward = -np.inf
         while k < max_iter:
-            batch_results = self.rollout()
 
+            if k % 10 == 0:
+                self.env.show_sample(self.policy)
+
+            batch_results = self.rollout()
+            self.policy.train()
+            self.value.train()
             # update the statistics
             traj_reward_mean = batch_results["cumulative_rewards"].mean()
             traj_reward_var = batch_results["cumulative_rewards"].var()
@@ -95,42 +92,6 @@ class PPO_EMS:
             print(f"mean duration: {self.stats['durations'][k]}")
             print(f"mean reward: {self.stats['episode_reward'][k]}")
             print("--------------------------------------------------")
-
-            if k >= 0 and k % 10 == 0:  # update the plots
-                clear_output(wait=True)
-                states, actions = sample_trajectory(self.env, self.policy)
-                self.axs[0].clear()
-                self.axs[1].clear()
-                self.axs[2].clear()
-
-                V_global = np.concatenate((states[0:144, 6], states[144:-1, 7]), axis=0)
-                V_ref_global = np.concatenate((states[0:144, 0], states[144:-1, 1]), axis=0)
-                t = np.linspace(0, 48, 288)
-
-                self.axs[0].step(t, V_global, label='V_global')
-                self.axs[0].step(t, V_ref_global, label='V_ref_global')
-                self.axs[0].set_title('Water demand fulfilled')
-                self.axs[0].set_xlabel('Time (h)')
-                self.axs[0].set_ylabel('Water volume (m3)')
-
-                I_global = np.concatenate((states[0:144, 4], states[144:-1, 5]), axis=0)
-                self.axs[1].step(t, I_global, label='I_1')
-                self.axs[1].set_title('Irrigation level')
-                self.axs[1].set_xlabel('Time (h)')
-                self.axs[1].set_ylabel('Irrigation level (L/s)')
-
-                self.axs[2].step(t, actions[:, 3], label='Pbat')
-                self.axs[2].set_title('Battery power')
-                self.axs[2].set_xlabel('Time (h)')
-                self.axs[2].set_ylabel('Power (kW)')
-
-                self.axs[0].legend()
-                self.axs[1].legend()
-                self.axs[2].legend()
-
-                display(self.fig)
-                clear_output(wait=True)
-                plt.pause(0.2)
 
             if k >= 5:
                 last_durations = self.stats['durations'][k - 10:k]
@@ -193,11 +154,20 @@ class PPO_EMS:
             k += 1
         torch.save(self.policy, "./models/policy_v2_a.pt")
         print("max iter reached")
-        with open('weas/data.pkl', 'wb') as file:
-            pickle.dump(self.stats, file)
+        self.env.close()
+
+        self.value.eval()
+        self.policy.eval()
         return self.stats
 
-    def calculate_gae(self, rewards, values, dones):
+    def calculate_gae(self, rewards, values, dones) -> torch.Tensor:
+        """
+        This method calculates the Generalized Advantage Estimation
+        :param rewards: rewards collected from the environment
+        :param values: values predicted by the critic
+        :param dones: a list of booleans indicating if the episode is done or not
+        :return: the GAE
+        """
         batch_advantages = []
         for ep_rews, ep_vals, ep_dones in zip(rewards, values, dones):
             advantages = []
@@ -234,11 +204,13 @@ class PPO_EMS:
 
         return V, log_probs, dist.entropy()
 
-    def rollout(self) -> dict:
+    def rollout(self) -> dict[str, torch.Tensor]:
         """
         Collects data from the environment.
-        :return: A dictionary containing batch data.
+        :return: A dictionary containing batches of data.
         """
+        self.policy.eval()
+        self.value.eval()
         batch_results = {'batch_obs': [],
                          'batch_actions': [],
                          'batch_log_probs': [],
@@ -267,8 +239,8 @@ class PPO_EMS:
 
                 batch_results["batch_obs"].append(obs)  # collect the current observation
 
-                action, log_prob = get_action(self.policy, obs, self.cov_mat)  # compute the action
-                self.value.eval()
+                action, log_prob = get_action(self.policy, obs, self.cov_mat)  # compute the action and the log(prob)
+
                 val = self.value(obs)
 
                 obs, rew, terminated, truncated, info = self.env.step(action)  # transition to the next state

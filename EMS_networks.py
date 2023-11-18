@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+from torch.nn import init
 
 
 class ActorNN(nn.Module):
@@ -8,8 +9,11 @@ class ActorNN(nn.Module):
     Policy network
     """
 
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim: int, output_dim: int,
+                 upper_bound: np.ndarray, lower_bound: np.ndarray):
         super(ActorNN, self).__init__()
+        self.upper_bound = torch.tensor(upper_bound, dtype=torch.float32).cuda()
+        self.lower_bound = torch.tensor(lower_bound, dtype=torch.float32).cuda()
         self.shared_fc = nn.Sequential(
             nn.Linear(input_dim, 128),
             nn.ReLU(),
@@ -21,16 +25,20 @@ class ActorNN(nn.Module):
             nn.ReLU(),
             nn.Linear(128, output_dim)
         )
+        self._init_weights()
 
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
             obs = torch.tensor(obs, dtype=torch.float32).cuda()
         shared_output = self.shared_fc(obs)
-        # d_I_1_output = self.d_I_1(shared_output)
-        # d_I_2_output = self.d_I_2(shared_output)
-        # d_Q_p_output = self.d_Q_p(shared_output)
-        # Pbat_output = self.Pbat(shared_output)
-        return shared_output
+        x = torch.sigmoid(shared_output)
+        x = x * (self.upper_bound - self.lower_bound) + self.lower_bound
+        return x
+
+    def _init_weights(self):
+        for layer in self.shared_fc:
+            if isinstance(layer, nn.Linear):
+                init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
 
 
 class ValueNN(nn.Module):
