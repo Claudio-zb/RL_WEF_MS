@@ -16,14 +16,17 @@ class ActorNN(nn.Module):
         self.lower_bound = torch.tensor(lower_bound, dtype=torch.float32).cuda()
         self.shared_fc = nn.Sequential(
             nn.Linear(input_dim, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
-            nn.Linear(128, output_dim)
+            nn.Linear(128, output_dim),
+            nn.BatchNorm1d(output_dim),
         )
         self._init_weights()
 

@@ -4,21 +4,21 @@ from torch.distributions import MultivariateNormal
 from torch.optim import Adam
 from torch import nn
 import numpy as np
-from environments.EMS_env import EMS_env
+from environments.custom_env import Custom_env
 from Funciones.train_utils import get_action
 
 
-class PPO_EMS:
+class PPO:
     """
     This class implements the PPO algorithm for the EMS problem
     """
-    def __init__(self, env: EMS_env, options=None):
+    def __init__(self, env: Custom_env, options=None):
         self._init_hyperparameters(options)
         self.env = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
-        policy_low = self.env.action_low
-        policy_high = self.env.action_high
+        policy_low = env.action_low
+        policy_high = env.action_high
         self.policy = ActorNN(self.obs_dim, self.action_dim, policy_low, policy_high).cuda()
         self.value = ValueNN(self.obs_dim).cuda()
 
@@ -43,7 +43,6 @@ class PPO_EMS:
         :return:
         """
         self.value.train()
-        self.policy.train()
 
         # if GPU is to be used
         exploration_decay = 0.075 ** (1 / max_iter)
@@ -66,8 +65,6 @@ class PPO_EMS:
                 self.env.show_sample(self.policy)
 
             batch_results = self.rollout()
-            self.policy.train()
-            self.value.train()
             # update the statistics
             traj_reward_mean = batch_results["cumulative_rewards"].mean()
             traj_reward_var = batch_results["cumulative_rewards"].var()
@@ -79,7 +76,6 @@ class PPO_EMS:
             if traj_reward_mean > best_reward_mean and traj_reward_var < best_reward_std and np.array(
                     batch_results["batch_lens"]).mean() >= 200:
                 best_reward_mean = traj_reward_mean
-                traj_reward_var = traj_reward_var
                 torch.save(self.policy, "./models/policy_best_a.pt")
                 print("best cumulative reward so far")
 
@@ -107,13 +103,13 @@ class PPO_EMS:
             V, _, _ = self.evaluate(batch_results["batch_obs"], batch_results["batch_actions"])
 
             # Calculate Advantage
-
+            self.value.eval()
             V = self.value(batch_results["batch_obs"]).squeeze()
             A_k = batch_results["batch_rtgs"] - V.detach()  # ALG STEP 5
             A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
 
             # The learning part
-
+            self.policy.train()
             for j in range(self.n_epochs_policy):  # policy update
                 _, curr_log_probs, entropy = self.evaluate(batch_results["batch_obs"], batch_results["batch_actions"])
                 ratios = torch.exp(curr_log_probs - batch_results["batch_log_probs"])  # P(a_t|s_t) / P_old(a_t|s_t)
@@ -130,6 +126,9 @@ class PPO_EMS:
                 nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
                 self.policy_optim.step()
 
+            self.policy.eval()
+            self.value.train()
+
             for j in range(self.n_epochs_critic):  # update critics
 
                 # Calculate V_phi and pi_theta(a_t | s_t)
@@ -142,6 +141,8 @@ class PPO_EMS:
                 critic_loss.backward()
                 nn.utils.clip_grad_norm_(self.value.parameters(), self.max_grad_norm)  # Clip gradients
                 self.critic_optim.step()
+
+            self.value.eval()
             frac = k / max_iter
             new_lr = self.lr * (1.0 - frac)
             new_lr = max(new_lr, 5e-5)
@@ -195,10 +196,11 @@ class PPO_EMS:
         :return:
         """
         # Calculate log probabilities using the most recent network
+        # self.policy.train()
         mean = self.policy(batch_obs)
         # cov_matrix = torch.diag(std.squeeze(1)).cuda()
         dist = MultivariateNormal(mean, self.cov_mat)
-        log_probs = dist.log_prob(batch_acts.squeeze(1)).cuda()
+        log_probs = dist.log_prob(batch_acts).cuda()
         self.value.eval()
         V = self.value(batch_obs).squeeze()
 

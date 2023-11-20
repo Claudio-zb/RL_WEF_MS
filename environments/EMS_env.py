@@ -3,11 +3,11 @@ from numpy import ndarray
 import matplotlib.pyplot as plt
 
 from Funciones.funcionesEMS import *
-import gymnasium as gym
 from gymnasium import spaces
+from environments.custom_env import Custom_env
 
 
-class EMS_env(gym.Env):
+class EMS_env(Custom_env):
     """
     Environment for the Energy Management System
     """
@@ -114,6 +114,8 @@ class EMS_env(gym.Env):
 
         self.action_high = np.array([100, 100, self.Pbat_max],
                                     dtype=np.float32)
+
+        super().__init__(self.action_low, self.action_high)
 
         # Agent params
         self.action_space = spaces.Box(low=self.action_low,
@@ -335,26 +337,6 @@ class EMS_env(gym.Env):
 
         plt.pause(0.1)
         plt.show()
-    
-    def sample_trajectory(self, policy, max_steps: int = 288):
-        """
-        Sample a trajectory from the environment using the policy.
-        :param policy: Policy to be used
-        :param max_steps: Maximum number of steps to be taken
-        :return: states and actions of the trajectory
-        """
-        policy.eval()
-        states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
-        actions = np.zeros((max_steps, self.action_space.shape[0]))
-        x0, _ = self.reset()
-        states[0] = x0
-        for i in range(max_steps):
-            action = policy(states[i])
-            actions[i] = action.detach().cpu().numpy()
-            x_next, _, _, _, _ = self.step(actions[i])
-            states[i + 1] = x_next
-        policy.train()
-        return states, actions
 
     def close(self):
         """

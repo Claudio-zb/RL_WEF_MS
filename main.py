@@ -2,16 +2,17 @@
 
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-from PPO_EMS import PPO_EMS
+from PPO import PPO
 from environments.EMS_env import EMS_env
+from environments.Quad_env import Quad_env
 from json import load
 
 
 def train():
 
-    environment = EMS_env()
-    rl_model = PPO_EMS(environment, options)
-    rl_model.learn(200)
+    environment = Quad_env()
+    rl_model = PPO(environment, options)
+    rl_model.learn(1000)
 
 
 # Press the green button in the gutter to run the script.
