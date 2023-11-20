@@ -12,7 +12,7 @@ def train():
 
     environment = Quad_env()
     rl_model = PPO(environment, options)
-    rl_model.learn(1000)
+    rl_model.learn(400)
 
 
 # Press the green button in the gutter to run the script.

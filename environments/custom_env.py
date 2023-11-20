@@ -27,6 +27,7 @@ class Custom_env(ABC, gym.Env):
         states[0] = x0
         for i in range(max_steps):
             action = policy(states[i])
+            action = action.squeeze()
             actions[i] = action.detach().cpu().numpy()
             x_next, _, _, _, _ = self.step(actions[i])
             states[i + 1] = x_next

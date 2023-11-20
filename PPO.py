@@ -42,7 +42,6 @@ class PPO:
         :param max_iter: number of iterations to run the algorithm
         :return:
         """
-        self.value.train()
 
         # if GPU is to be used
         exploration_decay = 0.075 ** (1 / max_iter)
@@ -100,8 +99,6 @@ class PPO:
                 self.policy_optim.param_groups[0]["lr"] = 0.0001
                 self.scheduled = True
 
-            V, _, _ = self.evaluate(batch_results["batch_obs"], batch_results["batch_actions"])
-
             # Calculate Advantage
             self.value.eval()
             V = self.value(batch_results["batch_obs"]).squeeze()
@@ -109,8 +106,10 @@ class PPO:
             A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
 
             # The learning part
+
+            # policy update
             self.policy.train()
-            for j in range(self.n_epochs_policy):  # policy update
+            for j in range(self.n_epochs_policy):
                 _, curr_log_probs, entropy = self.evaluate(batch_results["batch_obs"], batch_results["batch_actions"])
                 ratios = torch.exp(curr_log_probs - batch_results["batch_log_probs"])  # P(a_t|s_t) / P_old(a_t|s_t)
 
@@ -129,7 +128,8 @@ class PPO:
             self.policy.eval()
             self.value.train()
 
-            for j in range(self.n_epochs_critic):  # update critics
+            # critic update
+            for j in range(self.n_epochs_critic):
 
                 # Calculate V_phi and pi_theta(a_t | s_t)
                 self.critic_optim.zero_grad()

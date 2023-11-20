@@ -33,6 +33,8 @@ class ActorNN(nn.Module):
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
             obs = torch.tensor(obs, dtype=torch.float32).cuda()
+        if obs.dim() == 1:
+            obs = obs.unsqueeze(0)
         shared_output = self.shared_fc(obs)
         x = torch.sigmoid(shared_output)
         x = x * (self.upper_bound - self.lower_bound) + self.lower_bound

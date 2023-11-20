@@ -105,6 +105,9 @@ class Quad_env(Custom_env):
 
         next_state = self.A * self._current_state - 0.1 * self._prev_state ** 2 + self.b * u
 
+        cum_error = ((next_state - self._reference) ** 2 + (self._current_state - self._reference) ** 2 +
+                     (self._prev_state - self._reference) ** 2 + (self._prev_prev_state - self._reference) ** 2)
+
         # Next timestep
         self._prev_prev_state = self._prev_state
         self._prev_state = self._current_state
@@ -120,7 +123,7 @@ class Quad_env(Custom_env):
         else:
             truncated = False
 
-        reward = np.exp(-0.001 * (2 * (self._reference - self._current_state) ** 2 + 200 * d_action ** 2))
+        reward = 2*np.exp(-0.001 * (cum_error + 200 * d_action ** 2))
 
         if abs(self._reference - self._current_state) > bound:
             self._current_state = np.array([bound])
