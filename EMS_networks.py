@@ -72,3 +72,28 @@ class ValueNN(nn.Module):
             obs = torch.tensor(obs, dtype=torch.float32)
             obs = obs.unsqueeze(0).cuda()
         return self.structure(obs)
+
+
+class Q_network(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(Q_network, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.structure = nn.Sequential(
+            nn.BatchNorm1d(input_dim),
+            nn.Linear(input_dim, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Linear(128, 48),
+            nn.ReLU(),
+            nn.Linear(48, output_dim)
+        )
+
+    def forward(self, obs):
+        if isinstance(obs, np.ndarray):
+            obs = torch.tensor(obs, dtype=torch.float32)
+            obs = obs.unsqueeze(0).cuda()
+        return self.structure(obs)

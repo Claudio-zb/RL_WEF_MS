@@ -175,7 +175,7 @@ class EMS_env(Custom_env):
         irrigation_penalty = 0
         if self.Vt <= 0:  # If the tank is empty, there is no irrigation
             self.Irr = 0
-            irrigation_penalty = -300
+            irrigation_penalty = 0  #-300
 
         Vt_to_fill = self.Vt_max - self.Vt - self.dt * (self.Irr * 1e-6)  # Amount of water that can be filled
         Vt_available = self.Vt - self.Vt_min - self.dt * (self.Irr * 1e-6)  # Amount of water that can be discharged
@@ -183,11 +183,11 @@ class EMS_env(Custom_env):
         extraction_penalty = 0
         if Vt_to_fill <= 0 < self.Q_p:  # If the tank is full and the pump is feeding, the pump is turned off
             self.Q_p = 0
-            extraction_penalty = -300
+            extraction_penalty = 0  # -300
 
         if Vt_available <= 0 and self.Q_p < 0:  # If the tank is empty and the pump is extracting, the pump is turned off
             self.Q_p = 0
-            extraction_penalty = -300
+            extraction_penalty = 0  #-300
 
         self.p_fv = solar_power(self.radiacion, self.temperatura)
         P_Q_p = self.dt * self.B_p * (self.Q_p * 1e-6) * self.h_p_const / 1e3  # water pump power

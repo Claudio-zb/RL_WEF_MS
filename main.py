@@ -10,9 +10,11 @@ from json import load
 
 def train():
 
-    environment = Quad_env()
+    environment = Quad_env()  #Quad_env()
     rl_model = PPO(environment, options)
-    rl_model.learn(400)
+    results = rl_model.learn(400)
+    results.to_csv('./results.csv')
+
 
 
 # Press the green button in the gutter to run the script.

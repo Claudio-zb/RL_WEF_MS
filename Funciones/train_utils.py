@@ -2,7 +2,7 @@ import numpy as np
 from torch import distributions
 
 
-def get_action(policy, state, cov_mat):
+def get_action(policy, state, cov_mat) -> tuple[np.ndarray, np.ndarray]:
     """
     Sample an action from the policy considering exploration noise
     :param policy: policy to be used

@@ -102,8 +102,8 @@ def get_reward(E_residual,
         E_sell = 0
         E_buy = -E_residual
 
-    economic_component = (25 * E_sell - 100 * E_buy) / 100
-    actuator_penalty = (1/50)*(1e1 * d_Irr**2 + 1e1 * d_Qp ** 2 + 1 * d_Pbat ** 2)
+    economic_component = 0  #(25 * E_sell - 100 * E_buy) / 100
+    actuator_penalty = 0  #(1/50)*(1e1 * d_Irr**2 + 1e1 * d_Qp ** 2 + 1 * d_Pbat ** 2)
     follow_demand_reward = 200*np.exp(-0.1 * (V_Irr - V_ref)**2)
 
     constraints_penalty = 0

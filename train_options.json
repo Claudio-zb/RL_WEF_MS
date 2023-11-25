@@ -1,7 +1,7 @@
 {
   "path" : "results/quad_env",
   "timesteps_per_batch" : 3000,
-  "max_timesteps_per_episodes" : 288,
+  "max_timesteps_per_episodes" : 200,
   "episodes_per_batch" : 15,
   "gamma" : 0.91,
   "n_epochs_critic" : 10,

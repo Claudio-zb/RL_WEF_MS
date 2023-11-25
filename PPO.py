@@ -6,12 +6,15 @@ from torch import nn
 import numpy as np
 from environments.custom_env import Custom_env
 from Funciones.train_utils import get_action
+from RL_algorithm import RL_algorithm
 
 
-class PPO:
+class PPO(RL_algorithm):
     """
     This class implements the PPO algorithm for the EMS problem
     """
+
+
     def __init__(self, env: Custom_env, options=None):
         self._init_hyperparameters(options)
         self.env = env
@@ -36,11 +39,11 @@ class PPO:
             self.value.cuda()
             self.cov_mat.cuda()
 
-    def learn(self, max_iter: int):
+    def learn(self, max_iter: int) -> tuple[dict[str, np.ndarray], ActorNN]:
         """
         This method implements the PPO algorithm
         :param max_iter: number of iterations to run the algorithm
-        :return:
+        :return statistics and the policy
         """
 
         # if GPU is to be used
@@ -61,7 +64,7 @@ class PPO:
         while k < max_iter:
 
             if k % 10 == 0:
-                self.env.show_sample(self.policy)
+                self.show_trajectory(self.policy)
 
             batch_results = self.rollout()
             # update the statistics
@@ -80,7 +83,8 @@ class PPO:
 
             if self.stats['episode_reward'][k] > best_ep_reward:
                 best_ep_reward = self.stats['episode_reward'][k]
-                torch.save(self.policy, "./models/policy_best_ep.pt")
+                torch.save(self.policy, "models/policy_best_ep.pt")
+                torch.save(self.value, "models/value_best_ep.pt")
                 print("best episode reward so far")
 
             print(traj_reward_mean.float(), f" n_iter: {k}")
@@ -153,13 +157,17 @@ class PPO:
             self.cov_mat = torch.diag(self.cov_var).cuda()
 
             k += 1
-        torch.save(self.policy, "./models/policy_v2_a.pt")
+        torch.save(self.policy, "./models/policy_final.pt")
+        torch.save(self.value, "./models/value_final.pt")
         print("max iter reached")
         self.env.close()
 
         self.value.eval()
         self.policy.eval()
-        return self.stats
+        return self.stats, self.policy
+
+    def show_trajectory(self, policy):
+        self.env.show_sample(policy)
 
     def calculate_gae(self, rewards, values, dones) -> torch.Tensor:
         """
