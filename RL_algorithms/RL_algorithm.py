@@ -4,7 +4,10 @@ from torch import nn
 
 class RL_algorithm(ABC):
     """
-    Abstract class for RL algorithms
+    Abstract class for RL algorithms. All RL algorithms should inherit from this class. The main methods are:
+    - learn: learn the policy for the environment. It executes the training loop. Returns the training statistics and
+    the learned policy.
+    - show_trajectory: render the environment using the current policy
     """
 
     @abstractmethod

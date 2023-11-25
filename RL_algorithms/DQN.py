@@ -1,5 +1,6 @@
 import random
 from itertools import count
+import pandas as pd
 
 import matplotlib.pyplot as plt
 import torch
@@ -7,16 +8,17 @@ import torch.nn as nn
 from torch.optim import Adam
 
 from EMS_networks import Q_network
-from Funciones.ReplayMemory import ReplayMemory, Transition
+from utils_functions.ReplayMemory import ReplayMemory, Transition
 from environments.custom_env import Custom_env
-from environments.Quad_env import Quad_env
 import numpy as np
-from RL_algorithm import RL_algorithm
+from RL_algorithms.RL_algorithm import RL_algorithm
 
 
 class DQN(RL_algorithm):
     """
-    This class implements the DQN algorithm
+    This class implements the DQN algorithm. It can handle discrete action spaces.
+    It is based on Adam Paszke and Mark Towers' implementation:
+    https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
     """
 
     def show_trajectory(self, policy):
@@ -33,14 +35,22 @@ class DQN(RL_algorithm):
         self.policy_net = Q_network(self.obs_dim, self.action_dim).to(device)
         self.target_net = Q_network(self.obs_dim, self.action_dim).to(device)
         self.optimizer = Adam(self.policy_net.parameters(), lr=self.lr)
+        self._training_stats = {"mean_episode_rewards": [],
+                                "std_episode_rewards": [],
+                                "episodes": [],
+                                "steps": []}
 
-    def learn(self, n_episodes: int) -> tuple[dict, nn.Module]:
+    def learn(self, n_updates: int) -> tuple[dict, nn.Module]:
         device = self.device
-        stats = dict()
-
+        n_episodes = self.episodes_per_batch * n_updates
+        self._training_stats = {"mean_episode_rewards": np.zeros(n_episodes),
+                                "std_episode_rewards": np.zeros(n_episodes),
+                                "episodes": np.zeros(n_episodes),
+                                "steps": np.zeros(n_episodes)}
+        k_update = 0
         for i_episode in range(n_episodes):
             # Initialize the environment and get it's state
-            if i_episode % 10 == 0:
+            if i_episode % 100 == 0:
                 self.env.show_sample(self.policy_net)
             state, info = self.env.reset()
             state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
@@ -63,7 +73,8 @@ class DQN(RL_algorithm):
                 state = next_state
 
                 # Perform one step of the optimization (on the policy network)
-                self.optimize_model()
+                # Optimization is done every batch_size steps
+                self.optimize_model(k_update)
 
                 # Soft update of the target network's weights
                 # θ′ ← τ θ + (1 −τ )θ′
@@ -78,9 +89,9 @@ class DQN(RL_algorithm):
                     self.episode_durations.append(t + 1)
                     plt.plot(self.episode_durations)
                     break
-        return stats, self.policy_net
+        return self._training_stats, self.policy_net
 
-    def optimize_model(self):
+    def optimize_model(self, k_update: int):
         self.policy_net.train()
         if len(self.memory) < self.BATCH_SIZE:
             return
@@ -99,6 +110,18 @@ class DQN(RL_algorithm):
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action).to(self.device)
         reward_batch = torch.cat(batch.reward)
+
+        mean_reward = torch.mean(reward_batch)
+        std_reward = torch.std(reward_batch)
+
+        self._training_stats["mean_episode_rewards"][k_update] = mean_reward.item()
+        self._training_stats["std_episode_rewards"][k_update] = std_reward.item()
+
+        #print(f"Iteration: {k_update}")
+        #print(f"Mean reward: {mean_reward.item()}")
+        #print("------------------------")
+
+        k_update += 1
 
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
@@ -149,8 +172,7 @@ class DQN(RL_algorithm):
         :return:
         """
         if options is None:
-            self.BATCH_SIZE = 128
-            self.episodes_per_batch = 15
+            self.BATCH_SIZE = 2000
             self.gamma = 0.91
             self.n_epochs_critic = 10
             self.n_epochs_policy = 6
@@ -164,11 +186,12 @@ class DQN(RL_algorithm):
             self.EPS_DECAY = 200
             self.TAU = 0.001
             self.episode_durations = []
+            self.episodes_per_batch = 10
+            self.max_timesteps_per_episode = 200
 
         else:
             self.BATCH_SIZE = options['BATCH_SIZE']
-            self.timesteps_per_batch = options['timesteps_per_batch']
-            self.max_timesteps_per_episodes = options['max_timesteps_per_episodes']
+            self.max_timesteps_per_episode = options['max_timesteps_per_episodes']
             self.episodes_per_batch = options['episodes_per_batch']
             self.gamma = options['gamma']
             self.n_epochs_critic = options['n_epochs_critic']
@@ -178,8 +201,3 @@ class DQN(RL_algorithm):
             self.ent_coef = options['ent_coef']
             self.max_grad_norm = options['max_grad_norm']
             self.lam = options['lam']
-
-
-envi = Quad_env()
-mdl = DQN(envi)
-mdl.learn(5000)

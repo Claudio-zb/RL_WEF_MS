@@ -16,7 +16,7 @@ class Quad_env(Custom_env):
     """
 
     def __init__(self, toRender=False, continuous=False):
-        self.action_values = np.array([-10, -7, -5, -3, -1, -.5, -.1, 0, .1, .5, 1, 3, 5, 7, 10],
+        self.action_values = np.array([-20, -10, -7, -5, -3, -1, -.5, -.1, 0, .1, .5, 1, 3, 5, 7, 10, 20],
                                       dtype=np.float32)
         action_low = -25.0
         action_high = 25.0
@@ -27,7 +27,7 @@ class Quad_env(Custom_env):
                                            high=action_high,
                                            shape=(1,))
         else:
-            self.action_space = spaces.Discrete(15)
+            self.action_space = spaces.Discrete(17)
 
         # obs_space: y, y_prev, y_prev_prev, u_prev, u_prev_prev, y_ref
         self.observation_space = spaces.Box(low=-np.array([100, 100, 100, 20, 20, 10], dtype=np.float32),
@@ -86,13 +86,13 @@ class Quad_env(Custom_env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.initial_state = self.np_random.uniform(low=-6, high=6, size=1)
+        self.initial_state = self.np_random.uniform(low=-5, high=5, size=1)
         self._current_state = self.initial_state
         self._prev_state = self.initial_state
         self._prev_prev_state = self.initial_state
         self._prev_u = np.array([0.0])
         self._prev_prev_u = np.array([0.0])
-        self._reference = self.np_random.uniform(low=-6, high=6, size=1)
+        self._reference = self.np_random.uniform(low=-5, high=5, size=1)
 
         while np.abs(self._reference - self.initial_state) < 0.1:
             # Ensure that the initial state is not close to the reference
@@ -138,7 +138,7 @@ class Quad_env(Custom_env):
         else:
             truncated = False
 
-        reward = -(self._reference - self._current_state) ** 2
+        reward = -(self._reference - self._current_state) ** 2 - 0.1*d_action ** 2
 
         if abs(self._current_state) > bound:
             self._current_state = np.array([bound])*np.sign(self._current_state)

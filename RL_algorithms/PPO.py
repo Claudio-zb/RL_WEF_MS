@@ -5,15 +5,14 @@ from torch.optim import Adam
 from torch import nn
 import numpy as np
 from environments.custom_env import Custom_env
-from Funciones.train_utils import get_action
-from RL_algorithm import RL_algorithm
+from utils_functions.train_utils import get_action
+from RL_algorithms.RL_algorithm import RL_algorithm
 
 
 class PPO(RL_algorithm):
     """
-    This class implements the PPO algorithm for the EMS problem
+    This class implements the PPO algorithm. It can handle continuous action spaces.
     """
-
 
     def __init__(self, env: Custom_env, options=None):
         self._init_hyperparameters(options)
@@ -70,7 +69,8 @@ class PPO(RL_algorithm):
             # update the statistics
             traj_reward_mean = batch_results["cumulative_rewards"].mean()
             traj_reward_var = batch_results["cumulative_rewards"].var()
-            self.stats['episode_reward'][k] = float(batch_results["cumulative_rewards"].mean())  # np.array(batch_rews).mean()
+            self.stats['episode_reward'][k] = float(
+                batch_results["cumulative_rewards"].mean())  # np.array(batch_rews).mean()
             self.stats['means'][k] = traj_reward_mean.float()
             self.stats['vars'][k] = traj_reward_var.float()
             self.stats['durations'][k] = np.array(batch_results["batch_lens"]).mean()
@@ -83,8 +83,8 @@ class PPO(RL_algorithm):
 
             if self.stats['episode_reward'][k] > best_ep_reward:
                 best_ep_reward = self.stats['episode_reward'][k]
-                torch.save(self.policy, "models/policy_best_ep.pt")
-                torch.save(self.value, "models/value_best_ep.pt")
+                torch.save(self.policy, "../RL_EMS/models/policy_best_ep.pt")
+                torch.save(self.value, "../RL_EMS/models/value_best_ep.pt")
                 print("best episode reward so far")
 
             print(traj_reward_mean.float(), f" n_iter: {k}")
@@ -134,7 +134,6 @@ class PPO(RL_algorithm):
 
             # critic update
             for j in range(self.n_epochs_critic):
-
                 # Calculate V_phi and pi_theta(a_t | s_t)
                 self.critic_optim.zero_grad()
                 V, curr_log_probs, _ = self.evaluate(batch_results["batch_obs"], batch_results["batch_actions"])
@@ -157,8 +156,8 @@ class PPO(RL_algorithm):
             self.cov_mat = torch.diag(self.cov_var).cuda()
 
             k += 1
-        torch.save(self.policy, "./models/policy_final.pt")
-        torch.save(self.value, "./models/value_final.pt")
+        torch.save(self.policy, "../RL_EMS/models/policy_final.pt")
+        torch.save(self.value, "../RL_EMS/models/value_final.pt")
         print("max iter reached")
         self.env.close()
 
@@ -272,7 +271,8 @@ class PPO(RL_algorithm):
 
         # reshape data as a tensor
         batch_results["batch_obs"] = torch.tensor(np.array(batch_results["batch_obs"]), dtype=torch.float32).cuda()
-        batch_results["batch_actions"] = torch.tensor(np.array(batch_results["batch_actions"]), dtype=torch.float32).cuda()
+        batch_results["batch_actions"] = torch.tensor(np.array(batch_results["batch_actions"]),
+                                                      dtype=torch.float32).cuda()
         batch_results["batch_log_probs"] = torch.tensor(batch_results["batch_log_probs"], dtype=torch.float32).cuda()
 
         # for step 4, implement Rewards to-go
