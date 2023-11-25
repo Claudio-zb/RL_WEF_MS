@@ -2,7 +2,7 @@ from typing import Any
 from numpy import ndarray
 import matplotlib.pyplot as plt
 
-from Funciones.funcionesEMS import *
+from utils_functions.funcionesEMS import *
 from gymnasium import spaces
 from environments.custom_env import Custom_env
 
