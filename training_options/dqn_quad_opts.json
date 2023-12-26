@@ -13,5 +13,5 @@
   "ent_coef" : 0.01,
   "max_grad_norm" : 0.5,
   "lam" : 0.95,
-  "BATCH_SIZE" : 2000
+  "BATCH_SIZE" : 100
 }

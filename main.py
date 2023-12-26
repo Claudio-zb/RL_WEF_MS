@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 import torch
 
-alg_name = "DQN"
+alg_name = "PPO"
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     environment = Quad_env()
     rl_model = DQN(environment, options=None)
-    results, policy = rl_model.learn(1000)
+    results, policy = rl_model.learn(6000)
     torch.save(policy, full_path + r"\policy.pt")
     df = pd.DataFrame(results)
     df.to_csv(full_path + r"\training_results.csv")

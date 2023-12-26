@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 from environments.custom_env import Custom_env
 from typing import Union
 
-matplotlib.use('Qt5Agg')
-
 
 class Quad_env(Custom_env):
     """
@@ -33,7 +31,7 @@ class Quad_env(Custom_env):
         self.observation_space = spaces.Box(low=-np.array([100, 100, 100, 20, 20, 10], dtype=np.float32),
                                             high=np.array([100, 100, 100, 20, 20, 10], dtype=np.float32),
                                             shape=(6,))
-        self._reference = np.array([0.1])
+        self._reference = np.array([1.0])
         self.initial_state = np.array([1.0])
         self._current_state = np.array([1.0])
         self._prev_state = self.initial_state
@@ -92,11 +90,11 @@ class Quad_env(Custom_env):
         self._prev_prev_state = self.initial_state
         self._prev_u = np.array([0.0])
         self._prev_prev_u = np.array([0.0])
-        self._reference = self.np_random.uniform(low=-5, high=5, size=1)
+        self._reference = np.array([1.0]) # self.np_random.uniform(low=-5, high=5, size=1)
 
-        while np.abs(self._reference - self.initial_state) < 0.1:
+        # while np.abs(self._reference - self.initial_state) < 0.1:
             # Ensure that the initial state is not close to the reference
-            self._reference = self.np_random.uniform(low=-6, high=6, size=1)
+            # self._reference = self.np_random.uniform(low=-6, high=6, size=1)
 
         self.steps = 0
         observation = self._get_obs()
@@ -122,6 +120,9 @@ class Quad_env(Custom_env):
 
         cum_error = ((next_state - self._reference) + (self._current_state - self._reference) +
                      (self._prev_state - self._reference) + (self._prev_prev_state - self._reference))
+        
+        vect_error = np.array([next_state - self._reference, self._current_state - self._reference,
+                                 self._prev_state - self._reference, self._prev_prev_state - self._reference])
 
         # Next timestep
         self._prev_prev_state = self._prev_state
@@ -138,7 +139,8 @@ class Quad_env(Custom_env):
         else:
             truncated = False
 
-        reward = -(self._reference - self._current_state) ** 2 - 0.1*d_action ** 2
+        # reward = -(self._reference - self._current_state) ** 2 - 0.1*d_action ** 2
+        reward = np.exp(-0.01*np.dot(vect_error.T, vect_error) - 0.05*d_action ** 2)
 
         if abs(self._current_state) > bound:
             self._current_state = np.array([bound])*np.sign(self._current_state)
