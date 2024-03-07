@@ -1,14 +1,13 @@
 import random
 from itertools import count
-import pandas as pd
 
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-from torch.optim import Adam
+from torch.optim import AdamW
 
 from EMS_networks import Q_network
-from utils_functions.ReplayMemory import ReplayMemory, Transition
+from utils_functions.ReplayMemory import ReplayMemory, Transition, PrioritizedReplayMemory
 from environments.custom_env import Custom_env
 import numpy as np
 from RL_algorithms.RL_algorithm import RL_algorithm
@@ -27,37 +26,50 @@ class DQN(RL_algorithm):
     def __init__(self, env: Custom_env, options=None):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
-        self.memory = ReplayMemory(10000)
         self._init_hyperparameters(options)
+
+        self.memory = PrioritizedReplayMemory(10000)
         self.env = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
-        self.policy_net = Q_network(self.obs_dim, self.action_dim).to(device)
-        self.target_net = Q_network(self.obs_dim, self.action_dim).to(device)
-        self.optimizer = Adam(self.policy_net.parameters(), lr=self.lr)
-        self._training_stats = {"mean_episode_rewards": [],
-                                "std_episode_rewards": [],
-                                "episodes": [],
-                                "steps": []}
-
-    def learn(self, n_updates: int) -> tuple[dict, nn.Module]:
+        self.policy_net = Q_network(self.obs_dim, self.action_dim, device).to(device)
+        self.target_net = Q_network(self.obs_dim, self.action_dim, device).to(device)
+        self.optimizer = AdamW(self.policy_net.parameters(), lr=self.lr, amsgrad=True)
+        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9999)
+        self._training_stats = None
+        plt.ion()
+        self.stats_fig = plt.figure()
+        self.stats_axs = self.stats_fig.subplots(3, 1)
+        self.ep_steps = 0
+        self.ep_random_steps = 0
+    def learn(self, n_episodes: int) -> tuple[dict, nn.Module]:
         device = self.device
-        n_episodes = self.episodes_per_batch * n_updates
         self._training_stats = {"mean_episode_rewards": np.zeros(n_episodes),
                                 "std_episode_rewards": np.zeros(n_episodes),
-                                "episodes": np.zeros(n_episodes),
-                                "steps": np.zeros(n_episodes)}
+                                "episodes": np.array(np.arange(n_episodes)),
+                                "Q_values_policy": np.zeros(n_episodes),
+                                "Q_values_target": np.zeros(n_episodes),
+                                "steps": np.zeros(n_episodes),
+                                "action_randomness": np.zeros(n_episodes)}
+
         k_update = 0
         for i_episode in range(n_episodes):
             # Initialize the environment and get it's state
-            if i_episode % 100 == 0:
+            if i_episode % 50 == 0:
                 self.env.show_sample(self.policy_net)
             state, info = self.env.reset()
+            self.ep_random_steps = 0
+            self.ep_steps = 0
             state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-            for t in count():
+            ep_rewards = []
+            if i_episode >= 2000:
+                print("Time to debug!")
+            for t in count():  # begin episode
                 self.policy_net.eval()
-                action = self.select_action(state, t)
+                action = self.select_action(state, i_episode)
                 observation, reward, terminated, truncated, _ = self.env.step(action)
+                self.ep_steps += 1
+                ep_rewards.append(reward)
                 reward = torch.tensor(reward, device=device)
                 done = terminated or truncated
 
@@ -74,10 +86,10 @@ class DQN(RL_algorithm):
 
                 # Perform one step of the optimization (on the policy network)
                 # Optimization is done every batch_size steps
-                self.optimize_model(k_update)
+                k_update = self.optimize_model(k_update)
 
                 # Soft update of the target network's weights
-                # θ′ ← τ θ + (1 −τ )θ′
+                # θ′ ← τ θ + (1 − τ )θ′
                 target_net_state_dict = self.target_net.state_dict()
                 policy_net_state_dict = self.policy_net.state_dict()
                 for key in policy_net_state_dict:
@@ -85,17 +97,36 @@ class DQN(RL_algorithm):
                             1 - self.TAU)
                 self.target_net.load_state_dict(target_net_state_dict)
 
-                if done:
-                    self.episode_durations.append(t + 1)
-                    plt.plot(self.episode_durations)
+                if done:  # end episode
+                    ep_rewards = np.array(ep_rewards).flatten()
+                    self._training_stats["mean_episode_rewards"][i_episode] = ep_rewards.mean()
+                    self._training_stats["std_episode_rewards"][i_episode] = ep_rewards.std()
+                    self._training_stats["steps"][i_episode] = t + 1
+                    self._training_stats["action_randomness"][i_episode] = self.ep_random_steps / (t + 1)
+
+                    if len(self.memory) >= self.BATCH_SIZE:
+                        transitions, indices = self.memory.sample(self.BATCH_SIZE)
+                        batch = Transition(*zip(*transitions))
+                        state_batch = torch.cat(batch.state)
+
+                        self._training_stats["Q_values_target"][i_episode] = self.target_net(state_batch).max(1).values.mean().item()
+                        self._training_stats["Q_values_policy"][i_episode] = self.policy_net(state_batch).max(1).values.mean().item()
+
+                    print(f"Episode {i_episode} finished after {t + 1} timesteps")
+                    print(f"Mean reward: {ep_rewards.mean()}")
+                    print(f"Std of reward: {ep_rewards.std()}")
+                    print(f"Action randomness: {self.ep_random_steps / (t + 1)}")
+
+                    if i_episode > 10:
+                        self.update_training_plots(i_episode)
                     break
         return self._training_stats, self.policy_net
 
-    def optimize_model(self, k_update: int):
+    def optimize_model(self, k_update: int) -> int:
         self.policy_net.train()
         if len(self.memory) < self.BATCH_SIZE:
-            return
-        transitions = self.memory.sample(self.BATCH_SIZE)
+            return k_update
+        transitions, indices = self.memory.sample(self.BATCH_SIZE)
         # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
         # detailed explanation). This converts batch-array of Transitions
         # to Transition of batch-arrays.
@@ -111,18 +142,6 @@ class DQN(RL_algorithm):
         action_batch = torch.cat(batch.action).to(self.device)
         reward_batch = torch.cat(batch.reward)
 
-        mean_reward = torch.mean(reward_batch)
-        std_reward = torch.std(reward_batch)
-
-        self._training_stats["mean_episode_rewards"][k_update] = mean_reward.item()
-        self._training_stats["std_episode_rewards"][k_update] = std_reward.item()
-
-        #print(f"Iteration: {k_update}")
-        #print(f"Mean reward: {mean_reward.item()}")
-        #print("------------------------")
-
-        k_update += 1
-
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
@@ -137,11 +156,18 @@ class DQN(RL_algorithm):
         with torch.no_grad():
             next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1).values
         # Compute the expected Q values
-        expected_state_action_values = (next_state_values * self.gamma) + reward_batch
+        expected_state_action_values = (next_state_values * self.gamma) + reward_batch.squeeze(-1)
 
         # Compute Huber loss
-        criterion = nn.SmoothL1Loss()
+        criterion = nn.SmoothL1Loss(reduction='none')
         loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        # Update priorities
+        priorities = loss + 1e-5
+        self.memory.update_priorities(indices, priorities.detach().cpu().numpy())
+
+        # Average loss
+        loss = loss.mean()
 
         # Optimize the model
         self.optimizer.zero_grad()
@@ -149,12 +175,13 @@ class DQN(RL_algorithm):
         # In-place gradient clipping
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
         self.optimizer.step()
+        self.scheduler.step()
+        return k_update + 1
 
     def select_action(self, state, steps_done: int) -> torch.Tensor:
 
         sample = random.random()
-        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
-                        np.exp(-1. * steps_done / self.EPS_DECAY)
+        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * np.exp(-1. * steps_done / (self.EPS_DECAY))
         steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():
@@ -162,7 +189,9 @@ class DQN(RL_algorithm):
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 return self.policy_net(state).max(1).indices.view(1, 1)
+
         else:
+            self.ep_random_steps += 1
             return torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long)
 
     def _init_hyperparameters(self, options=None):
@@ -172,32 +201,86 @@ class DQN(RL_algorithm):
         :return:
         """
         if options is None:
-            self.BATCH_SIZE = 2000
-            self.gamma = 0.91
-            self.n_epochs_critic = 10
-            self.n_epochs_policy = 6
-            self.clip = 0.2
-            self.lr = 0.001
-            self.ent_coef = 0.01
-            self.max_grad_norm = 0.5
-            self.lam = 0.95
-            self.EPS_START = 0.9
-            self.EPS_END = 0.05
-            self.EPS_DECAY = 200
+            self.BATCH_SIZE = 512
+            self.gamma = 0.99
+            self.lr = 1e-4
+            self.EPS_START = 0.95
+            self.EPS_END = 0.001
+            self.EPS_DECAY = 1000
             self.TAU = 0.001
-            self.episode_durations = []
-            self.episodes_per_batch = 10
-            self.max_timesteps_per_episode = 200
 
         else:
             self.BATCH_SIZE = options['BATCH_SIZE']
-            self.max_timesteps_per_episode = options['max_timesteps_per_episodes']
-            self.episodes_per_batch = options['episodes_per_batch']
             self.gamma = options['gamma']
             self.n_epochs_critic = options['n_epochs_critic']
-            self.n_epochs_policy = options['n_epochs_policy']
-            self.clip = options['clip']
             self.lr = options['lr']
-            self.ent_coef = options['ent_coef']
-            self.max_grad_norm = options['max_grad_norm']
-            self.lam = options['lam']
+            self.EPS_START = options['EPS_START']
+            self.EPS_END = options['EPS_END']
+            self.EPS_DECAY = options['EPS_DECAY']
+            self.TAU = options['TAU']
+
+    def map_action(self, action: torch.Tensor) -> np.ndarray:
+        """
+            Map the action from the policy to the action of the environment
+            :param action:
+            :return:
+            """
+        index = action.item()
+        return np.array([self.action_values[index]])
+
+    def update_training_plots(self, episode: int):
+        """Updates the training plots"""
+        plt.figure(self.stats_fig.number)
+        self.stats_axs[0].clear()
+        self.stats_axs[1].clear()
+        self.stats_axs[2].clear()
+
+        window_length = 10
+
+        if episode < 1000:
+
+            mean_rewards = self._training_stats["mean_episode_rewards"][0:episode]
+            windowed_rewards = np.convolve(mean_rewards, np.ones(10) / 10, mode='valid')
+
+            #durations = self._training_stats["steps"][0:episode]
+            target_values = self._training_stats["Q_values_target"][0:episode]
+            policy_values = self._training_stats["Q_values_policy"][0:episode]
+            #windowed_duration = np.convolve(durations, np.ones(10) / 10, mode='valid')
+
+            self.stats_axs[0].plot(range(0, episode), mean_rewards, label="Mean reward")
+            self.stats_axs[0].plot(range(window_length - 1, episode), windowed_rewards, label="Windowed reward")
+
+            self.stats_axs[1].plot(range(0, episode), target_values, label="Target values")
+            self.stats_axs[1].plot(range(0, episode), policy_values, label="Policy value")
+            #self.stats_axs[1].plot(range(window_length - 1, episode), windowed_duration, label="Windowed duration")
+
+            self.stats_axs[2].plot(range(0, episode), self._training_stats["action_randomness"][0:episode],
+                                   label="Action randomness")
+        else:
+            mean_rewards = self._training_stats["mean_episode_rewards"][episode - 1000:episode]
+            #durations = self._training_stats["steps"][episode - 1000:episode]
+            target_values = self._training_stats["Q_values_target"][episode - 1000:episode]
+            policy_values = self._training_stats["Q_values_policy"][episode - 1000:episode]
+            windowed_rewards = np.convolve(mean_rewards, np.ones(window_length) / window_length, mode='valid')
+            #windowed_duration = np.convolve(durations, np.ones(10) / 10, mode='valid')
+
+            self.stats_axs[0].plot(range(episode - 1000, episode), mean_rewards, label="Mean reward")
+            self.stats_axs[0].plot(range(episode - 1000 + window_length - 1, episode),
+                                   windowed_rewards, label="Windowed reward")
+
+            self.stats_axs[1].plot(range(episode - 1000, episode), target_values, label="Target Values")
+            self.stats_axs[1].plot(range(episode - 1000, episode), policy_values, label="Policy Values")
+
+            #self.stats_axs[1].plot(range(episode - 1000 + window_length - 1, episode),
+            #                       windowed_duration, label="Windowed duration")
+            self.stats_axs[2].plot(range(episode - 1000, episode),
+                                   self._training_stats["action_randomness"][episode - 1000:episode],
+                                   label="Action randomness")
+        self.stats_axs[1].legend()
+        self.stats_axs[0].legend()
+
+        plt.pause(0.01)
+
+    def save(self):
+        """ Saves the training statistics and the model"""
+        pass

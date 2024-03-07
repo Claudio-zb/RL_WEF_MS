@@ -27,3 +27,12 @@ class RL_algorithm(ABC):
         :return:
         """
         pass
+    
+
+    @abstractmethod
+    def update_training_plots(self, i_episode: int):
+        """
+        Update the training plots
+        :return:
+        """
+        pass

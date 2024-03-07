@@ -75,8 +75,9 @@ class ValueNN(nn.Module):
 
 
 class Q_network(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, device):
         super(Q_network, self).__init__()
+        self.device = device
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.structure = nn.Sequential(
@@ -87,13 +88,23 @@ class Q_network(nn.Module):
             nn.Linear(128, 128),
             nn.BatchNorm1d(128),
             nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
             nn.Linear(128, 48),
             nn.ReLU(),
             nn.Linear(48, output_dim)
         )
+        self._init_weights()
 
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
             obs = torch.tensor(obs, dtype=torch.float32)
-            obs = obs.unsqueeze(0).cuda()
+            obs = obs.unsqueeze(0).to(self.device)
         return self.structure(obs)
+    
+    def _init_weights(self):
+        for layer in self.structure:
+            if isinstance(layer, nn.Linear):
+                init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')

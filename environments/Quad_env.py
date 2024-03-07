@@ -16,8 +16,7 @@ class Quad_env(Custom_env):
     """
 
     def __init__(self, toRender=False, continuous=False):
-        self.action_values = np.array([-20, -10, -7, -5, -3, -1, -.5, -.1, 0, .1, .5, 1, 3, 5, 7, 10, 20],
-                                      dtype=np.float32)
+        
         action_low = -25.0
         action_high = 25.0
         super().__init__(action_low, action_high, continuous=continuous)
@@ -27,12 +26,14 @@ class Quad_env(Custom_env):
                                            high=action_high,
                                            shape=(1,))
         else:
-            self.action_space = spaces.Discrete(17)
+            self.action_space = spaces.Discrete(13)
 
         # obs_space: y, y_prev, y_prev_prev, u_prev, u_prev_prev, y_ref
         self.observation_space = spaces.Box(low=-np.array([100, 100, 100, 20, 20, 10], dtype=np.float32),
                                             high=np.array([100, 100, 100, 20, 20, 10], dtype=np.float32),
                                             shape=(6,))
+        self.action_values = np.array([-20, -10, -4.5, -1.5, -.5, -.1, 0, .1, .5, 1.5, 4.5, 10, 20],
+                                      dtype=np.float32)
         self._reference = np.array([0.1])
         self.initial_state = np.array([1.0])
         self._current_state = np.array([1.0])
@@ -57,7 +58,7 @@ class Quad_env(Custom_env):
         fig, axs = plt.subplots(2, 1)
         self.fig = fig
         self.axs = axs
-        self.fig.suptitle('Energy Management System')
+        self.fig.suptitle('System Response')
         self.fig.tight_layout()
         self.fig.set_size_inches(10, 10)
 
@@ -86,13 +87,13 @@ class Quad_env(Custom_env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.initial_state = self.np_random.uniform(low=-5, high=5, size=1)
+        self.initial_state = self.np_random.uniform(low=-6, high=6, size=1)
         self._current_state = self.initial_state
         self._prev_state = self.initial_state
         self._prev_prev_state = self.initial_state
         self._prev_u = np.array([0.0])
         self._prev_prev_u = np.array([0.0])
-        self._reference = self.np_random.uniform(low=-5, high=5, size=1)
+        self._reference = self.np_random.uniform(low=-6, high=6, size=1)
 
         while np.abs(self._reference - self.initial_state) < 0.1:
             # Ensure that the initial state is not close to the reference
@@ -104,11 +105,11 @@ class Quad_env(Custom_env):
         return observation, False  # info
 
     def step(self, policy_output: Union[np.ndarray, torch.Tensor]) -> tuple:
-
+        
         if self.isContinuous:
             d_action = policy_output
         else:
-            d_action = self.map_action(policy_output)
+            d_action = self.map_action(policy_output)  
 
         if d_action.ndim != 1:
             d_action = d_action.flatten()
@@ -122,6 +123,9 @@ class Quad_env(Custom_env):
 
         cum_error = ((next_state - self._reference) + (self._current_state - self._reference) +
                      (self._prev_state - self._reference) + (self._prev_prev_state - self._reference))
+        
+        error_vector = np.array([next_state - self._reference, self._current_state - self._reference,
+                                    self._prev_state - self._reference, self._prev_prev_state - self._reference])
 
         # Next timestep
         self._prev_prev_state = self._prev_state
@@ -138,12 +142,19 @@ class Quad_env(Custom_env):
         else:
             truncated = False
 
-        reward = -(self._reference - self._current_state) ** 2 - 0.1*d_action ** 2
+        # reward = -(self._reference - self._current_state) ** 2 - 5*d_action ** 2
+        reward = (np.exp(-0.01*(np.dot(error_vector.T, error_vector) + 7*d_action**2 )) + 
+                  2*np.exp(-0.05*(np.dot(error_vector.T, error_vector) + 7*d_action**2 )))
+
+        # reward for reaching the %5 error band  
+
+        if np.abs(self._current_state - self._reference) < 0.05:
+            reward += 10
 
         if abs(self._current_state) > bound:
             self._current_state = np.array([bound])*np.sign(self._current_state)
             terminated = True
-            # reward = -np.array([200])
+            reward = -np.array([[0]])
 
         # We need to return four values: observation, reward, done, info
 
@@ -159,7 +170,7 @@ class Quad_env(Custom_env):
         :return:
         """
 
-        states, actions = self.sample_trajectory(policy)
+        states, actions, rewards = self.sample_trajectory(policy)
         for ax in self.axs.flat:
             ax.clear()
         t = np.arange(states.shape[0])
@@ -173,7 +184,7 @@ class Quad_env(Custom_env):
         self.axs[1].legend()
 
         plt.pause(0.1)
-        plt.show(block=False)
+
 
     def close(self):
         """
@@ -184,10 +195,12 @@ class Quad_env(Custom_env):
         plt.ioff()
 
     def map_action(self, action: torch.Tensor) -> np.ndarray:
-        """
-        Map the action from the policy to the action of the environment
-        :param action:
-        :return:
-        """
-        index = action.item()
-        return np.array([self.action_values[index]])
+            """
+            Map the action from the policy to the action of the environment
+            :param action:
+            :return:
+            """
+            index = action.item()
+            return np.array([self.action_values[index]])
+
+    

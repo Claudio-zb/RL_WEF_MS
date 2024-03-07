@@ -14,8 +14,9 @@ class Custom_env(ABC, gym.Env):
         self.action_low = action_low
         self.action_high = action_high
         self.isContinuous = continuous
+        self.action_values = None
 
-    def sample_trajectory(self, policy, max_steps: int = 288):
+    def sample_trajectory(self, policy, max_steps: int = 288, rew_fun = None):
         """
         Sample a trajectory from the environment using the policy.
         :param policy: Policy to be used
@@ -24,24 +25,37 @@ class Custom_env(ABC, gym.Env):
         """
         policy.eval()
         states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
+        rewards = np.zeros(max_steps)
         if self.isContinuous:
             actions = np.zeros((max_steps, self.action_space.shape[0]))
         else:
-            actions = np.zeros((max_steps, 1))
+            try:
+                actions = np.zeros((max_steps, self.action_values.shape[1]))
+            except:
+                actions = np.zeros((max_steps, 1))
         x0, _ = self.reset()
         states[0] = x0
         for i in range(max_steps):
             if self.isContinuous:
                 action = policy(states[i])
                 action = action.squeeze().detach().cpu().numpy()
+                actions[i] = action
             else:
                 action = policy(states[i]).max(1).indices.view(1, 1)
+                actions[i] = self.action_values[action]
 
-            actions[i] = self.map_action(action)[0]
-            x_next, _, _, _, _ = self.step(action)
+            x_next, _, terminated, truncated, _ = self.step(action)
             states[i + 1] = x_next
+            if terminated or truncated:
+                states = states[:i + 2]
+                actions = actions[:i+1]
+                break
         policy.train()
-        return states, actions
+        if rew_fun is not None:
+            for i in range(max_steps):
+                rewards[i] = rew_fun(states[i], actions[i], states[i+1])
+
+        return states, actions, rewards
 
     @abstractmethod
     def show_sample(self, policy):
