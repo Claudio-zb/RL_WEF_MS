@@ -1,16 +1,16 @@
-from typing import Any
+from typing import Any, Union, Tuple, Callable, List, Iterable
 
+import copy
 import numpy as np
 from numpy import ndarray
 import matplotlib.pyplot as plt
 import torch
 import matplotlib
+from sklearn.preprocessing import StandardScaler
 
 from utils_functions.funcionesEMS import *
 from gymnasium import spaces
 from environments.custom_env import Custom_env
-from typing import Union
-
 matplotlib.use('Qt5Agg')
 
 
@@ -19,7 +19,7 @@ class EMS_env(Custom_env):
     Environment for the Energy Management System
     """
 
-    def __init__(self, render: bool = True, continuous: bool = False):
+    def __init__(self, energy_penalty=0, render: bool = True, continuous: bool = False):
         """
         Initialize the environment
         :param render:
@@ -98,10 +98,33 @@ class EMS_env(Custom_env):
         self.Q_p_max = 100  # (1 / 1000)  # 1L / s <= > 0.001m3 / s
         self.d_Q_p_bound = 1e-3  # Q_p_max
 
-        self.reward_fun = lambda s, a, s_next: np.array([(np.exp(-1*(s[0] - s_next[4]) ** 2 / (s[0]+1e-5) ** 2)) +
-                                                         (np.exp(-2*(s[0] - s_next[4]) ** 2 / (s[0]+1e-5) ** 2)) -
-                                                          0.5*np.sign(np.min([np.abs(s[0] - s_next[4]) - np.abs((s[0] - s[4])), 0])) -
-                                                          3.0*np.sign(np.max([np.abs(s[0] - s_next[4]) - np.abs((s[0] - s[4])), 0]))])
+        def rwd_fun(s, a, s_next, e_penal=energy_penalty):
+            next_error = s[0] - s_next[4]
+            current_error = s[0] - s[4]
+            delta_error = np.abs(next_error) - np.abs(current_error)
+            delta_Irr = (a[0] - s[3]) / 100
+            delta_Q_p = (a[1] - s[5]) / 100
+
+            if s[-1] != 143:
+                reward = (np.exp(-1 * next_error ** 2 / (s[0] + 1e-5) ** 2 -
+                                 delta_Irr ** 2 - delta_Q_p ** 2) +
+                          2 * np.exp(-3 * next_error ** 2 / (s[0] + 1e-5) ** 2 -
+                                     2 * delta_Irr ** 2 - 2 * delta_Q_p ** 2) -
+                          0.5 * np.sign(np.min([delta_error, 0])) -
+                          3.0 * np.sign(np.max([delta_error, 0])))
+                if s[10] != 0:
+                    reward = reward - e_penal
+            else:
+                reward = (np.exp(-1 * next_error ** 2 / (s[0] + 1e-5) ** 2 -
+                                 delta_Irr ** 2 - delta_Q_p ** 2) +
+                          2 * np.exp(-3 * next_error ** 2 / (s[0] + 1e-5) ** 2) -
+                          2 * delta_Irr ** 2 - 2 * delta_Q_p ** 2)
+                if s_next[10] != 0:
+                    reward = reward - e_penal
+
+            return np.array([reward])
+
+        self.reward_fun = lambda s, a, s_next: rwd_fun(s, a, s_next, energy_penalty)
 
         # Observation space
         # V_ref, Vt, SoE, I_prev, V_Irr, Q_p_prev, p_fv, demand
@@ -174,9 +197,6 @@ class EMS_env(Custom_env):
                                 self.E_surplus, self.E_deficit, self.k % 144])
 
         # Store the previous values of the variables to compute the reward
-        Irr_prev = self.Irr
-        Q_p_prev = self.Q_p
-        V_Irr_prev = self.V_Irr
 
         self.Irr = action[0]
         self.Q_p = action[1]
@@ -188,12 +208,12 @@ class EMS_env(Custom_env):
                                                                                     self.demanda[self.k],
                                                                                     P_Q_p)
 
-        #irrigation_penalty = 0
+        # irrigation_penalty = 0
 
         if self.Vt <= self.Vt_min:  # If the tank is empty, there is no irrigation
             if self.Irr > 0:
                 self.Irr = 0
-                #irrigation_penalty = 10  # -300
+                # irrigation_penalty = 10  # -300
 
         amount_to_irrigate = self.dt * (self.Irr * 1e-6)
 
@@ -208,18 +228,6 @@ class EMS_env(Custom_env):
         self.Vt = np.clip(self.Vt + amount_to_pump - amount_to_irrigate, self.Vt_min, self.Vt_max)
         self.V_Irr = self.V_Irr + amount_to_irrigate
 
-        reward = get_reward(self.E_surplus,
-                            self.E_deficit,
-                            Irr_prev,
-                            self.Irr,
-                            self.V_Irr,
-                            self.V_ref,
-                            Q_p_prev, self.Q_p)
-
-        if self.k == self.n_steps // 2:  # A day has passed
-            self.V_ref = self.V_2_ref
-            self.V_Irr = 0
-
         self.k = self.k + 1
 
         observation_next = np.array([self.V_ref,
@@ -232,10 +240,21 @@ class EMS_env(Custom_env):
 
         reward = self.reward_fun(observation, action, observation_next)
 
+        if self.k == self.n_steps // 2:  # A day has passed
+            self.V_ref = self.V_2_ref
+            self.V_Irr = 0
+            observation_next = np.array([self.V_ref,
+                                         self.Vt, self.SoE,
+                                         self.Irr,
+                                         self.V_Irr,
+                                         self.Q_p, self.p_fv[self.k],
+                                         self.demanda[self.k], self.Pbat,
+                                         self.E_surplus, self.E_deficit, self.k % 144])
+
         if self.k >= self.n_steps:  # Number of steps are completed
             truncated = True
 
-        return observation, reward, terminated, truncated, Info
+        return observation_next, reward, terminated, truncated, Info
 
     def reset(self, seed=None, options=None) -> tuple[np.ndarray, dict]:
         """
@@ -244,15 +263,37 @@ class EMS_env(Custom_env):
         :param options: options for the environment
         :return: tuple of (initial_observation, info)
         """
-        info = {}
-        self.k = 0
-        day_picked = np.random.randint(0, 70)  # Pick a random day from the data
-        self.start_index = day_picked * 144  # 144 is the number of steps per day
+        day_picked = np.random.randint(0, 70)
 
-        self.V_ref = self.V_refs[day_picked]
-        self.V_2_ref = self.V_refs[day_picked + 1]
-        self.Vt = (self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min
-        self.SoE = (self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min
+        InitialObservation = self.set_initial_conditions(day_picked,
+                                                         V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
+                                                         Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min)
+
+        info = {"day_picked": day_picked,
+                "V_tank": self.Vt,
+                "SoE": self.SoE}
+
+        return InitialObservation, info
+
+    def load_initial_conditions(self, info):
+        """
+        Load the initial conditions of the environment
+        :param info: dictionary with the initial conditions
+        :return:
+        """
+        self.k = 0
+        day_picked = info["day_picked"]
+        InitialObservation = self.set_initial_conditions(day_picked,
+                                                         V_tank=info["V_tank"],
+                                                         Soe=info["SoE"])
+
+        return InitialObservation
+
+    def set_initial_conditions(self, day_picked, V_tank, Soe):
+        self.k = 0
+        self.start_index = day_picked * 144
+        self.Vt = V_tank
+        self.SoE = Soe
         self.Irr = 0
         self.V_Irr = 0
         self.radiacion = self.radiation_data[self.start_index:self.start_index + self.n_steps + 1]
@@ -262,6 +303,8 @@ class EMS_env(Custom_env):
         self.Q_p = 0
         self.d_Q_p = 0
         self.Pbat = 0
+        self.V_ref = self.V_refs[day_picked]
+        self.V_2_ref = self.V_refs[day_picked + 1]
 
         InitialObservation = np.array(
             [self.V_ref,
@@ -271,16 +314,18 @@ class EMS_env(Custom_env):
              self.Q_p, self.p_fv[self.k],
              self.demanda[self.k], self.Pbat,
              0, 0, self.k])
-        return InitialObservation, info
 
-    def show_sample(self, policy):
+        return InitialObservation
+
+    def show_sample(self, policy, scaler: StandardScaler = None):
         """
         Render the environment
         :param policy: policy to be used
+        :param scaler: scaler to be used
         :return:
         """
 
-        states, actions, rewards = self.sample_trajectory(policy, max_steps=288, rew_fun=self.reward_fun)
+        states, actions, rewards = self.sample_trajectory(policy, scaler = scaler, max_steps=288, rew_fun=self.reward_fun)
         for ax in self.axs.flat:
             ax.clear()
 
@@ -292,8 +337,6 @@ class EMS_env(Custom_env):
         P_fv = states[:-1, 6]  # foto-voltaic generation
         P_demanda = states[:-1, 7]  # Energetic demand
         P_bat = states[:-1, 8]  # Battery power
-
-        P_residual = P_fv - P_demanda - P_Q_p - P_bat  # If it is positive there is an energy surplus. Otherwise,
 
         self.axs[0, 0].step(t, states[:-1, 0], where='post', label='V_ref')
         self.axs[0, 0].step(t, states[:-1, 4], where='post', label='V_Irr')
@@ -327,7 +370,8 @@ class EMS_env(Custom_env):
         self.axs[2, 1].set_xlabel('Time (h)')
         self.axs[2, 1].set_ylabel('(%)')
 
-        self.axs[3, 0].step(t, P_residual, where='post', label='P_balance')
+        self.axs[3, 0].step(t, states[:-1, 9], where='post', label='E_surplus')
+        self.axs[3, 0].step(t, states[:-1, 10], where='post', label='E_deficit')
         self.axs[3, 0].set_title('Power balance')
 
         # balance = np.cumsum(P_residual * self.dt / 3600)
@@ -402,3 +446,44 @@ class EMS_env(Custom_env):
         E_deficit = E_deficit - P_not_used / self.n_d * (self.dt / 3600) if P_not_used < 0 else E_deficit
 
         return Pbat, next_SoE, E_surplus, E_deficit
+
+    def compare_policies(self,
+                         policies: list[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]],
+                         max_steps: int = 288,
+                         rew_funs: Iterable[Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]] = None) -> list:
+        """
+        Compare the policies in the environment
+        :param policies: list of policies to be compared
+        :param max_steps: maximum number of steps to be taken
+        :param rew_funs: set of reward functions to be used
+        :return:
+        """
+        # initialize environment
+        x0, info = self.reset()
+        envs = [self]
+        trajectories = []
+
+        # make copies of the environment so they have same initial conditions
+        for i in range(1, len(policies)):
+            envs.append(copy.copy(self))
+            envs[i].load_initial_conditions(info)
+
+        # Run the policies in the environment
+
+        if rew_funs is None:
+            for idx, env in enumerate(envs):
+                s, a, r = env.sample_trajectory(policies[idx], None,
+                                                max_steps,
+                                                self.reward_fun,
+                                                initial_conditions=info)
+                trajectories.append([s, a, r])
+
+        else:
+            for idx, env in enumerate(envs):
+                s, a, r = env.sample_trajectory(policies[idx], None,
+                                                max_steps,
+                                                rew_funs[idx],
+                                                initial_conditions=info)
+                trajectories.append([s, a, r])
+
+        return trajectories

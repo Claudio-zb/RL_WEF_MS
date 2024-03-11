@@ -3,6 +3,7 @@ import torch
 from gymnasium import spaces
 from abc import ABC, abstractmethod
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 
 
 class Custom_env(ABC, gym.Env):
@@ -16,11 +17,19 @@ class Custom_env(ABC, gym.Env):
         self.isContinuous = continuous
         self.action_values = None
 
-    def sample_trajectory(self, policy, max_steps: int = 288, rew_fun = None):
+    def sample_trajectory(self,
+                          policy,
+                          scaler: StandardScaler = None,
+                          max_steps: int = 288,
+                          rew_fun=None,
+                          initial_conditions: dict = None):
         """
         Sample a trajectory from the environment using the policy.
         :param policy: Policy to be used
+        :param scaler: Scaler to be used for the states
         :param max_steps: Maximum number of steps to be taken
+        :param rew_fun: Reward function to be used
+        :param initial_conditions: Initial conditions for the environment
         :return: states and actions of the trajectory
         """
         policy.eval()
@@ -29,15 +38,22 @@ class Custom_env(ABC, gym.Env):
         if self.isContinuous:
             actions = np.zeros((max_steps, self.action_space.shape[0]))
         else:
-            try:
+            a_shape = self.action_values.shape
+            if len(a_shape) > 1:
                 actions = np.zeros((max_steps, self.action_values.shape[1]))
-            except:
+            else:
                 actions = np.zeros((max_steps, 1))
-        x0, _ = self.reset()
+        if initial_conditions is not None:
+            x0 = self.load_initial_conditions(initial_conditions)
+        else:
+            x0, _ = self.reset()
         states[0] = x0
         for i in range(max_steps):
             if self.isContinuous:
-                action = policy(states[i])
+                if scaler is not None:
+                    action = policy(scaler.transform([states[i]]))
+                else:
+                    action = policy((states[i]))
                 action = action.squeeze().detach().cpu().numpy()
                 actions[i] = action
             else:
@@ -48,12 +64,12 @@ class Custom_env(ABC, gym.Env):
             states[i + 1] = x_next
             if terminated or truncated:
                 states = states[:i + 2]
-                actions = actions[:i+1]
+                actions = actions[:i + 1]
                 break
         policy.train()
         if rew_fun is not None:
             for i in range(max_steps):
-                rewards[i] = rew_fun(states[i], actions[i], states[i+1])
+                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
 
         return states, actions, rewards
 
@@ -75,3 +91,11 @@ class Custom_env(ABC, gym.Env):
         """
         pass
 
+    @abstractmethod
+    def load_initial_conditions(self, initial_conditions: dict) -> np.ndarray:
+        """
+        Load the initial conditions for the environment
+        :param initial_conditions: dictionary containing the initial conditions
+        :return: initial observation
+        """
+        pass
