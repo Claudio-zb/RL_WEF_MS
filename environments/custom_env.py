@@ -34,7 +34,6 @@ class Custom_env(ABC, gym.Env):
         """
         policy.eval()
         states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
-        rewards = np.zeros(max_steps)
         if self.isContinuous:
             actions = np.zeros((max_steps, self.action_space.shape[0]))
         else:
@@ -67,8 +66,9 @@ class Custom_env(ABC, gym.Env):
                 actions = actions[:i + 1]
                 break
         policy.train()
+        rewards = np.zeros_like(actions)
         if rew_fun is not None:
-            for i in range(max_steps):
+            for i in range(len(actions)):
                 rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
 
         return states, actions, rewards

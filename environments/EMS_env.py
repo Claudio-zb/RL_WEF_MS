@@ -197,33 +197,27 @@ class EMS_env(Custom_env):
                                 self.E_surplus, self.E_deficit, self.k % 144])
 
         # Store the previous values of the variables to compute the reward
-
         self.Irr = action[0]
         self.Q_p = action[1]
 
-        P_Q_p = self.B_p * (self.Q_p * 1e-6) * self.h_p_const / 1e3  # water pump power [kW]
+        if self.Vt <= self.Vt_min:  # If the tank is empty, there is no irrigation
+            if self.Irr > 0:
+                self.Irr = 0
+
+        amount_to_irrigate = self.dt * (self.Irr * 1e-5)
+
+        Vt_to_fill = self.Vt_max - self.Vt - amount_to_irrigate  # Amount of water that can be filled
+        if Vt_to_fill <= 0 < self.Q_p:  # If the tank is full and the pump is feeding, the pump is turned off
+            self.Q_p = 0
+
+        P_Q_p = self.B_p * (self.Q_p * 1e-5) * self.h_p_const / 1e3  # water pump power [kW]
 
         self.Pbat, self.SoE, self.E_surplus, self.E_deficit = self.manage_batteries(self.SoE,
                                                                                     self.p_fv[self.k],
                                                                                     self.demanda[self.k],
                                                                                     P_Q_p)
 
-        # irrigation_penalty = 0
-
-        if self.Vt <= self.Vt_min:  # If the tank is empty, there is no irrigation
-            if self.Irr > 0:
-                self.Irr = 0
-                # irrigation_penalty = 10  # -300
-
-        amount_to_irrigate = self.dt * (self.Irr * 1e-6)
-
-        extraction_penalty = 0
-        Vt_to_fill = self.Vt_max - self.Vt - amount_to_irrigate  # Amount of water that can be filled
-        if Vt_to_fill <= 0 < self.Q_p:  # If the tank is full and the pump is feeding, the pump is turned off
-            self.Q_p = 0
-            extraction_penalty = 10  # -300
-
-        amount_to_pump = self.dt * (self.Q_p * 1e-6)
+        amount_to_pump = self.dt * (self.Q_p * 1e-5)
 
         self.Vt = np.clip(self.Vt + amount_to_pump - amount_to_irrigate, self.Vt_min, self.Vt_max)
         self.V_Irr = self.V_Irr + amount_to_irrigate
@@ -267,11 +261,19 @@ class EMS_env(Custom_env):
 
         InitialObservation = self.set_initial_conditions(day_picked,
                                                          V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
-                                                         Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min)
+                                                         Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
+                                                         Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
+                                                         Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
+                                                         instant_k=np.random.randint(0, 144),
+                                                         V_irr=0)
 
         info = {"day_picked": day_picked,
                 "V_tank": self.Vt,
-                "SoE": self.SoE}
+                "SoE": self.SoE,
+                "Irr_prev": self.Irr,
+                "Q_p_prev": self.Q_p,
+                "instant_k": self.k,
+                "V_irr": self.V_Irr}
 
         return InitialObservation, info
 
@@ -285,23 +287,38 @@ class EMS_env(Custom_env):
         day_picked = info["day_picked"]
         InitialObservation = self.set_initial_conditions(day_picked,
                                                          V_tank=info["V_tank"],
-                                                         Soe=info["SoE"])
+                                                         Soe=info["SoE"],
+                                                         Irr_prev=info["Irr_prev"],
+                                                         Q_p_prev=info["Q_p_prev"],
+                                                         instant_k=info["instant_k"],
+                                                         V_irr=info["V_irr"]
+                                                         )
 
         return InitialObservation
 
-    def set_initial_conditions(self, day_picked, V_tank, Soe):
-        self.k = 0
+    def set_initial_conditions(self, day_picked, V_tank, Soe, Irr_prev, Q_p_prev, instant_k, V_irr):
+        """
+        Set the initial conditions of the environment
+        :param V_irr:
+        :param instant_k:
+        :param day_picked:
+        :param V_tank:
+        :param Soe:
+        :param Irr_prev:
+        :param Q_p_prev:
+        :return:
+        """
+        self.k = instant_k
         self.start_index = day_picked * 144
         self.Vt = V_tank
         self.SoE = Soe
-        self.Irr = 0
-        self.V_Irr = 0
+        self.Irr = Irr_prev
+        self.V_Irr = V_irr
         self.radiacion = self.radiation_data[self.start_index:self.start_index + self.n_steps + 1]
         self.temperatura = self.temperature_data[self.start_index:self.start_index + self.n_steps + 1]
         self.p_fv = solar_power(self.radiacion, self.temperatura)
         self.demanda = self.demand_data[self.start_index:self.start_index + self.n_steps + 1]
-        self.Q_p = 0
-        self.d_Q_p = 0
+        self.Q_p = Q_p_prev
         self.Pbat = 0
         self.V_ref = self.V_refs[day_picked]
         self.V_2_ref = self.V_refs[day_picked + 1]
@@ -329,11 +346,11 @@ class EMS_env(Custom_env):
         for ax in self.axs.flat:
             ax.clear()
 
-        t = np.linspace(0, 48, 288)
+        t = np.linspace(0, 48, len(actions))
 
         SoE = states[:, 2]
-        Qp = np.diff(states[:, 1]) + self.dt * actions[:, 0] * 1e-6
-        P_Q_p = self.dt * self.B_p * Qp / self.dt * self.h_p_const / 1e3
+        Qp = self.dt * (actions[:, 0]/100) * 1e-3
+        P_Q_p = self.B_p * Qp * self.h_p_const / 1e3
         P_fv = states[:-1, 6]  # foto-voltaic generation
         P_demanda = states[:-1, 7]  # Energetic demand
         P_bat = states[:-1, 8]  # Battery power
@@ -423,13 +440,16 @@ class EMS_env(Custom_env):
         """
         E_surplus = 0
         E_deficit = 0
-        Pbat = P_fv - P_demanded - P_pump
-        if not -self.Pbat_max <= Pbat <= self.Pbat_max:  # The surplus is under the power of power bounds of the battery
-            P_not_used = Pbat - np.clip(Pbat, -self.Pbat_max,
-                                        self.Pbat_max)  # positive for surplus, negative for deficit
-            Pbat = np.clip(Pbat, -self.Pbat_max, self.Pbat_max)
+
+        P_residual = P_fv - P_demanded - P_pump
+        if not -self.Pbat_max <= P_residual <= self.Pbat_max:  # The surplus is out of the power bounds of the battery
+            Pbat = np.clip(P_residual, -self.Pbat_max, self.Pbat_max)  # positive for surplus, negative for deficit
+            P_not_used = P_residual - Pbat  # positive for surplus, negative for deficit
+
         else:
             P_not_used = 0
+            Pbat = P_residual
+
         delta_SoE = np.max([Pbat, 0]) * self.n_c * (self.dt / 3600) + np.min([Pbat, 0]) / self.n_d * (self.dt / 3600)
         next_SoE = SoE + delta_SoE
         if self.SoE_min <= next_SoE <= self.SoE_max:  # The recharge is done immediately
@@ -443,7 +463,7 @@ class EMS_env(Custom_env):
                 [next_SoE - SoE, 0]) * self.n_d / (self.dt / 3600)
 
         E_surplus = E_surplus + P_not_used * self.n_c * (self.dt / 3600) if P_not_used > 0 else E_surplus
-        E_deficit = E_deficit - P_not_used / self.n_d * (self.dt / 3600) if P_not_used < 0 else E_deficit
+        E_deficit = E_deficit + P_not_used / self.n_d * (self.dt / 3600) if P_not_used < 0 else E_deficit
 
         return Pbat, next_SoE, E_surplus, E_deficit
 

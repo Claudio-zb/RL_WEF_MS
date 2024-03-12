@@ -59,13 +59,17 @@ class DQN(RL_algorithm):
     def _init_scaler(self):
         """Initialize the scaler with the mean and std of the observations."""
         sample_states = []
-        for _ in range(10000):  # Collect 10000 samples
+        for idx in range(10000):  # Collect 10000 samples
             state, _ = self.env.reset()
+            #state[-1] = idx % 144 # momento of the day
+            #state[]
             sample_states.append(state)
         self.scaler.fit(sample_states)
 
     def normalize_state(self, state):
         """Normalize a state with the scaler."""
+        if isinstance(state, torch.Tensor):
+            state = state.detach().cpu().numpy().squeeze()
         return self.scaler.transform([state])[0]
 
     def learn(self, n_episodes: int) -> tuple[dict, nn.Module, StandardScaler]:
