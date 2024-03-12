@@ -34,16 +34,8 @@ class DQN(RL_algorithm):
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
 
-        path = "training_results/ems/DQN_20240308_191651"
-        model = torch.load(path + '/policy.pt')
-        model.to(device)
-
         self.policy_net = Q_network(self.obs_dim, self.action_dim, device).to(device)
         self.target_net = Q_network(self.obs_dim, self.action_dim, device).to(device)
-
-        # Copy the weights of the pre-trained model to the policy and target networks
-        # self.policy_net.load_state_dict(model.state_dict())
-        self.target_net.load_state_dict(model.state_dict())
 
         self.optimizer = AdamW(self.policy_net.parameters(), lr=self.lr, amsgrad=True)
         self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9999)
