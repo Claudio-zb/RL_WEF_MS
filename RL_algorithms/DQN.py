@@ -12,6 +12,7 @@ from environments.custom_env import Custom_env
 import numpy as np
 from RL_algorithms.RL_algorithm import RL_algorithm
 from sklearn.preprocessing import StandardScaler
+from typing import Union, Tuple, Any
 
 
 class DQN(RL_algorithm):
@@ -53,16 +54,22 @@ class DQN(RL_algorithm):
         sample_states = []
         for idx in range(10000):  # Collect 10000 samples
             state, _ = self.env.reset()
-            #state[-1] = idx % 144 # momento of the day
-            #state[]
             sample_states.append(state)
         self.scaler.fit(sample_states)
 
-    def normalize_state(self, state):
-        """Normalize a state with the scaler."""
+    def normalize_state(self, state: Union[np.array, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
+        """Normalize a state with the scaler.
+        :param state: The state to normalize
+        :return: The normalized state. If the input is a tensor, the output is a tensor. 
+        If the input is a numpy array, the output is a numpy array."""
+
         if isinstance(state, torch.Tensor):
             state = state.detach().cpu().numpy().squeeze()
-        return self.scaler.transform([state])[0]
+            state = self.scaler.transform([state])[0]
+            return torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
+        
+        else:
+            return self.scaler.transform([state])[0]
 
     def learn(self, n_episodes: int) -> tuple[dict, nn.Module, StandardScaler]:
         device = self.device
@@ -77,7 +84,7 @@ class DQN(RL_algorithm):
         k_update = 0
         for i_episode in range(n_episodes):
             # Initialize the environment and get it's state
-            if i_episode % 50 == 0:
+            if i_episode % 10 == 0:
                 self.env.show_sample(self.policy_net)
             state, info = self.env.reset()
             self.ep_random_steps = 0

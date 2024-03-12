@@ -43,6 +43,7 @@ class EMS_env(Custom_env):
         self.n_d = 1.15
         self.V_1_ref = 0.0
         self.V_2_ref = 0.0
+        self.V_3_ref = 0.0
         self.time = 0
 
         # Load meteorological data and demand
@@ -76,6 +77,7 @@ class EMS_env(Custom_env):
         self.E_deficit = 0.0
         self.Irr_levels = np.array([0.0, 33.33, 66.66, 100])
         self.Q_p_levels = np.array([0.0, 33.33, 66.66, 100])
+        self.day_picked = 0
 
         # Constants and bounds
         self.B_p = 1000 * 10
@@ -217,7 +219,7 @@ class EMS_env(Custom_env):
                                                                                     self.demanda[self.k],
                                                                                     P_Q_p)
 
-        amount_to_pump = self.dt * (self.Q_p * 1e-5)
+        amount_to_pump = self.dt * (self.Q_p * 1e-5) # Volume [m3]
 
         self.Vt = np.clip(self.Vt + amount_to_pump - amount_to_irrigate, self.Vt_min, self.Vt_max)
         self.V_Irr = self.V_Irr + amount_to_irrigate
@@ -234,8 +236,8 @@ class EMS_env(Custom_env):
 
         reward = self.reward_fun(observation, action, observation_next)
 
-        if self.k == self.n_steps // 2:  # A day has passed
-            self.V_ref = self.V_2_ref
+        if (self.k % 144) == 0:  # A day has passed
+            self.V_ref = self.V_refs[self.day_picked + self.k//144]
             self.V_Irr = 0
             observation_next = np.array([self.V_ref,
                                          self.Vt, self.SoE,
@@ -257,9 +259,9 @@ class EMS_env(Custom_env):
         :param options: options for the environment
         :return: tuple of (initial_observation, info)
         """
-        day_picked = np.random.randint(0, 70)
+        self.day_picked = np.random.randint(0, 70)
 
-        InitialObservation = self.set_initial_conditions(day_picked,
+        InitialObservation = self.set_initial_conditions(self.day_picked,
                                                          V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
                                                          Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
                                                          Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
@@ -267,7 +269,7 @@ class EMS_env(Custom_env):
                                                          instant_k=np.random.randint(0, 144),
                                                          V_irr=0)
 
-        info = {"day_picked": day_picked,
+        info = {"day_picked": self.day_picked,
                 "V_tank": self.Vt,
                 "SoE": self.SoE,
                 "Irr_prev": self.Irr,
@@ -309,6 +311,7 @@ class EMS_env(Custom_env):
         :return:
         """
         self.k = instant_k
+        self.n_steps = self.k + 288
         self.start_index = day_picked * 144
         self.Vt = V_tank
         self.SoE = Soe
@@ -319,9 +322,8 @@ class EMS_env(Custom_env):
         self.p_fv = solar_power(self.radiacion, self.temperatura)
         self.demanda = self.demand_data[self.start_index:self.start_index + self.n_steps + 1]
         self.Q_p = Q_p_prev
-        self.Pbat = 0
         self.V_ref = self.V_refs[day_picked]
-        self.V_2_ref = self.V_refs[day_picked + 1]
+        self.Pbat, _, self.E_surplus, self.E_deficit = self.manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
 
         InitialObservation = np.array(
             [self.V_ref,
@@ -330,7 +332,7 @@ class EMS_env(Custom_env):
              self.V_Irr,
              self.Q_p, self.p_fv[self.k],
              self.demanda[self.k], self.Pbat,
-             0, 0, self.k])
+             self.E_surplus, self.E_deficit, self.k])
 
         return InitialObservation
 
@@ -436,7 +438,7 @@ class EMS_env(Custom_env):
         :param P_fv:
         :param P_demanded:
         :param P_pump:
-        :return:
+        :return: Pbat, next_SoE, E_surplus, E_deficit
         """
         E_surplus = 0
         E_deficit = 0
