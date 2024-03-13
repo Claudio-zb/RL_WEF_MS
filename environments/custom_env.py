@@ -4,6 +4,7 @@ from gymnasium import spaces
 from abc import ABC, abstractmethod
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from typing import Callable
 
 
 class Custom_env(ABC, gym.Env):
@@ -18,7 +19,7 @@ class Custom_env(ABC, gym.Env):
         self.action_values = None
 
     def sample_trajectory(self,
-                          policy,
+                          policy: Callable,
                           scaler: StandardScaler = None,
                           max_steps: int = 288,
                           rew_fun=None,
@@ -34,6 +35,13 @@ class Custom_env(ABC, gym.Env):
         """
         policy.eval()
         states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
+        
+        if initial_conditions is not None:
+            x0 = self.load_initial_conditions(initial_conditions)
+        else:
+            x0, _ = self.reset()
+        states[0] = x0
+
         if self.isContinuous:
             actions = np.zeros((max_steps, self.action_space.shape[0]))
         else:
@@ -42,11 +50,7 @@ class Custom_env(ABC, gym.Env):
                 actions = np.zeros((max_steps, self.action_values.shape[1]))
             else:
                 actions = np.zeros((max_steps, 1))
-        if initial_conditions is not None:
-            x0 = self.load_initial_conditions(initial_conditions)
-        else:
-            x0, _ = self.reset()
-        states[0] = x0
+
         for i in range(max_steps):
             if self.isContinuous:
                 if scaler is not None:

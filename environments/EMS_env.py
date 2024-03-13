@@ -80,15 +80,15 @@ class EMS_env(Custom_env):
         self.day_picked = 0
 
         # Constants and bounds
-        self.B_p = 1000 * 10
-        self.h_p_const = 1
+        self.B_p = 1000 * 10 #1e5
+        self.h_p_const = 20
         # Tank Constants
         self.Vt_max = 5
         self.Vt_min = 1
 
         # Batteries Constants
-        Pbat_nom = 100
-        self.Pbat_max = 30  # [Kw]
+        Pbat_nom = 10 # 100
+        self.Pbat_max = 10 # 100  # [Kw]
         self.SoE_max = 0.8 * Pbat_nom
         self.SoE_min = 0.2 * Pbat_nom
 
@@ -308,7 +308,7 @@ class EMS_env(Custom_env):
         :param Soe:
         :param Irr_prev:
         :param Q_p_prev:
-        :return:
+        :return: Initial observation
         """
         self.k = instant_k
         self.n_steps = self.k + 288
@@ -446,7 +446,7 @@ class EMS_env(Custom_env):
         P_residual = P_fv - P_demanded - P_pump
         if not -self.Pbat_max <= P_residual <= self.Pbat_max:  # The surplus is out of the power bounds of the battery
             Pbat = np.clip(P_residual, -self.Pbat_max, self.Pbat_max)  # positive for surplus, negative for deficit
-            P_not_used = P_residual - Pbat  # positive for surplus, negative for deficit
+            P_not_used = P_residual - Pbat  # positive for surplus, negative for deficit. In case of negative value is P not available
 
         else:
             P_not_used = 0
@@ -454,6 +454,7 @@ class EMS_env(Custom_env):
 
         delta_SoE = np.max([Pbat, 0]) * self.n_c * (self.dt / 3600) + np.min([Pbat, 0]) / self.n_d * (self.dt / 3600)
         next_SoE = SoE + delta_SoE
+
         if self.SoE_min <= next_SoE <= self.SoE_max:  # The recharge is done immediately
             Pbat = Pbat
         else:  # The re/discharge is done but there is a surplus/deficit of energy
@@ -461,16 +462,15 @@ class EMS_env(Custom_env):
             E_deficit = next_SoE - self.SoE_min if next_SoE < self.SoE_min else 0
 
             next_SoE = np.clip(next_SoE, self.SoE_min, self.SoE_max)
-            Pbat = np.max([next_SoE - SoE, 0]) / (self.dt / 3600) / self.n_c + np.min(
-                [next_SoE - SoE, 0]) * self.n_d / (self.dt / 3600)
+            Pbat = np.max([self.SoE_max - SoE, 0]) / (self.dt / 3600) / self.n_c + np.min([self.SoE_min - SoE, 0]) * self.n_d / (self.dt / 3600)
 
-        E_surplus = E_surplus + P_not_used * self.n_c * (self.dt / 3600) if P_not_used > 0 else E_surplus
+        E_surplus = E_surplus + P_not_used * (self.dt / 3600) if P_not_used > 0 else E_surplus
         E_deficit = E_deficit + P_not_used / self.n_d * (self.dt / 3600) if P_not_used < 0 else E_deficit
 
         return Pbat, next_SoE, E_surplus, E_deficit
 
     def compare_policies(self,
-                         policies: list[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]],
+                         policies: Iterable[Tuple[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]]],
                          max_steps: int = 288,
                          rew_funs: Iterable[Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]] = None) -> list:
         """
@@ -494,7 +494,9 @@ class EMS_env(Custom_env):
 
         if rew_funs is None:
             for idx, env in enumerate(envs):
-                s, a, r = env.sample_trajectory(policies[idx], None,
+                policy = policies[idx][0]
+                scaler = policies[idx][1]
+                s, a, r = env.sample_trajectory(policy, scaler,
                                                 max_steps,
                                                 self.reward_fun,
                                                 initial_conditions=info)
@@ -502,7 +504,9 @@ class EMS_env(Custom_env):
 
         else:
             for idx, env in enumerate(envs):
-                s, a, r = env.sample_trajectory(policies[idx], None,
+                policy = policies[idx][0]
+                scaler = policies[idx][1]
+                s, a, r = env.sample_trajectory(policy, scaler,
                                                 max_steps,
                                                 rew_funs[idx],
                                                 initial_conditions=info)

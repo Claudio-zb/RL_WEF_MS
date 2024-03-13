@@ -19,7 +19,7 @@ def get_demand() -> np.ndarray:
     dt = 600
     for i in range(s_hourly_demand[0]):
         for j in range(s_hourly_demand[1]):
-            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j]  # * dt / 3600
+            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j]*0.1  # * dt / 3600
     demand = demand.flatten()
     return demand
 
@@ -74,7 +74,7 @@ def solar_power(rad: Union[float, np.ndarray], temp: Union[float, np.ndarray]) -
     :return: Solar power in kW
 
     """
-    Pn = 90  # 90 * (600 / 3600)
+    Pn = 9 # 90  # 90 * (600 / 3600)
     a_fv = -.0045
     Tn = 25
     T_cell = temp + rad / 800 * (Tn - 20)

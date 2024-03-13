@@ -7,7 +7,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import torch
-from sklearn.externals import joblib
+import joblib
 
 alg_name = "DQN"
 
@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
         environment = EMS_env()
         rl_model = DQN(environment, options=None)
-        results, policy, scaler = rl_model.learn(3500)
+        results, policy, scaler = rl_model.learn(15)
 
         env_id = options["env_id"]
         # Get the current date and time
