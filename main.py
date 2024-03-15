@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
         environment = EMS_env()
         rl_model = DQN(environment, options=None)
-        results, policy, scaler = rl_model.learn(15)
+        results, policy, scaler = rl_model.learn(100)
 
         env_id = options["env_id"]
         # Get the current date and time

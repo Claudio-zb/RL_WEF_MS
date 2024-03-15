@@ -100,6 +100,15 @@ class EMS_env(Custom_env):
         self.Q_p_max = 100  # (1 / 1000)  # 1L / s <= > 0.001m3 / s
         self.d_Q_p_bound = 1e-3  # Q_p_max
 
+        def rwd_fun2(s, a, s_next, e_penal=energy_penalty):
+            # reward for ending the day close to the reference
+            if s_next[11] == 143:
+                reward = 0.5 * np.exp(-1 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2) + 0.5 * np.exp(
+                    -3 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2)
+                if s_next[10] != 0:
+                    reward = reward - e_penal
+            return reward
+
         def rwd_fun(s, a, s_next, e_penal=energy_penalty):
             next_error = s[0] - s_next[4]
             current_error = s[0] - s[4]
@@ -117,9 +126,9 @@ class EMS_env(Custom_env):
                 if s[10] != 0:
                     reward = reward - e_penal
             else:
-                reward = (np.exp(-1 * next_error ** 2 / (s[0] + 1e-5) ** 2 -
+                reward = (np.exp(-1 * current_error ** 2 / (s[0] + 1e-5) ** 2 -
                                  delta_Irr ** 2 - delta_Q_p ** 2) +
-                          2 * np.exp(-3 * next_error ** 2 / (s[0] + 1e-5) ** 2) -
+                          2 * np.exp(-3 * current_error ** 2 / (s[0] + 1e-5) ** 2) -
                           2 * delta_Irr ** 2 - 2 * delta_Q_p ** 2)
                 if s_next[10] != 0:
                     reward = reward - e_penal
@@ -267,7 +276,7 @@ class EMS_env(Custom_env):
                                                          Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
                                                          Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
                                                          instant_k=np.random.randint(0, 144),
-                                                         V_irr=0)
+                                                         V_irr=self.V_refs[self.day_picked] * np.random.random_sample())
 
         info = {"day_picked": self.day_picked,
                 "V_tank": self.Vt,
@@ -462,7 +471,11 @@ class EMS_env(Custom_env):
             E_deficit = next_SoE - self.SoE_min if next_SoE < self.SoE_min else 0
 
             next_SoE = np.clip(next_SoE, self.SoE_min, self.SoE_max)
-            Pbat = np.max([self.SoE_max - SoE, 0]) / (self.dt / 3600) / self.n_c + np.min([self.SoE_min - SoE, 0]) * self.n_d / (self.dt / 3600)
+            if delta_SoE > 0:
+                Pbat = np.max([self.SoE_max - SoE, 0]) / (self.dt / 3600) / self.n_c
+            else:
+                Pbat = np.min([self.SoE_min - SoE, 0]) * self.n_d / (self.dt / 3600)
+            #Pbat = np.max([self.SoE_max - SoE, 0]) / (self.dt / 3600) / self.n_c + np.min([self.SoE_min - SoE, 0]) * self.n_d / (self.dt / 3600)
 
         E_surplus = E_surplus + P_not_used * (self.dt / 3600) if P_not_used > 0 else E_surplus
         E_deficit = E_deficit + P_not_used / self.n_d * (self.dt / 3600) if P_not_used < 0 else E_deficit
