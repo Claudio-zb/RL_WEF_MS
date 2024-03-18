@@ -8,4 +8,6 @@
 /dataSources.local.xml
 # GitHub Copilot persisted chat sessions
 /copilot/chatSessions
-/training_results
+/training_results/*
+**/__pycache__/
+

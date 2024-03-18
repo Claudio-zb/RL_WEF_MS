@@ -185,14 +185,15 @@ class DQN(RL_algorithm):
         # on the "older" target_net; selecting their best reward with max(1).values
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
-        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
+        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device, dtype=torch.float32)
         with torch.no_grad():
             next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1).values
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch.squeeze(-1)
 
         # Compute Huber loss
-        criterion = nn.SmoothL1Loss(reduction='none')
+        #criterion = nn.SmoothL1Loss(reduction='none')
+        criterion = nn.HuberLoss(reduction='none')
         loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
         # Update priorities
@@ -234,9 +235,9 @@ class DQN(RL_algorithm):
         :return:
         """
         if options is None:
-            self.BATCH_SIZE = 128
+            self.BATCH_SIZE = 64
             self.gamma = 0.99
-            self.lr = 1e-4
+            self.lr = 1e-5
             self.EPS_START = 0.95
             self.EPS_END = 0.001
             self.EPS_DECAY = 1000

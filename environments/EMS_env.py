@@ -73,9 +73,8 @@ class EMS_env(Custom_env):
         self.SoE = np.array([0.0])
         self.E_Q_p = 0.0
         self.State = np.array([0.0])
-        self.E_surplus = 0.0
-        self.E_deficit = 0.0
-        self.Irr_levels = np.array([0.0, 33.33, 66.66, 100])
+        self.E_residual = 0.0
+        self.Irr_levels = np.array([0.0, 10.0, 20.0, 30.0])
         self.Q_p_levels = np.array([0.0, 33.33, 66.66, 100])
         self.day_picked = 0
 
@@ -89,7 +88,7 @@ class EMS_env(Custom_env):
         # Batteries Constants
         Pbat_nom = 10 # 100
         self.Pbat_max = 10 # 100  # [Kw]
-        self.SoE_max = 0.8 * Pbat_nom
+        self.SoE_max = Pbat_nom
         self.SoE_min = 0.2 * Pbat_nom
 
         # Irrigation Constants
@@ -101,13 +100,34 @@ class EMS_env(Custom_env):
         self.d_Q_p_bound = 1e-3  # Q_p_max
 
         def rwd_fun2(s, a, s_next, e_penal=energy_penalty):
+
+            penalty = 0
+            reward = 0
+
+            # penalty for activating the pump when the tank is full 
+            if a[1] > 0 and s[1] >= self.Vt_max:
+                penalty += 50
+
+            # penalty for irrigate when the tank is empty
+            if a[0] > 0 and s[1] <= self.Vt_min:
+                penalty += 50
+
+            #reward for having water in the tank
+            if self.Vt_min < s_next[1] <= self.Vt_max:
+                reward = 50 * np.exp(-0.1*(self.Vt_max-s_next[1])**2/(self.Vt_max**2))
+
             # reward for ending the day close to the reference
-            if s_next[11] == 143:
-                reward = 0.5 * np.exp(-1 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2) + 0.5 * np.exp(
-                    -3 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2)
+            if s_next[-1] == 143:
+                reward = 100 * np.exp(-.1 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2) + 100 * np.exp(
+                    -.3 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2)
                 if s_next[10] != 0:
                     reward = reward - e_penal
-            return reward
+            
+            else:
+                if s_next[-2] < 0:
+                    penalty += 50
+
+            return np.array([reward - penalty], dtype=np.float32) 
 
         def rwd_fun(s, a, s_next, e_penal=energy_penalty):
             next_error = s[0] - s_next[4]
@@ -135,7 +155,7 @@ class EMS_env(Custom_env):
 
             return np.array([reward])
 
-        self.reward_fun = lambda s, a, s_next: rwd_fun(s, a, s_next, energy_penalty)
+        self.reward_fun = lambda s, a, s_next: rwd_fun2(s, a, s_next, energy_penalty)
 
         # Observation space
         # V_ref, Vt, SoE, I_prev, V_Irr, Q_p_prev, p_fv, demand
@@ -146,14 +166,14 @@ class EMS_env(Custom_env):
                             self.I_min,
                             0.0,
                             0.0, 0.0, 0.0,
-                            0, 0, 0, 0], dtype=np.float32)
+                            0, 0, 0], dtype=np.float32)
 
         obs_high = np.array([self.Vt_max,
                              self.Vt_max, self.SoE_max,
                              self.I_max,
                              self.Vt_max,
                              self.Q_p_max, 1000, 1000,
-                             0, 0, 0, 143], dtype=np.float32)
+                             0, 0, 143], dtype=np.float32)
 
         # Action space
         # Irr, Q_p, Pbat
@@ -181,7 +201,7 @@ class EMS_env(Custom_env):
 
         self.observation_space = spaces.Box(low=obs_low,
                                             high=obs_high,
-                                            shape=(12,),
+                                            shape=(11,),
                                             dtype=np.float32)
 
     def step(self, action: np.ndarray) -> tuple[ndarray, ndarray, bool, bool, dict[str, Any]]:
@@ -205,7 +225,7 @@ class EMS_env(Custom_env):
                                 self.V_Irr,
                                 self.Q_p, self.p_fv[self.k],
                                 self.demanda[self.k], self.Pbat,
-                                self.E_surplus, self.E_deficit, self.k % 144])
+                                self.E_residual, self.k % 144])
 
         # Store the previous values of the variables to compute the reward
         self.Irr = action[0]
@@ -223,7 +243,7 @@ class EMS_env(Custom_env):
 
         P_Q_p = self.B_p * (self.Q_p * 1e-5) * self.h_p_const / 1e3  # water pump power [kW]
 
-        self.Pbat, self.SoE, self.E_surplus, self.E_deficit = self.manage_batteries(self.SoE,
+        self.Pbat, self.SoE, self.E_residual = self.manage_batteries(self.SoE,
                                                                                     self.p_fv[self.k],
                                                                                     self.demanda[self.k],
                                                                                     P_Q_p)
@@ -241,7 +261,7 @@ class EMS_env(Custom_env):
                                      self.V_Irr,
                                      self.Q_p, self.p_fv[self.k],
                                      self.demanda[self.k], self.Pbat,
-                                     self.E_surplus, self.E_deficit, self.k % 144])
+                                     self.E_residual, self.k % 144])
 
         reward = self.reward_fun(observation, action, observation_next)
 
@@ -254,7 +274,7 @@ class EMS_env(Custom_env):
                                          self.V_Irr,
                                          self.Q_p, self.p_fv[self.k],
                                          self.demanda[self.k], self.Pbat,
-                                         self.E_surplus, self.E_deficit, self.k % 144])
+                                         self.E_residual, self.k % 144])
 
         if self.k >= self.n_steps:  # Number of steps are completed
             truncated = True
@@ -332,7 +352,7 @@ class EMS_env(Custom_env):
         self.demanda = self.demand_data[self.start_index:self.start_index + self.n_steps + 1]
         self.Q_p = Q_p_prev
         self.V_ref = self.V_refs[day_picked]
-        self.Pbat, _, self.E_surplus, self.E_deficit = self.manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
+        self.Pbat, _, self.E_residual = self.manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
 
         InitialObservation = np.array(
             [self.V_ref,
@@ -341,7 +361,7 @@ class EMS_env(Custom_env):
              self.V_Irr,
              self.Q_p, self.p_fv[self.k],
              self.demanda[self.k], self.Pbat,
-             self.E_surplus, self.E_deficit, self.k])
+             self.E_residual, self.k])
 
         return InitialObservation
 
@@ -398,15 +418,14 @@ class EMS_env(Custom_env):
         self.axs[2, 1].set_xlabel('Time (h)')
         self.axs[2, 1].set_ylabel('(%)')
 
-        self.axs[3, 0].step(t, states[:-1, 9], where='post', label='E_surplus')
-        self.axs[3, 0].step(t, states[:-1, 10], where='post', label='E_deficit')
+        self.axs[3, 0].step(t, states[:-1, 9], where='post', label='E_residual')
         self.axs[3, 0].set_title('Power balance')
 
         # balance = np.cumsum(P_residual * self.dt / 3600)
         # self.axs[3, 1].step(t, states[:-1, 9] + states[:-1, 10], where='post', label='E_residual')
         # self.axs[3, 1].set_title('Energy balance')
 
-        self.axs[3, 1].step(t, rewards, where='post', label='E_residual')
+        self.axs[3, 1].step(t, rewards, where='post', label='rewards')
         self.axs[3, 1].set_title('Transition Rewards')
 
         self.axs[0, 0].legend()
@@ -480,7 +499,9 @@ class EMS_env(Custom_env):
         E_surplus = E_surplus + P_not_used * (self.dt / 3600) if P_not_used > 0 else E_surplus
         E_deficit = E_deficit + P_not_used / self.n_d * (self.dt / 3600) if P_not_used < 0 else E_deficit
 
-        return Pbat, next_SoE, E_surplus, E_deficit
+        E_residual = E_surplus + E_deficit 
+
+        return Pbat, next_SoE, E_residual
 
     def compare_policies(self,
                          policies: Iterable[Tuple[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]]],
