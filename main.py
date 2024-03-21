@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 import torch
 import joblib
+from utils_functions.funcionesEMS import follow_ref_rew_1, follow_ref_rew_2, follow_ref_rew_3
 
 alg_name = "DQN"
 
@@ -20,13 +21,13 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
 
-    penalties = [0, 1, 3]
+    penalties = [follow_ref_rew_1, follow_ref_rew_2, follow_ref_rew_3]
 
     for penalty in penalties:
 
-        environment = EMS_env()
+        environment = EMS_env(rwd_function=penalty)
         rl_model = DQN(environment, options=None)
-        results, policy, scaler = rl_model.learn(2000)
+        results, policy, scaler = rl_model.learn(400)
 
         env_id = options["env_id"]
         # Get the current date and time

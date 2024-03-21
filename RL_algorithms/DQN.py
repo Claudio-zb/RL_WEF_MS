@@ -193,7 +193,7 @@ class DQN(RL_algorithm):
 
         # Compute Huber loss
         #criterion = nn.SmoothL1Loss(reduction='none')
-        criterion = nn.HuberLoss(reduction='none')
+        criterion = nn.MSELoss(reduction='none')
         loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
         # Update priorities

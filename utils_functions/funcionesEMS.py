@@ -115,3 +115,89 @@ def get_reward(E_surplus,
               + 20*np.exp(-0.1 * (V_ref - V_Irr)**2)
               + economic_component/10)
     return reward
+
+def follow_ref_rew_1(s, a, s_next) -> np.ndarray:
+    """
+    Reward function for the follow reference task
+    :param s: current state
+    :param a: action
+    :param s_next: next state
+    :return: reward
+    """
+    reward = 0
+    if s[-1] == 143:
+        reward += 10*np.exp(-0.1 * (s[0] - s[4])**2)
+    
+    else: # penalty for the reference surpassing
+        if s[4] > s[0] and s_next[4] > s[4]:
+            reward = reward - 1
+
+
+    tank_reward = s_next[1] if s_next[1] <= 5 else 0
+
+    reward = reward + (tank_reward/5)*.8
+
+    if s[4] > s[0] and s_next[4] > s[4]:
+        reward = reward - 1
+
+    return np.array([reward], dtype=np.float32)
+
+def follow_ref_rew_2(s, a, s_next) -> np.ndarray:
+    """
+    Reward function for the follow reference task
+    :param s: current state
+    :param a: action
+    :param s_next: next state
+    :return: reward
+    """
+    reward = 0
+    if s[-1] == 143:
+        reward += 10*np.exp(-0.1 * (s[0] - s[4])**2)
+    
+    else: # penalty for the reference surpassing
+        if s[4] > s[0] and s_next[4] > s[4]:
+            reward = reward - 1
+
+    soe_reward = s_next[2] if s_next[2] <= 8 else 0
+    tank_reward = s_next[1] if s_next[1] <= 5 else 0
+
+    reward = reward + (tank_reward/5)*.8 + (soe_reward/8)*.8
+
+    return np.array([reward], dtype=np.float32)
+
+def follow_ref_rew_3(s, a, s_next) -> np.ndarray:
+    """
+    Reward function for the follow reference task
+    :param s: current state
+    :param a: action
+    :param s_next: next state
+    :return: reward
+    """
+    reward = 0
+    if s[-1] == 143:
+        reward += 10*np.exp(-0.1 * (s[0] - s[4])**2)
+    
+    else: # penalty for the reference surpassing
+        if s[4] > s[0] and s_next[4] > s[4]:
+            reward = reward - 1
+
+    soe_reward = s_next[2] if s_next[2] <= 8 else 0
+    tank_reward = s_next[1] if s_next[1] <= 5 else 0
+
+    reward = reward + (tank_reward/5)*.8 + (soe_reward/8)*.8
+
+    # unfeasible action penalty
+    if s[1] <= 1 and a[0] > 0:
+        reward = reward - 1
+
+    if s[1] >= 5 and a[1] > 0:
+        reward = reward - 1    
+
+    return np.array([reward], dtype=np.float32)
+
+
+"""    weight_1 = 1
+        weight_2 = 1
+        reward = weight_1 * s[4] if s[4] <= s[0] else ((1+weight_2)*s[0] - weight_2*s[4])
+        reward = reward/(s[0] + 1e-5)
+        reward = np.clip(reward, 0, np.inf)"""

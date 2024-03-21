@@ -19,7 +19,7 @@ class EMS_env(Custom_env):
     Environment for the Energy Management System
     """
 
-    def __init__(self, energy_penalty=0, render: bool = True, continuous: bool = False):
+    def __init__(self, rwd_function = None, render: bool = True, continuous: bool = False):
         """
         Initialize the environment
         :param render:
@@ -99,7 +99,7 @@ class EMS_env(Custom_env):
         self.Q_p_max = 100  # (1 / 1000)  # 1L / s <= > 0.001m3 / s
         self.d_Q_p_bound = 1e-3  # Q_p_max
 
-        def rwd_fun2(s, a, s_next, e_penal=energy_penalty):
+        def rwd_fun2(s, a, s_next, e_penal=0):
 
             penalty = 0
             reward = 0
@@ -129,7 +129,7 @@ class EMS_env(Custom_env):
 
             return np.array([reward - penalty], dtype=np.float32) 
 
-        def rwd_fun(s, a, s_next, e_penal=energy_penalty):
+        def rwd_fun(s, a, s_next, e_penal=0):
             next_error = s[0] - s_next[4]
             current_error = s[0] - s[4]
             delta_error = np.abs(next_error) - np.abs(current_error)
@@ -155,7 +155,10 @@ class EMS_env(Custom_env):
 
             return np.array([reward])
 
-        self.reward_fun = lambda s, a, s_next: rwd_fun2(s, a, s_next, energy_penalty)
+        if rwd_function is not None:
+            self.reward_fun = rwd_function
+        else:
+            self.reward_fun = lambda s, a, s_next: rwd_fun(s, a, s_next)
 
         # Observation space
         # V_ref, Vt, SoE, I_prev, V_Irr, Q_p_prev, p_fv, demand
@@ -459,7 +462,7 @@ class EMS_env(Custom_env):
                          SoE: float,
                          P_fv: float,
                          P_demanded: float,
-                         P_pump: float) -> tuple[float, float, float, float]:
+                         P_pump: float) -> tuple[float, float, float]:
         """
         Choose the power to re/discharge the batteries and computes the next SoE
         :param SoE:
