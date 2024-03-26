@@ -236,7 +236,7 @@ class DQN(RL_algorithm):
         """
         if options is None:
             self.BATCH_SIZE = 64
-            self.gamma = 0.99
+            self.gamma = 0.67
             self.lr = 1e-5
             self.EPS_START = 0.95
             self.EPS_END = 0.001

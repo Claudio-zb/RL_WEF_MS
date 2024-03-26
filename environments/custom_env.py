@@ -23,7 +23,8 @@ class Custom_env(ABC, gym.Env):
                           scaler: StandardScaler = None,
                           max_steps: int = 288,
                           rew_fun=None,
-                          initial_conditions: dict = None):
+                          initial_conditions: dict = None,
+                          options: dict = None):
         """
         Sample a trajectory from the environment using the policy.
         :param policy: Policy to be used
@@ -38,6 +39,8 @@ class Custom_env(ABC, gym.Env):
         
         if initial_conditions is not None:
             x0 = self.load_initial_conditions(initial_conditions)
+        elif options is not None:
+            x0, _ = self.reset(options={"t_init": 0})
         else:
             x0, _ = self.reset()
         states[0] = x0

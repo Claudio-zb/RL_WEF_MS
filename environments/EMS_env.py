@@ -86,8 +86,8 @@ class EMS_env(Custom_env):
         self.Vt_min = 1
 
         # Batteries Constants
-        Pbat_nom = 10 # 100
-        self.Pbat_max = 10 # 100  # [Kw]
+        Pbat_nom = 10  # 100
+        self.Pbat_max = 10  # 100  # [Kw]
         self.SoE_max = Pbat_nom
         self.SoE_min = 0.2 * Pbat_nom
 
@@ -293,13 +293,23 @@ class EMS_env(Custom_env):
         """
         self.day_picked = np.random.randint(0, 70)
 
-        InitialObservation = self.set_initial_conditions(self.day_picked,
-                                                         V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
-                                                         Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
-                                                         Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
-                                                         Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
-                                                         instant_k=np.random.randint(0, 144),
-                                                         V_irr=self.V_refs[self.day_picked] * np.random.random_sample())
+        if options is not None:
+            instant_k = options["t_init"]
+            InitialObservation = self.set_initial_conditions(self.day_picked,
+                                                             V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
+                                                             Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
+                                                             Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
+                                                             Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
+                                                             instant_k=instant_k,
+                                                             V_irr=0)
+        else:
+            InitialObservation = self.set_initial_conditions(self.day_picked,
+                                                            V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
+                                                            Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
+                                                            Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
+                                                            Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
+                                                            instant_k=np.random.randint(0, 144),
+                                                            V_irr=self.V_refs[self.day_picked] * np.random.random_sample())
 
         info = {"day_picked": self.day_picked,
                 "V_tank": self.Vt,
@@ -509,7 +519,8 @@ class EMS_env(Custom_env):
     def compare_policies(self,
                          policies: Iterable[Tuple[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]]],
                          max_steps: int = 288,
-                         rew_funs: Iterable[Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]] = None) -> list:
+                         rew_funs: Iterable[Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]] = None, 
+                         options = None) -> list:
         """
         Compare the policies in the environment
         :param policies: list of policies to be compared
@@ -518,7 +529,10 @@ class EMS_env(Custom_env):
         :return:
         """
         # initialize environment
-        x0, info = self.reset()
+        if options is not None:
+            x0, info = self.reset(options=options)
+        else:
+            x0, info = self.reset()
         envs = [self]
         trajectories = []
 
