@@ -1,4 +1,5 @@
 from typing import Any, Union, Tuple, Callable, List, Iterable
+from environments.EMS_constants import *
 
 import copy
 import numpy as np
@@ -35,12 +36,12 @@ class EMS_env(Custom_env):
             self.fig.set_size_inches(10, 10)
 
         # Hyperparams
-        self.n_steps = 288  # 288
+        self.n_steps = 144  # 288
         self.start_index = 0
         self.k = 0
-        self.dt = 600
-        self.n_c = 0.85
-        self.n_d = 1.15
+        self.dt = dt
+        self.n_c = n_c
+        self.n_d = n_d
         self.V_1_ref = 0.0
         self.V_2_ref = 0.0
         self.V_3_ref = 0.0
@@ -79,89 +80,48 @@ class EMS_env(Custom_env):
         self.day_picked = 0
 
         # Constants and bounds
-        self.B_p = 1000 * 10 #1e5
-        self.h_p_const = 20
+        self.B_p = B_p
+        self.h_p_const = h_p_const
         # Tank Constants
         self.Vt_max = 5
         self.Vt_min = 1
 
         # Batteries Constants
-        Pbat_nom = 10  # 100
-        self.Pbat_max = 10  # 100  # [Kw]
-        self.SoE_max = Pbat_nom
-        self.SoE_min = 0.2 * Pbat_nom
+        self.Pbat_max = Pbat_max  # 100  # [Kw]
+        self.SoE_max = SoE_max
+        self.SoE_min = SoE_min
 
         # Irrigation Constants
 
-        self.I_max = 100  # 1 / 1000  # 1L / s -> 0.001m3 / s
-        self.I_min = 0
-        self.d_I_bound = 1e-3  # I_max 
-        self.Q_p_max = 100  # (1 / 1000)  # 1L / s <= > 0.001m3 / s
-        self.d_Q_p_bound = 1e-3  # Q_p_max
+        self.I_max = I_max
+        self.I_min = I_min
+        self.d_I_bound = d_I_bound  
+        self.Q_p_max = Q_p_max  # (1 / 1000)  # 1L / s <= > 0.001m3 / s
+        self.d_Q_p_bound = d_Q_p_bound  # Q_p_max        
 
-        def rwd_fun2(s, a, s_next, e_penal=0):
+        def default_rwd_fun(s, a, s_next):
+            """ Default reward function 
+            :param s: current state
+            :param a: action
+            :param s_next: next state
+            :param e_penal: penalty for energy deficit"""
 
-            penalty = 0
-            reward = 0
-
-            # penalty for activating the pump when the tank is full 
-            if a[1] > 0 and s[1] >= self.Vt_max:
-                penalty += 50
-
-            # penalty for irrigate when the tank is empty
-            if a[0] > 0 and s[1] <= self.Vt_min:
-                penalty += 50
-
-            #reward for having water in the tank
-            if self.Vt_min < s_next[1] <= self.Vt_max:
-                reward = 50 * np.exp(-0.1*(self.Vt_max-s_next[1])**2/(self.Vt_max**2))
-
-            # reward for ending the day close to the reference
-            if s_next[-1] == 143:
-                reward = 100 * np.exp(-.1 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2) + 100 * np.exp(
-                    -.3 * (s_next[4] - s_next[0]) ** 2 / (s_next[0] + 1e-5) ** 2)
-                if s_next[10] != 0:
-                    reward = reward - e_penal
-            
-            else:
-                if s_next[-2] < 0:
-                    penalty += 50
-
-            return np.array([reward - penalty], dtype=np.float32) 
-
-        def rwd_fun(s, a, s_next, e_penal=0):
-            next_error = s[0] - s_next[4]
-            current_error = s[0] - s[4]
+            next_error = s[0] - s_next[1]
+            current_error = s[0] - s[1]
             delta_error = np.abs(next_error) - np.abs(current_error)
-            delta_Irr = (a[0] - s[3]) / 100
-            delta_Q_p = (a[1] - s[5]) / 100
 
-            if s[-1] != 143:
-                reward = (np.exp(-1 * next_error ** 2 / (s[0] + 1e-5) ** 2 -
-                                 delta_Irr ** 2 - delta_Q_p ** 2) +
-                          2 * np.exp(-3 * next_error ** 2 / (s[0] + 1e-5) ** 2 -
-                                     2 * delta_Irr ** 2 - 2 * delta_Q_p ** 2) -
+            if s_next[-1] != 143:
+                reward = (np.exp(-1 * next_error ** 2 / (s[0] + 1e-5) ** 2) +
+                          2 * np.exp(-3 * next_error ** 2 / (s[0] + 1e-5) ** 2) -
                           0.5 * np.sign(np.min([delta_error, 0])) -
                           3.0 * np.sign(np.max([delta_error, 0])))
-                if s[10] != 0:
-                    reward = reward - e_penal
-            else:
-                reward = (np.exp(-1 * current_error ** 2 / (s[0] + 1e-5) ** 2 -
-                                 delta_Irr ** 2 - delta_Q_p ** 2) +
-                          2 * np.exp(-3 * current_error ** 2 / (s[0] + 1e-5) ** 2) -
-                          2 * delta_Irr ** 2 - 2 * delta_Q_p ** 2)
-                if s_next[10] != 0:
-                    reward = reward - e_penal
-
             return np.array([reward])
 
         if rwd_function is not None:
             self.reward_fun = rwd_function
         else:
-            self.reward_fun = lambda s, a, s_next: rwd_fun(s, a, s_next)
+            self.reward_fun = lambda s, a, s_next: default_rwd_fun(s, a, s_next)
 
-        # Observation space
-        # V_ref, Vt, SoE, I_prev, V_Irr, Q_p_prev, p_fv, demand
 
         # Bounds for observations
         obs_low = np.array([0.0,
@@ -169,23 +129,23 @@ class EMS_env(Custom_env):
                             self.I_min,
                             0.0,
                             0.0, 0.0, 0.0,
-                            0, 0, 0], dtype=np.float32)
+                            0, 0], dtype=np.float32)
 
         obs_high = np.array([self.Vt_max,
                              self.Vt_max, self.SoE_max,
                              self.I_max,
                              self.Vt_max,
                              self.Q_p_max, 1000, 1000,
-                             0, 0, 143], dtype=np.float32)
+                             0, 143], dtype=np.float32)
 
         # Action space
         # Irr, Q_p, Pbat
 
         # Bounds for actions
-        self.action_low = np.array([0.0, 0.0, -self.Pbat_max],
+        self.action_low = np.array([0.0, 0.0],
                                    dtype=np.float32)
 
-        self.action_high = np.array([100, 100, self.Pbat_max],
+        self.action_high = np.array([100, 100],
                                     dtype=np.float32)
 
         super().__init__(self.action_low, self.action_high)
@@ -194,7 +154,7 @@ class EMS_env(Custom_env):
         if continuous:
             self.action_space = spaces.Box(low=self.action_low,
                                            high=self.action_high,
-                                           shape=(3,),
+                                           shape=(2,),
                                            dtype=np.float32)
 
         else:
@@ -204,7 +164,7 @@ class EMS_env(Custom_env):
 
         self.observation_space = spaces.Box(low=obs_low,
                                             high=obs_high,
-                                            shape=(11,),
+                                            shape=(10,),
                                             dtype=np.float32)
 
     def step(self, action: np.ndarray) -> tuple[ndarray, ndarray, bool, bool, dict[str, Any]]:
@@ -223,12 +183,15 @@ class EMS_env(Custom_env):
         Info = {}
 
         observation = np.array([self.V_ref,
-                                self.Vt, self.SoE,
-                                self.Irr,
                                 self.V_Irr,
-                                self.Q_p, self.p_fv[self.k],
-                                self.demanda[self.k], self.Pbat,
-                                self.E_residual, self.k % 144])
+                                self.Irr,
+                                self.Vt, 
+                                self.Q_p,
+                                self.SoE, 
+                                self.Pbat,
+                                self.p_fv[self.k],
+                                self.demanda[self.k], 
+                                self.k % 144])
 
         # Store the previous values of the variables to compute the reward
         self.Irr = action[0]
@@ -246,10 +209,10 @@ class EMS_env(Custom_env):
 
         P_Q_p = self.B_p * (self.Q_p * 1e-5) * self.h_p_const / 1e3  # water pump power [kW]
 
-        self.Pbat, self.SoE, self.E_residual = self.manage_batteries(self.SoE,
-                                                                                    self.p_fv[self.k],
-                                                                                    self.demanda[self.k],
-                                                                                    P_Q_p)
+        self.Pbat, self.SoE, self.E_residual = manage_batteries(self.SoE,
+                                                                     self.p_fv[self.k],
+                                                                     self.demanda[self.k],
+                                                                     P_Q_p)
 
         amount_to_pump = self.dt * (self.Q_p * 1e-5) # Volume [m3]
 
@@ -259,28 +222,20 @@ class EMS_env(Custom_env):
         self.k = self.k + 1
 
         observation_next = np.array([self.V_ref,
-                                     self.Vt, self.SoE,
-                                     self.Irr,
-                                     self.V_Irr,
-                                     self.Q_p, self.p_fv[self.k],
-                                     self.demanda[self.k], self.Pbat,
-                                     self.E_residual, self.k % 144])
+                                    self.V_Irr,
+                                    self.Irr,
+                                    self.Vt, 
+                                    self.Q_p,
+                                    self.SoE, 
+                                    self.Pbat,
+                                    self.p_fv[self.k],
+                                    self.demanda[self.k], 
+                                    self.k % 144])
 
         reward = self.reward_fun(observation, action, observation_next)
 
-        if (self.k % 144) == 0:  # A day has passed
-            self.V_ref = self.V_refs[self.day_picked + self.k//144]
-            self.V_Irr = 0
-            observation_next = np.array([self.V_ref,
-                                         self.Vt, self.SoE,
-                                         self.Irr,
-                                         self.V_Irr,
-                                         self.Q_p, self.p_fv[self.k],
-                                         self.demanda[self.k], self.Pbat,
-                                         self.E_residual, self.k % 144])
-
-        if self.k >= self.n_steps:  # Number of steps are completed
-            truncated = True
+        if (self.k % 144) == 143:  # A day is over
+            terminated = True
 
         return observation_next, reward, terminated, truncated, Info
 
@@ -293,23 +248,14 @@ class EMS_env(Custom_env):
         """
         self.day_picked = np.random.randint(0, 70)
 
-        if options is not None:
-            instant_k = options["t_init"]
-            InitialObservation = self.set_initial_conditions(self.day_picked,
-                                                             V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
-                                                             Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
-                                                             Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
-                                                             Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
-                                                             instant_k=instant_k,
-                                                             V_irr=0)
-        else:
-            InitialObservation = self.set_initial_conditions(self.day_picked,
-                                                            V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
-                                                            Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
-                                                            Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
-                                                            Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
-                                                            instant_k=np.random.randint(0, 144),
-                                                            V_irr=self.V_refs[self.day_picked] * np.random.random_sample())
+        
+        InitialObservation = self.set_initial_conditions(self.day_picked,
+                                                        V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
+                                                        Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
+                                                        Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
+                                                        Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
+                                                        instant_k=0,
+                                                        V_irr=0.0)
 
         info = {"day_picked": self.day_picked,
                 "V_tank": self.Vt,
@@ -353,7 +299,7 @@ class EMS_env(Custom_env):
         :return: Initial observation
         """
         self.k = instant_k
-        self.n_steps = self.k + 288
+        self.n_steps = self.k + 143
         self.start_index = day_picked * 144
         self.Vt = V_tank
         self.SoE = Soe
@@ -364,17 +310,19 @@ class EMS_env(Custom_env):
         self.p_fv = solar_power(self.radiacion, self.temperatura)
         self.demanda = self.demand_data[self.start_index:self.start_index + self.n_steps + 1]
         self.Q_p = Q_p_prev
-        self.V_ref = self.V_refs[day_picked]
-        self.Pbat, _, self.E_residual = self.manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
+        self.V_ref = 5*np.random.rand() #self.V_refs[day_picked]
+        self.Pbat, _, self.E_residual = manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
 
-        InitialObservation = np.array(
-            [self.V_ref,
-             self.Vt, self.SoE,
-             self.Irr,
-             self.V_Irr,
-             self.Q_p, self.p_fv[self.k],
-             self.demanda[self.k], self.Pbat,
-             self.E_residual, self.k])
+        InitialObservation = np.array([self.V_ref,
+                                self.V_Irr,
+                                self.Irr,
+                                self.Vt, 
+                                self.Q_p,
+                                self.SoE, 
+                                self.Pbat,
+                                self.p_fv[self.k],
+                                self.demanda[self.k], 
+                                self.k])
 
         return InitialObservation
 
@@ -392,22 +340,20 @@ class EMS_env(Custom_env):
 
         t = np.linspace(0, 48, len(actions))
 
-        SoE = states[:, 2]
-        Qp = self.dt * (actions[:, 0]/100) * 1e-3
+        SoE = states[:, 5]
+        Qp = np.diff(states[:,3])/(600)*1e5
         P_Q_p = self.B_p * Qp * self.h_p_const / 1e3
-        P_fv = states[:-1, 6]  # foto-voltaic generation
-        P_demanda = states[:-1, 7]  # Energetic demand
-        P_bat = states[:-1, 8]  # Battery power
+        P_bat = states[1:, 6]  # Battery power
 
         self.axs[0, 0].step(t, states[:-1, 0], where='post', label='V_ref')
-        self.axs[0, 0].step(t, states[:-1, 4], where='post', label='V_Irr')
+        self.axs[0, 0].step(t, states[:-1, 1], where='post', label='V_Irr')
         self.axs[0, 0].set_title('Water demand fulfilled')
         # self.axs[0].set_xlabel('Time (h)')
         self.axs[0, 0].set_ylabel('Water volume (m3)')
-
+        actual_irrigation = np.diff(states[:, 1])/(600)*1e5
         self.axs[0, 1].step(t, actions[:, 0], where='post', label='Irr')
+        self.axs[0, 1].step(t, actual_irrigation, where='post', label='Actual_Irr')
         self.axs[0, 1].set_title('Irrigation level')
-        # self.axs[1].set_xlabel('Time (h)')
         self.axs[0, 1].set_ylabel('Irrigation level (%)')
         self.axs[0, 1].legend()
 
@@ -421,22 +367,20 @@ class EMS_env(Custom_env):
         # self.axs[3].set_xlabel('Time (h)')
         self.axs[1, 1].set_ylabel('Power (kW)')
 
-        self.axs[2, 0].step(t, states[:-1, 1], where='post', label='V_tank')
+        self.axs[2, 0].step(t, states[:-1, 3], where='post', label='V_tank')
         self.axs[2, 0].set_title('Tank volume')
         self.axs[2, 0].set_xlabel('Time (h)')
         self.axs[2, 0].set_ylabel('Volume (m3)')
 
         self.axs[2, 1].step(t, actions[:, 1], where='post', label='Q_pump')
-        self.axs[2, 1].set_title('Pump power')
+        self.axs[2, 1].step(t, Qp + actual_irrigation, where='post', label='Actual_Q_pump')
+        self.axs[2, 1].set_title('Pump')
         self.axs[2, 1].set_xlabel('Time (h)')
         self.axs[2, 1].set_ylabel('(%)')
 
         self.axs[3, 0].step(t, states[:-1, 9], where='post', label='E_residual')
         self.axs[3, 0].set_title('Power balance')
 
-        # balance = np.cumsum(P_residual * self.dt / 3600)
-        # self.axs[3, 1].step(t, states[:-1, 9] + states[:-1, 10], where='post', label='E_residual')
-        # self.axs[3, 1].set_title('Energy balance')
 
         self.axs[3, 1].step(t, rewards, where='post', label='rewards')
         self.axs[3, 1].set_title('Transition Rewards')
@@ -468,57 +412,10 @@ class EMS_env(Custom_env):
         index = action.item()
         return np.array([self.action_values[index]])
 
-    def manage_batteries(self,
-                         SoE: float,
-                         P_fv: float,
-                         P_demanded: float,
-                         P_pump: float) -> tuple[float, float, float]:
-        """
-        Choose the power to re/discharge the batteries and computes the next SoE
-        :param SoE:
-        :param P_fv:
-        :param P_demanded:
-        :param P_pump:
-        :return: Pbat, next_SoE, E_surplus, E_deficit
-        """
-        E_surplus = 0
-        E_deficit = 0
-
-        P_residual = P_fv - P_demanded - P_pump
-        if not -self.Pbat_max <= P_residual <= self.Pbat_max:  # The surplus is out of the power bounds of the battery
-            Pbat = np.clip(P_residual, -self.Pbat_max, self.Pbat_max)  # positive for surplus, negative for deficit
-            P_not_used = P_residual - Pbat  # positive for surplus, negative for deficit. In case of negative value is P not available
-
-        else:
-            P_not_used = 0
-            Pbat = P_residual
-
-        delta_SoE = np.max([Pbat, 0]) * self.n_c * (self.dt / 3600) + np.min([Pbat, 0]) / self.n_d * (self.dt / 3600)
-        next_SoE = SoE + delta_SoE
-
-        if self.SoE_min <= next_SoE <= self.SoE_max:  # The recharge is done immediately
-            Pbat = Pbat
-        else:  # The re/discharge is done but there is a surplus/deficit of energy
-            E_surplus = next_SoE - self.SoE_max if next_SoE > self.SoE_max else 0
-            E_deficit = next_SoE - self.SoE_min if next_SoE < self.SoE_min else 0
-
-            next_SoE = np.clip(next_SoE, self.SoE_min, self.SoE_max)
-            if delta_SoE > 0:
-                Pbat = np.max([self.SoE_max - SoE, 0]) / (self.dt / 3600) / self.n_c
-            else:
-                Pbat = np.min([self.SoE_min - SoE, 0]) * self.n_d / (self.dt / 3600)
-            #Pbat = np.max([self.SoE_max - SoE, 0]) / (self.dt / 3600) / self.n_c + np.min([self.SoE_min - SoE, 0]) * self.n_d / (self.dt / 3600)
-
-        E_surplus = E_surplus + P_not_used * (self.dt / 3600) if P_not_used > 0 else E_surplus
-        E_deficit = E_deficit + P_not_used / self.n_d * (self.dt / 3600) if P_not_used < 0 else E_deficit
-
-        E_residual = E_surplus + E_deficit 
-
-        return Pbat, next_SoE, E_residual
 
     def compare_policies(self,
                          policies: Iterable[Tuple[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]]],
-                         max_steps: int = 288,
+                         max_steps: int = 144,
                          rew_funs: Iterable[Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]] = None, 
                          options = None) -> list:
         """
@@ -564,3 +461,4 @@ class EMS_env(Custom_env):
                 trajectories.append([s, a, r])
 
         return trajectories
+    

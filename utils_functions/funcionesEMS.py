@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import Union
+from environments.EMS_constants import*
 
 PATH = r'C:\Users\wenap\PycharmProjects\PPO_project\Data\EMS'
 
@@ -19,7 +20,7 @@ def get_demand() -> np.ndarray:
     dt = 600
     for i in range(s_hourly_demand[0]):
         for j in range(s_hourly_demand[1]):
-            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j]*0.1  # * dt / 3600
+            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j]*0.01  # * dt / 3600
     demand = demand.flatten()
     return demand
 
@@ -74,47 +75,12 @@ def solar_power(rad: Union[float, np.ndarray], temp: Union[float, np.ndarray]) -
     :return: Solar power in kW
 
     """
-    Pn = 9 # 90  # 90 * (600 / 3600)
+    Pn = 1 # 90  # 90 * (600 / 3600)
     a_fv = -.0045
     Tn = 25
     T_cell = temp + rad / 800 * (Tn - 20)
     return (Pn * rad / 1000.) * (1 + a_fv * (T_cell - Tn))
 
-
-def get_reward(E_surplus,
-               E_deficit,
-               Irr_prev,
-               Irr,
-               V_Irr,
-               V_ref,
-               Qp_prev, Qp) -> float:
-    """
-    Computes the reward for the current state of the system
-    :param E_surplus: Energy surplus [kWh]
-    :param E_deficit: Energy deficit [kWh]
-    :param Irr_prev: Previous irrigation [%] in the first day
-    :param Irr: Irrigation [%] in the first day
-    :param V_Irr_prev: Previous water volume fulfilled the first day [m3]
-    :param V_Irr: Water volume fulfilled the first day [m3]
-    :param V_ref: Water volume demand the first day [m3]
-    :param Qp_prev: Previous power of the pump [%]
-    :param Qp: Power of the pump [%]
-    :param Pbat_prev: Previous power of the battery [%]
-    :param Pbat: Power of the battery [%]
-    :return: reward r(t)
-    """
-
-    d_Irr = (Irr - Irr_prev)/100  # [l/s]
-    d_Qp = (Qp - Qp_prev)/100  # [l/s]
-
-    economic_component = 25 * E_surplus - 100 * E_deficit
-    w_ns = np.max([0.0, V_ref - V_Irr])  # Pending demand
-    w_ex = np.max([0.0, -(V_ref - V_Irr)])  # Excedent
-
-    reward = (30*np.exp(-0.05 * (w_ns**2 + 5*w_ex**2 + d_Irr**2 + d_Qp**2))
-              + 20*np.exp(-0.1 * (V_ref - V_Irr)**2)
-              + economic_component/10)
-    return reward
 
 def follow_ref_rew_1(s, a, s_next) -> np.ndarray:
     """
@@ -125,79 +91,107 @@ def follow_ref_rew_1(s, a, s_next) -> np.ndarray:
     :return: reward
     """
     reward = 0
-    if s[-1] == 143:
-        reward += 10*np.exp(-0.1 * (s[0] - s[4])**2)
-    
-    else: # penalty for the reference surpassing
-        if s[4] > s[0] and s_next[4] > s[4]:
-            reward = reward - 1
 
+    if np.abs(s[0] - s[1]) > np.abs(s[0] - s_next[1]):
+        reward = reward + 1
 
-    tank_reward = s_next[1] if s_next[1] <= 5 else 0
+    elif s[1] > s[0] and s_next[1] > s[1]:
+            reward = reward - 2
 
-    reward = reward + (tank_reward/5)*.8
+    tank_reward = 0 #(s_next[3])*.8 if s_next[3] <= 5 else 0
 
-    if s[4] > s[0] and s_next[4] > s[4]:
-        reward = reward - 1
+    reward = reward + tank_reward
+
+     # unfeasible action penalty
+    if s[3] <= 1 and a[0] > 0:
+        reward = reward - 5
+
+    if s[3] >= 5 and a[1] > 0:
+        reward = reward - 5
 
     return np.array([reward], dtype=np.float32)
 
 def follow_ref_rew_2(s, a, s_next) -> np.ndarray:
     """
-    Reward function for the follow reference task
+    Reward function for the follow reference task.
+    Also penalizes the energy deficits.
     :param s: current state
     :param a: action
     :param s_next: next state
     :return: reward
     """
     reward = 0
-    if s[-1] == 143:
-        reward += 10*np.exp(-0.1 * (s[0] - s[4])**2)
-    
-    else: # penalty for the reference surpassing
-        if s[4] > s[0] and s_next[4] > s[4]:
-            reward = reward - 1
 
-    soe_reward = s_next[2] if s_next[2] <= 8 else 0
-    tank_reward = s_next[1] if s_next[1] <= 5 else 0
+    if np.abs(s[0] - s[1]) > np.abs(s[0] - s_next[1]):
+        reward = reward + 1
 
-    reward = reward + (tank_reward/5)*.8 + (soe_reward/8)*.8
+    elif s[1] > s[0] and s_next[1] > s[1]:
+            reward = reward - 2
 
-    return np.array([reward], dtype=np.float32)
+    tank_reward = 0 #(s_next[3])*.8 if s_next[3] <= 5 else 0
 
-def follow_ref_rew_3(s, a, s_next) -> np.ndarray:
-    """
-    Reward function for the follow reference task
-    :param s: current state
-    :param a: action
-    :param s_next: next state
-    :return: reward
-    """
-    reward = 0
-    if s[-1] == 143:
-        reward += 10*np.exp(-0.1 * (s[0] - s[4])**2)
-    
-    else: # penalty for the reference surpassing
-        if s[4] > s[0] and s_next[4] > s[4]:
-            reward = reward - 1
+    reward = reward + tank_reward
 
-    soe_reward = s_next[2] if s_next[2] <= 8 else 0
-    tank_reward = s_next[1] if s_next[1] <= 5 else 0
+     # unfeasible action penalty
+    if s[3] <= 1 and a[0] > 0: # Irrigating while the tank is empty
+        reward = reward - 5
 
-    reward = reward + (tank_reward/5)*.8 + (soe_reward/8)*.8
+    if s[3] >= 5 and a[1] > 0: # Pumping while the tank is full
+        reward = reward - 5
+        P_Q_pump = 0
+    else:
+        P_Q_pump = 1000 * 10 * (a[1] * 1e-5) * 20 / 1e3
 
-    # unfeasible action penalty
-    if s[1] <= 1 and a[0] > 0:
-        reward = reward - 1
+    Pbat, next_SoE, E_residual = manage_batteries(s_next[5], s_next[7], s[8], P_Q_pump)
 
-    if s[1] >= 5 and a[1] > 0:
-        reward = reward - 1    
+    if E_residual < 0:
+        reward = reward - 5
 
     return np.array([reward], dtype=np.float32)
 
+def manage_batteries(SoE: float,
+                    P_fv: float,
+                    P_demanded: float,
+                    P_pump: float) -> tuple[float, float, float]:
+        """
+        Choose the power to re/discharge the batteries and computes the next SoE
+        :param SoE:
+        :param P_fv:
+        :param P_demanded:
+        :param P_pump:
+        :return: Pbat, next_SoE, E_residual
+        """
+        E_surplus = 0
+        E_deficit = 0
 
-"""    weight_1 = 1
-        weight_2 = 1
-        reward = weight_1 * s[4] if s[4] <= s[0] else ((1+weight_2)*s[0] - weight_2*s[4])
-        reward = reward/(s[0] + 1e-5)
-        reward = np.clip(reward, 0, np.inf)"""
+        P_residual = P_fv - P_demanded - P_pump
+        if not -Pbat_max <= P_residual <= Pbat_max:  # The surplus is out of the power bounds of the battery
+            Pbat = np.clip(P_residual, -Pbat_max, Pbat_max)  # positive for surplus, negative for deficit
+            P_not_used = P_residual - Pbat  # positive for surplus, negative for deficit. In case of negative value is P not available
+
+        else:
+            P_not_used = 0
+            Pbat = P_residual
+
+        delta_SoE = np.max([Pbat, 0]) * n_c * (dt / 3600) + np.min([Pbat, 0]) / n_d * (dt / 3600)
+        next_SoE = SoE + delta_SoE
+
+        if SoE_min <= next_SoE <= SoE_max:  # The recharge is done immediately
+            Pbat = Pbat
+        else:  # The re/discharge is done but there is a surplus/deficit of energy
+            E_surplus = next_SoE - SoE_max if next_SoE > SoE_max else 0
+            E_deficit = next_SoE - SoE_min if next_SoE < SoE_min else 0
+
+            next_SoE = np.clip(next_SoE, SoE_min, SoE_max)
+            if delta_SoE > 0:
+                Pbat = np.max([SoE_max - SoE, 0]) / (dt / 3600) / n_c
+            else:
+                Pbat = np.min([SoE_min - SoE, 0]) * n_d / (dt / 3600)
+            #Pbat = np.max([SoE_max - SoE, 0]) / (dt / 3600) / n_c + np.min([SoE_min - SoE, 0]) * n_d / (dt / 3600)
+
+        E_surplus = E_surplus + P_not_used * (dt / 3600) if P_not_used > 0 else E_surplus
+        E_deficit = E_deficit + P_not_used / n_d * (dt / 3600) if P_not_used < 0 else E_deficit
+
+        E_residual = E_surplus + E_deficit 
+
+        return Pbat, next_SoE, E_residual

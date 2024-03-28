@@ -51,10 +51,13 @@ class DQN(RL_algorithm):
 
     def _init_scaler(self):
         """Initialize the scaler with the mean and std of the observations."""
-        sample_states = []
-        for idx in range(10000):  # Collect 10000 samples
+        n_samples = 10000
+        sample_states = np.zeros((n_samples, self.obs_dim))
+        for idx in range(n_samples):  # Collect 10000 samples
             state, _ = self.env.reset()
-            sample_states.append(state)
+            sample_states[idx] = state
+        sample_states[:, -1] = np.arange(n_samples) % 144  # Add a time feature
+        sample_states[:, 1] = np.random.rand(n_samples)*5  # Add a random feature
         self.scaler.fit(sample_states)
 
     def normalize_state(self, state: Union[np.array, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
@@ -67,7 +70,6 @@ class DQN(RL_algorithm):
             state = state.detach().cpu().numpy().squeeze()
             state = self.scaler.transform([state])[0]
             return torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
-        
         else:
             return self.scaler.transform([state])[0]
 
@@ -235,9 +237,9 @@ class DQN(RL_algorithm):
         :return:
         """
         if options is None:
-            self.BATCH_SIZE = 64
-            self.gamma = 0.67
-            self.lr = 1e-5
+            self.BATCH_SIZE = 128
+            self.gamma = 0.78
+            self.lr = 1e-3
             self.EPS_START = 0.95
             self.EPS_END = 0.001
             self.EPS_DECAY = 1000

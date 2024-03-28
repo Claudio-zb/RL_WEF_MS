@@ -80,19 +80,22 @@ class Q_network(nn.Module):
         self.device = device
         self.input_dim = input_dim
         self.output_dim = output_dim
+        self.width = 128
         self.structure = nn.Sequential(
             nn.BatchNorm1d(input_dim),
-            nn.Linear(input_dim, 128),
-            nn.BatchNorm1d(128),
+            nn.Linear(input_dim, self.width),
+            nn.BatchNorm1d(self.width),
             nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.BatchNorm1d(128),
+            nn.Linear(self.width, self.width),
+            nn.BatchNorm1d(self.width),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(self.width, self.width),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(self.width, self.width),
             nn.ReLU(),
-            nn.Linear(128, 48),
+            nn.Linear(self.width, self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, 48),
             nn.ReLU(),
             nn.Linear(48, output_dim)
         )
