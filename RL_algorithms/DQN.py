@@ -74,6 +74,7 @@ class DQN(RL_algorithm):
             return self.scaler.transform([state])[0]
 
     def learn(self, n_episodes: int) -> tuple[dict, nn.Module, StandardScaler]:
+        self.EPS_DECAY = n_episodes/5
         device = self.device
         self._training_stats = {"mean_episode_rewards": np.zeros(n_episodes),
                                 "std_episode_rewards": np.zeros(n_episodes),
@@ -214,11 +215,10 @@ class DQN(RL_algorithm):
         self.scheduler.step()
         return k_update + 1
 
-    def select_action(self, state, steps_done: int) -> torch.Tensor:
+    def select_action(self, state, i_episode: int) -> torch.Tensor:
 
         sample = random.random()
-        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * np.exp(-1. * steps_done / (self.EPS_DECAY))
-        steps_done += 1
+        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * np.exp(-1. * (i_episode) / (self.EPS_DECAY))
         if sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return the largest column value of each row.

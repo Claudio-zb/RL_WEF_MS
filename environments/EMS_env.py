@@ -105,7 +105,7 @@ class EMS_env(Custom_env):
             :param a: action
             :param s_next: next state
             :param e_penal: penalty for energy deficit"""
-
+            reward = 0
             next_error = s[0] - s_next[1]
             current_error = s[0] - s[1]
             delta_error = np.abs(next_error) - np.abs(current_error)
@@ -250,6 +250,7 @@ class EMS_env(Custom_env):
 
         
         InitialObservation = self.set_initial_conditions(self.day_picked,
+                                                         V_ref=5*np.random.rand(),
                                                         V_tank=(self.Vt_max - self.Vt_min) * np.random.random_sample() + self.Vt_min,
                                                         Soe=(self.SoE_max - self.SoE_min) * np.random.random_sample() + self.SoE_min,
                                                         Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
@@ -263,7 +264,8 @@ class EMS_env(Custom_env):
                 "Irr_prev": self.Irr,
                 "Q_p_prev": self.Q_p,
                 "instant_k": self.k,
-                "V_irr": self.V_Irr}
+                "V_irr": self.V_Irr, 
+                "V_ref": self.V_ref}
 
         return InitialObservation, info
 
@@ -276,6 +278,7 @@ class EMS_env(Custom_env):
         self.k = 0
         day_picked = info["day_picked"]
         InitialObservation = self.set_initial_conditions(day_picked,
+                                                         V_ref=info["V_ref"],
                                                          V_tank=info["V_tank"],
                                                          Soe=info["SoE"],
                                                          Irr_prev=info["Irr_prev"],
@@ -286,7 +289,7 @@ class EMS_env(Custom_env):
 
         return InitialObservation
 
-    def set_initial_conditions(self, day_picked, V_tank, Soe, Irr_prev, Q_p_prev, instant_k, V_irr):
+    def set_initial_conditions(self, day_picked, V_ref, V_tank, Soe, Irr_prev, Q_p_prev, instant_k, V_irr):
         """
         Set the initial conditions of the environment
         :param V_irr:
@@ -310,7 +313,7 @@ class EMS_env(Custom_env):
         self.p_fv = solar_power(self.radiacion, self.temperatura)
         self.demanda = self.demand_data[self.start_index:self.start_index + self.n_steps + 1]
         self.Q_p = Q_p_prev
-        self.V_ref = 5*np.random.rand() #self.V_refs[day_picked]
+        self.V_ref = V_ref #self.V_refs[day_picked]
         self.Pbat, _, self.E_residual = manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
 
         InitialObservation = np.array([self.V_ref,
