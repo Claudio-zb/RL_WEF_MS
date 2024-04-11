@@ -13,6 +13,7 @@ import numpy as np
 from RL_algorithms.RL_algorithm import RL_algorithm
 from sklearn.preprocessing import StandardScaler
 from typing import Union, Tuple, Any
+from matplotlib.figure import Figure
 
 
 class DQN(RL_algorithm):
@@ -25,7 +26,9 @@ class DQN(RL_algorithm):
     def show_trajectory(self, policy):
         self.env.show_sample(policy)
 
-    def __init__(self, env: Custom_env, options=None):
+    def __init__(self, env: Custom_env, options=None) -> None:
+        """Initializes the DQN algorithm class. 
+        It creates the policy and target networks, the optimizer and the memory."""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
         self._init_hyperparameters(options)
@@ -41,13 +44,22 @@ class DQN(RL_algorithm):
         self.optimizer = AdamW(self.policy_net.parameters(), lr=self.lr, amsgrad=True)
         self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9999)
         self._training_stats = None
-        plt.ion()
-        self.stats_fig = plt.figure()
+
+        self.stats_fig = Figure(figsize=(5, 4), dpi=100)
         self.stats_axs = self.stats_fig.subplots(3, 1)
+
         self.ep_steps = 0
         self.ep_random_steps = 0
         self.scaler = StandardScaler()
         self._init_scaler()
+
+        # priority experience replay
+        self.replay_period = 4
+        self.priority_alpha = 0.6
+        self.priority_beta = 0.4
+        self.delta = 0
+
+
 
     def _init_scaler(self):
         """Initialize the scaler with the mean and std of the observations."""
@@ -189,8 +201,10 @@ class DQN(RL_algorithm):
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device, dtype=torch.float32)
+        a_next = self.policy_net(non_final_next_states).max(1).indices
+        q_next = self.target_net(non_final_next_states)
         with torch.no_grad():
-            next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1).values
+            next_state_values[non_final_mask] = q_next.gather(1, a_next.unsqueeze(1)).squeeze()
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch.squeeze(-1)
 
@@ -266,7 +280,7 @@ class DQN(RL_algorithm):
 
     def update_training_plots(self, episode: int):
         """Updates the training plots"""
-        plt.figure(self.stats_fig.number)
+
         self.stats_axs[0].clear()
         self.stats_axs[1].clear()
         self.stats_axs[2].clear()
@@ -276,6 +290,9 @@ class DQN(RL_algorithm):
         if episode < 1000:
 
             mean_rewards = self._training_stats["mean_episode_rewards"][0:episode]
+            #draw the std deviation
+            std_rewards = self._training_stats["std_episode_rewards"][0:episode]
+
             windowed_rewards = np.convolve(mean_rewards, np.ones(10) / 10, mode='valid')
 
             # durations = self._training_stats["steps"][0:episode]
@@ -285,6 +302,7 @@ class DQN(RL_algorithm):
 
             self.stats_axs[0].plot(range(0, episode), mean_rewards, label="Mean reward")
             self.stats_axs[0].plot(range(window_length - 1, episode), windowed_rewards, label="Windowed reward")
+            self.stats_axs[0].fill_between(range(0, episode), mean_rewards - std_rewards, mean_rewards + std_rewards, alpha=0.2)
 
             self.stats_axs[1].plot(range(0, episode), target_values, label="Target values")
             self.stats_axs[1].plot(range(0, episode), policy_values, label="Policy value")
@@ -314,9 +332,11 @@ class DQN(RL_algorithm):
                                    label="Action randomness")
         self.stats_axs[1].legend()
         self.stats_axs[0].legend()
-
         plt.pause(0.01)
 
     def save(self):
         """ Saves the training statistics and the model"""
         pass
+
+    def get_training_fig(self) -> plt.Figure:
+        return self.stats_fig

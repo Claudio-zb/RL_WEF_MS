@@ -12,7 +12,6 @@ from sklearn.preprocessing import StandardScaler
 from utils_functions.funcionesEMS import *
 from gymnasium import spaces
 from environments.custom_env import Custom_env
-matplotlib.use('Qt5Agg')
 
 
 class EMS_env(Custom_env):

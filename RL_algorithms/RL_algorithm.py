@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from torch import nn
+from matplotlib.figure import Figure
 
 
 class RL_algorithm(ABC):
@@ -36,3 +37,11 @@ class RL_algorithm(ABC):
         :return:
         """
         pass
+    
+    @abstractmethod
+    def get_training_fig(self) -> Figure:
+        """
+        Get the training figure
+        :return:
+        """
+        pass 
