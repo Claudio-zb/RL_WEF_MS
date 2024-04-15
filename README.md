@@ -1,2 +1,3 @@
 # RL_EMS
-Energy Management System based in reinforcement learning algorithms 
+
+This project implements an environment that allows to train an Energy Management System based on reinforcement learning algorithms. 
