@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 
-from EMS_networks import Q_network
+from utils_functions.EMS_networks import Q_network
 from utils_functions.ReplayMemory import ReplayMemory, Transition, PrioritizedReplayMemory
 from environments.custom_env import Custom_env
 import numpy as np
@@ -95,7 +95,6 @@ class DQN(RL_algorithm):
                                 "steps": np.zeros(n_episodes),
                                 "action_randomness": np.zeros(n_episodes)}
 
-        k_update = 0
         for i_episode in range(n_episodes):
             # Initialize the environment and get it's state
             if i_episode % 10 == 0:
@@ -117,7 +116,7 @@ class DQN(RL_algorithm):
                 reward = torch.tensor(reward, device=device)
                 done = terminated or truncated
 
-                if terminated:
+                if done:
                     next_state = None
                 else:
                     next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
@@ -130,7 +129,7 @@ class DQN(RL_algorithm):
 
                 # Perform one step of the optimization (on the policy network)
                 # Optimization is done every batch_size steps
-                k_update = self.optimize_model(k_update)
+                self.optimize_model()
 
                 # Soft update of the target network's weights
                 # θ′ ← τ θ + (1 − τ )θ′
@@ -169,10 +168,10 @@ class DQN(RL_algorithm):
 
         return self._training_stats, self.policy_net, self.scaler
 
-    def optimize_model(self, k_update: int) -> int:
+    def optimize_model(self) -> None:
         self.policy_net.train()
         if len(self.memory) < self.BATCH_SIZE:
-            return k_update
+            return 
         transitions, indices = self.memory.sample(self.BATCH_SIZE)
         # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
         # detailed explanation). This converts batch-array of Transitions
@@ -226,7 +225,8 @@ class DQN(RL_algorithm):
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
         self.optimizer.step()
         self.scheduler.step()
-        return k_update + 1
+
+        return
 
     def select_action(self, state, steps_done: int) -> torch.Tensor:
 
@@ -332,7 +332,6 @@ class DQN(RL_algorithm):
                                    label="Action randomness")
         self.stats_axs[1].legend()
         self.stats_axs[0].legend()
-        plt.pause(0.01)
 
     def save(self):
         """ Saves the training statistics and the model"""
@@ -340,3 +339,63 @@ class DQN(RL_algorithm):
 
     def get_training_fig(self) -> plt.Figure:
         return self.stats_fig
+
+    def one_ep_training(self, i_episode: int = 0):
+        '''Train the agent for one episode'''
+        device = self.device
+        state, info = self.env.reset()
+        self.ep_random_steps = 0
+        self.ep_steps = 0
+        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        state = self.normalize_state(state)
+        ep_rewards = []
+        for t in count():  # begin episode
+            self.policy_net.eval()
+            action = self.select_action(state, i_episode)
+            observation, reward, terminated, truncated, _ = self.env.step(action)
+            self.ep_steps += 1
+            ep_rewards.append(reward)
+            reward = torch.tensor(reward, device=device)
+            done = terminated or truncated
+
+            if done:
+                next_state = None
+                ep_rewards = np.array(ep_rewards).flatten()
+                mean_ep_rwd = ep_rewards.mean()
+                std_ep_rwd = ep_rewards.std()
+                action_randomness = self.ep_random_steps / (t + 1)
+
+                if len(self.memory) >= self.BATCH_SIZE:
+                    transitions, indices = self.memory.sample(self.BATCH_SIZE)
+                    batch = Transition(*zip(*transitions))
+                    state_batch = torch.cat(batch.state)
+
+                    q_values_target = self.target_net(state_batch).max(1).values.mean().item()
+                    q_values_policy = self.policy_net(state_batch).max(1).values.mean().item()
+            else:
+                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+
+            # Store the transition in memory
+            self.memory.push(state, action, next_state, reward)
+
+            # Move to the next state
+            state = next_state
+
+            # Perform one step of the optimization (on the policy network)
+            # Optimization is done every batch_size steps
+            self.optimize_model()
+
+            # Soft update of the target network's weights
+            # θ′ ← τ θ + (1 − τ )θ′
+            target_net_state_dict = self.target_net.state_dict()
+            policy_net_state_dict = self.policy_net.state_dict()
+            for key in policy_net_state_dict:
+                target_net_state_dict[key] = policy_net_state_dict[key] * self.TAU + target_net_state_dict[key] * (
+                        1 - self.TAU)
+            self.target_net.load_state_dict(target_net_state_dict)
+
+            if done:
+                break
+
+        return mean_ep_rwd, std_ep_rwd, action_randomness, q_values_target, q_values_policy
+

@@ -45,3 +45,12 @@ class RL_algorithm(ABC):
         :return:
         """
         pass 
+    
+    @abstractmethod
+    def one_ep_training(self, i_episode: int) -> tuple[float, float, float, float, float]:
+        """
+        Execute one episode of training
+        :param i_episode: episode number
+        :return:
+        """
+        pass

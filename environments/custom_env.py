@@ -81,7 +81,7 @@ class Custom_env(ABC, gym.Env):
         return states, actions, rewards
 
     @abstractmethod
-    def show_sample(self, policy):
+    def show_sample(self, policy, scaler):
         """
         Render the environment
         :param policy: policy to be used

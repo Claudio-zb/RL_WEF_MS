@@ -1,5 +1,5 @@
 import torch
-from EMS_networks import ValueNN, ActorNN
+from utils_functions.EMS_networks import ValueNN, ActorNN
 from torch.distributions import MultivariateNormal
 from torch.optim import Adam
 from torch import nn

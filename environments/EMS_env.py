@@ -108,13 +108,14 @@ class EMS_env(Custom_env):
             next_error = s[0] - s_next[1]
             current_error = s[0] - s[1]
             delta_error = np.abs(next_error) - np.abs(current_error)
+            reward = 0.0
 
             if s_next[-1] != 143:
                 reward = (np.exp(-1 * next_error ** 2 / (s[0] + 1e-5) ** 2) +
                           2 * np.exp(-3 * next_error ** 2 / (s[0] + 1e-5) ** 2) -
                           0.5 * np.sign(np.min([delta_error, 0])) -
                           3.0 * np.sign(np.max([delta_error, 0])))
-            return np.array([reward])
+            return np.array([reward], dtype=np.float32)
 
         if rwd_function is not None:
             self.reward_fun = rwd_function
@@ -220,6 +221,9 @@ class EMS_env(Custom_env):
 
         self.k = self.k + 1
 
+        if (self.k % 144) == 143:  # A day is over
+            terminated = True
+
         observation_next = np.array([self.V_ref,
                                     self.V_Irr,
                                     self.Irr,
@@ -227,14 +231,11 @@ class EMS_env(Custom_env):
                                     self.Q_p,
                                     self.SoE, 
                                     self.Pbat,
-                                    self.p_fv[self.k],
-                                    self.demanda[self.k], 
+                                    self.p_fv[np.min((self.k, 143))],
+                                    self.demanda[np.min((self.k, 143))], 
                                     self.k % 144])
 
         reward = self.reward_fun(observation, action, observation_next)
-
-        if (self.k % 144) == 143:  # A day is over
-            terminated = True
 
         return observation_next, reward, terminated, truncated, Info
 
@@ -391,9 +392,7 @@ class EMS_env(Custom_env):
         self.axs[2, 0].legend()
         self.axs[2, 1].legend()
 
-        plt.pause(0.1)
-        plt.show()
-
+        
     def close(self):
         """
         Close the environment
