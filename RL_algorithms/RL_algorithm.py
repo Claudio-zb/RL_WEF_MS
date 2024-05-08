@@ -51,6 +51,6 @@ class RL_algorithm(ABC):
         """
         Execute one episode of training
         :param i_episode: episode number
-        :return:
+        :return mean_ep_rwd, std_ep_rwd, action_randomness, q_values_target, q_values_policy:
         """
         pass

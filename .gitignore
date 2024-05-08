@@ -2,3 +2,4 @@ __pycache__/
 .vscode/
 figures/*
 RL_algoritms/__pycache__/
+environments/__pycache__/

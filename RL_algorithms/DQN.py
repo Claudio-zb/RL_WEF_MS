@@ -67,9 +67,10 @@ class DQN(RL_algorithm):
         sample_states = np.zeros((n_samples, self.obs_dim))
         for idx in range(n_samples):  # Collect 10000 samples
             state, _ = self.env.reset()
+            state[-1] = np.random.randint(0, 2) 
+            state[-2] = np.random.rand()*2 - 1 
+            state[-3] = np.random.rand() *2 - 1 
             sample_states[idx] = state
-        sample_states[:, -1] = np.arange(n_samples) % 144  # Add a time feature
-        sample_states[:, 1] = np.random.rand(n_samples)*5  # Add a random feature
         self.scaler.fit(sample_states)
 
     def normalize_state(self, state: Union[np.array, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
@@ -99,7 +100,7 @@ class DQN(RL_algorithm):
         for i_episode in range(n_episodes):
             # Initialize the environment and get it's state
             if i_episode % 10 == 0:
-                self.env.show_sample(self.policy_net)
+                self.env.show_sample(self.target_net)
             state, info = self.env.reset()
             self.ep_random_steps = 0
             self.ep_steps = 0
@@ -252,12 +253,12 @@ class DQN(RL_algorithm):
         """
         if options is None:
             self.BATCH_SIZE = 128
-            self.gamma = 0.78
+            self.gamma = 0.95
             self.lr = 1e-3
             self.EPS_START = 0.95
             self.EPS_END = 0.001
-            self.EPS_DECAY = 1000
-            self.TAU = 0.001
+            self.EPS_DECAY = 500
+            self.TAU = 0.005
 
         else:
             self.BATCH_SIZE = options['BATCH_SIZE']
