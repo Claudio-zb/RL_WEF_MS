@@ -28,15 +28,15 @@ L_ss = 0.15 # [m]
 
 # Efecto radiación solar 
 
-z = 10 # m
-p_atm = 101.3*((293 - 0.0065*z)/293)**5.26 # atm pressure 
-A_g = 60 # Area del suelo del invernadero [m^2]
-rho_g = 1500 # kg/m^3
+z:float = 10.0 # m
+p_atm:float = 101.3*((293 - 0.0065*z)/293)**5.26 # atm pressure 
+A_g:float = 60.0 # Area del suelo del invernadero [m^2]
+rho_g:float = 1500.0 # kg/m^3
 
-A_cu = 136.002
-alpha_inv = 0.08
-tau_inv = 0.78
-epsilon_inv = 0.97
+A_cu:float = 136.002 # Area de la cubierta [m^2]
+alpha_inv:float = 0.08 # coeficiente de absorción invernadero
+tau_inv:float = 0.78 # coeficiente de transmisión invernadero
+epsilon_inv:float = 0.97 
 
 alpha_c = 0.81
 alpha_g = 0.95

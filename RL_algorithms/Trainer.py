@@ -28,7 +28,17 @@ class TrainerUI:
         # Create a figure and axes
         self.fig = Figure()
         self.axs = [self.fig.add_subplot(3, 1, i+1) for i in range(3)]
-        self.lines = [ax.plot([], [])[0] for ax in self.axs]
+        self.lines = []
+        # lines for the mean rewards 
+        self.lines.append(self.axs[0].plot([], [], label="Mean rewards")[0])
+        self.lines.append(self.axs[0].plot([], [], label="Mean rewards (last 10 episodes)")[0])
+
+        # lines for the Q values of the networks
+        self.lines.append(self.axs[1].plot([], [], label="Q policy")[0])
+        self.lines.append(self.axs[1].plot([], [], label="Q target")[0])
+
+        # lines for the epsilon values
+        self.lines.append(self.axs[2].plot([], [], label="Epsilon")[0])
 
         # Create a canvas and add the figure to it
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
@@ -59,6 +69,7 @@ class TrainerUI:
         self.std_rewards = []
         self.values_q_net = []
         self.values_target_net = []
+        self.epsilon = []
         
         # directory to save the results
         current_datetime = datetime.now()
@@ -77,17 +88,35 @@ class TrainerUI:
                 self.update_stats()
         except queue.Empty:
             pass
-        for idx, ax in enumerate(self.axs):
-            self.lines[idx].set_data(range(len(self.mean_rewards)), [self.mean_rewards, self.std_rewards, self.values_q_net, self.values_target_net][idx])
+        
+        # Plot the mean rewards
+        self.lines[0].set_data(range(len(self.mean_rewards)), self.mean_rewards)
+        # last 10 episodes mean rewards
+        if len(self.mean_rewards) >= 10:
+            avg_rew = np.convolve(self.mean_rewards, np.ones(10)/10, mode='valid')
+            self.lines[1].set_data(range(10, len(self.mean_rewards)+1), avg_rew)
+
+        # plot the Q values of both networks  
+        self.lines[2].set_data(range(len(self.values_q_net)), self.values_q_net)
+        self.lines[3].set_data(range(len(self.values_target_net)), self.values_target_net) 
+
+        # plot the epsilon values
+
+        self.lines[4].set_data(range(len(self.epsilon)), self.epsilon)
+
+        for ax in self.axs:
             ax.relim()
             ax.autoscale_view()
-            
+        #self.canvas.draw()
         self.canvas.draw_idle()
+        self.canvas.flush_events()
         self.job = self.root.after(100, self.update_plot)
 
     def start_plot(self) -> None:
         '''Start the plot update process in a separate thread'''
         def target():
+            for ax in self.axs:
+                ax.legend()
             while True:
                 if self.i_episode % 10 == 0:
                     self.env.show_sample(self.alg.target_net, self.alg.scaler)
@@ -140,8 +169,9 @@ class TrainerUI:
         stats = self.q.get_nowait()
         self.mean_rewards.append(stats[0])
         self.std_rewards.append(stats[1])
-        self.values_q_net.append(stats[2])
-        self.values_target_net.append(stats[3])
+        self.epsilon.append(stats[2])
+        self.values_q_net.append(stats[3])
+        self.values_target_net.append(stats[4])
 
     def stats_to_df(self) -> pd.DataFrame:
         """Convert the statistics to a pandas DataFrame"""
@@ -151,3 +181,19 @@ class TrainerUI:
                            "values_q_net": self.values_q_net, 
                            "values_target_net": self.values_target_net})
         return df
+    
+
+class Trainer():
+    """Class to train a RL agent over a custom environment"""
+
+    def __init__(self, env: Custom_env, rl_algorithm: RL_algorithm):
+        self.env = env
+        self.rl_algorithm = rl_algorithm
+
+    def train(self, n_eps: int = 200):
+        """Train the RL agent over the environment for n_eps episodes"""
+        stats = []
+        for i in range(n_eps):
+            stats.append(self.rl_algorithm.one_ep_training(i))
+        return stats
+

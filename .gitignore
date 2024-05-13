@@ -3,3 +3,4 @@ __pycache__/
 figures/*
 RL_algoritms/__pycache__/
 environments/__pycache__/
+utils_functions/__pycache__/

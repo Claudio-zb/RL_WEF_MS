@@ -62,7 +62,7 @@ class GH_env(Custom_env):
         # T_inv, T_ss, X_inv, (RH_inv): state variables
         self.state = np.array([40, 15, 41.0])
 
-        # I, T_ext, RH_ext, w_speed : disturbances
+        # I, T_ext, RH_ext, w_speed : disturbances with timestep 10 min
         self.disturbances = np.array([self.I_data[self.steps], 
                                       self.T_ext_data[self.steps], 
                                       self.RH_ext_data[self.steps],
@@ -72,15 +72,26 @@ class GH_env(Custom_env):
     
     def render(self):
         pass
-
-    def show_sample(self, policy, scaler):
-        pass
-
+    def show_sample(self, policy = None, scaler = None):
+        if policy is None:
+            policy = lambda x: 0
+        x0 = self.reset()
+        N = 144
+        states = np.zeros((N, 3))
+        for i in range(144):
+            action = policy(x0)
+            x0 = self.step(action)
+            states[i] = x0
     def map_action(self, policy_output: Tensor) -> np.ndarray:
         pass
 
     def load_initial_conditions(self, initial_conditions: dict) -> np.ndarray:
         pass
+
+
+# ----------------------------------------------------------------------------- #
+#---------------------- END OF CLASS DEFINITION --------------------------------#
+# ----------------------------------------------------------------------------- #
 
 ### Modeling a Green House environment
 
@@ -101,7 +112,7 @@ T_cu = lambda T_inv, T_ext: (T_inv+T_ext)/2
 def R_n(I, T_inv, T_ext, RH_ext):
     """Calculates the radiation heat transfer [W] """
 
-    T_atm = f_n*T_ext + 0.0552*(1-f_n)*(T_ext + 273.15)**1.5 
+    T_atm = f_n*(T_ext + 273.15) + 0.0552*(1-f_n)*(T_ext + 273.15)**1.5 
     eo_ext = 6.1078*np.exp(17.269*T_ext/(T_ext+237.3)) # presión parcial vapor [hPa]
     ea_ext = eo_ext*RH_ext/100  
     epsilon_atm = 1-np.exp(-10*ea_ext/T_ext)
@@ -192,20 +203,52 @@ Q_evp = lambda ET_c, T_inv: lambda_0(T_inv)*ET_c
 
 A_c = A_g*0.8
 
-X_evap = lambda ET_c: 1000*ET_c*A_c/V_inv/3600
+LAI = 1.0
 
-X_inv_sat = lambda T_inv: 5.5638*np.exp(0.0572*T_inv)
+def phi_wind(w_speed, W):
+    return w_speed*W
 
-def X_c(T_inv, T_ext,T_cu, X_inv):
-    T_aux = (T_inv - T_cu(T_ext, T_inv))
-    g_c = A_cu/A_g*(10**(-3))*T_aux**(1/3) if T_aux > 0 else 0
-    X_inv_sat_ = X_inv_sat(T_inv)
-    arg = 0.2522*np.exp(0.0485*T_inv)*(T_inv - T_ext) - (X_inv_sat_ - X_inv) 
-    return A_g*g_c*arg/V_inv/3600
+def r_b(T_inv, T_ext, phi_wind):
+    d = 1
+    return 1.174*d**.5/(d*np.abs((T_ext-T_inv)/2) + 207*phi_wind**2)**.25
+
+def epsilon(T_inv):
+    return 0.7584*np.exp(0.0518*T_inv)
+
+def Rn(I):
+    return tau_inv*(1-np.exp(-.7*LAI))*I
+
+def r_s(T_inv):
+    Rn_ = 1
+    return 82*(4.3/0.54)*np.exp(-Rn_)*(1+ 0.023*(T_inv-20)**2) 
+
+def g_E(T_inv, T_ext, phi_wind):
+    value = 2*LAI/((1+0.7584*np.exp(0.0518*T_inv))*r_b(T_inv, T_ext, phi_wind) + r_s(T_inv))
+    return value
+
+def x_crop(T_inv, T_ext, I, phi_wind):
+    epsilon_ = epsilon(T_inv)
+    r_b_ = r_b(T_inv, T_ext, phi_wind)
+    Rn_ = Rn(I)
+    lambda_0_ = lambda_0(T_inv)
+    return x_inv_sat(T_inv) + epsilon_*r_b_*Rn_/(2*LAI*lambda_0_) # [g/m3]
+
+def x_evap(T_inv, T_ext, x_inv, Is, phi_wind): # = lambda ET_c: 1000*ET_c*A_c/V_inv/3600
+    """Calculates the evaporation effect in the Green House [g/(s m3)]"""
+    x_crop_ = x_crop(T_inv, T_ext, Is, phi_wind)
+    g_E_ = g_E(T_inv, T_ext, phi_wind)
+    return g_E_ * (x_crop_ - x_inv)
+
+x_inv_sat = lambda T_inv: 5.5638*np.exp(0.0572*T_inv)
+
+def x_c(T_inv, T_ext, x_inv):
+    """Calculates the condensation effect in the Green House [g/(s m3)]"""
+    T_cu = (T_inv + T_ext)/2
+    g_c = np.maximum(0, 250.0*np.sign(T_inv-T_cu)*np.abs(T_inv-T_cu)**(1./3.))
+    x_inv_sat_ = x_inv_sat(T_inv)
+    return g_c*(0.2522*np.exp(0.0485*T_inv)*(T_inv - T_ext) - (x_inv_sat_ - x_inv))
 
 #%% Condensation Effect
-
-
 
 def RK4(f, x, d, u, h):
     "Performs one step of the Runge-Kutta 4th order method"
@@ -244,7 +287,7 @@ def GH_climate_ode(x, d, u):
 
     # Disturbances
     # I [w/m2], T_ext [°C], RH_ext [%], w_speed [m/s]: 
-    I = d[0]
+    I_s = d[0]
     T_ext = d[1]
     RH_ext = np.clip(d[2], 0, 100)
     w_speed = d[3]
@@ -254,24 +297,35 @@ def GH_climate_ode(x, d, u):
     W = u[0]
 
     # Auxiliar variables
-    X_inv_sat_ = np.maximum(X_inv_sat(T_inv), 0.001)
+    X_inv_sat_ = np.maximum(x_inv_sat(T_inv), 0.001)
     RH_inv = 100*X_inv/X_inv_sat_
     RH_inv = np.clip(RH_inv, 0, 100)
 
-    ET_0_ = ET_0(I, T_inv, T_ext, T_ss, RH_inv, RH_ext, w_speed, W, p_atm) 
+    ET_0_ = ET_0(I_s, T_inv, T_ext, T_ss, RH_inv, RH_ext, w_speed, W, p_atm) 
     ET_pc_ = ET_c(ET_0_, K_c)
 
     # heat balance computation 
-    Q_rad = R_n(I, T_inv, T_ext, RH_ext)
+    Q_rad = R_n(I_s, T_inv, T_ext, RH_ext)
     Q_g = Q_soil(T_inv, T_ss)
     Q_evp_ = Q_evp(ET_pc_, T_inv)
     Q_cc_ = Q_cc(T_inv, T_ext, w_speed) 
     Q_ren_ = Q_ren(X_inv, RH_ext, T_inv, T_ext, w_speed, W)  
     
-    Q_t = Q_rad - Q_cc_ - Q_ren_ - Q_g - Q_evp_
+    Q_t = Q_rad - Q_g - Q_cc_ # - Q_ren_ #- Q_evp_ # 
 
-    d_T_inv = Q_t/((rho_air*c_pa + X_inv*c_pv/1000)*V_inv)/3600
+    d_T_inv = Q_t/((rho_air*c_pa + X_inv*c_pv/1000)*V_inv)
     d_T_ss = Q_g/(A_g*L_ss*rho_g*c_pg)
-    d_X_inv = (X_evap(ET_pc_) - X_ren(X_inv, RH_ext, T_ext, X_ext, w_speed, W) - X_c(T_inv, T_ext,T_cu, X_inv))/3600
+    phi_wind_ = phi_wind(w_speed, W)
+
+    d_X_inv = (A_cu/V_inv)*(x_evap(T_inv, T_ext, X_inv, I_s, phi_wind_) - x_c(T_inv, T_ext, X_inv))
 
     return np.array([d_T_inv, d_T_ss, d_X_inv])
+
+def x_ode(x_inv):
+    T_inv = 20
+    T_ext = 25
+    I_s = 300
+    phi_wind_ = 0.8
+    d_X_inv = (A_cu/V_inv)*(x_evap(T_inv, T_ext, x_inv, I_s, phi_wind_) - x_c(T_inv, T_ext, x_inv))
+    return d_X_inv
+

@@ -257,7 +257,7 @@ class DQN(RL_algorithm):
             self.lr = 1e-3
             self.EPS_START = 0.95
             self.EPS_END = 0.001
-            self.EPS_DECAY = 500
+            self.EPS_DECAY = 100
             self.TAU = 0.005
 
         else:
@@ -340,7 +340,7 @@ class DQN(RL_algorithm):
 
     def get_training_fig(self) -> plt.Figure:
         return self.stats_fig
-
+    
     def one_ep_training(self, i_episode: int = 0):
         '''Train the agent for one episode'''
         device = self.device
@@ -399,4 +399,5 @@ class DQN(RL_algorithm):
                 break
 
         return mean_ep_rwd, std_ep_rwd, action_randomness, q_values_target, q_values_policy
+    
 
