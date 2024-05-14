@@ -17,24 +17,24 @@ class GH_env(Custom_env):
         ### micro climate variables 
 
         # T_inv, T_ss, X_inv, (RH_inv): state variables
-        self.state = np.array([25, 25, 0, 0])
+        self.state:np.ndarray = np.array([25, 25, 0, 0])
 
         # I, T_ext, RH_ext, w_speed: disturbances
-        self.disturbances = np.array([0, 25, 0, 0])
+        self.disturbances:np.ndarray = np.array([0, 25, 0, 0])
         
         # W: manipulated variable
-        self.action = np.array([0])
+        self.action:np.ndarray = np.array([0])
 
         data = pd.read_excel(data_path)
-        self.T_ext_data = data["T_ext"].to_numpy()
-        self.RH_ext_data = data["HR_ext"].to_numpy()
-        self.w_speed_data = data["u_ext"].to_numpy()
-        self.I_data = data["I_r"].to_numpy()
+        self.T_ext_data:np.ndarray = data["T_ext"].to_numpy()
+        self.RH_ext_data:np.ndarray = data["HR_ext"].to_numpy()
+        self.w_speed_data:np.ndarray = data["u_ext"].to_numpy()
+        self.I_data:np.ndarray = data["I_r"].to_numpy()
 
         #self.fig = Figure(figsize=(3,8), dpi = 300)
         #self.axs =
         self.fig, self.axs = plt.subplots(3,1)
-        self.steps = 0
+        self.steps:int = 0
         self.time = 0
         
     def step(self, action):
@@ -44,13 +44,13 @@ class GH_env(Custom_env):
         self.disturbances[1] = self.T_ext_data[self.steps]
         self.disturbances[2] = self.RH_ext_data[self.steps]
         self.disturbances[3] = self.w_speed_data[self.steps]
-        self.state = integrate_RK4(GH_climate_ode, 
-                                   x0=self.state, 
-                                   t0=self.time,
-                                   tf=(self.steps+1)*600,
-                                   d=self.disturbances,
-                                   u=action, 
-                                   N=600)
+        self.state = integrate(GH_climate_ode, 
+                                x0=self.state, 
+                                t0=self.time,
+                                tf=(self.steps+1)*600,
+                                d=self.disturbances,
+                                u=action, 
+                                N=60)
         self.steps += 1 # next timestep (144ts per day)
         return self.state
     
@@ -60,7 +60,7 @@ class GH_env(Custom_env):
         self.steps = 0
 
         # T_inv, T_ss, X_inv, (RH_inv): state variables
-        self.state = np.array([40, 15, 41.0])
+        self.state = np.array([12.5, 15, 12.5])
 
         # I, T_ext, RH_ext, w_speed : disturbances with timestep 10 min
         self.disturbances = np.array([self.I_data[self.steps], 
@@ -119,7 +119,7 @@ def R_n(I, T_inv, T_ext, RH_ext):
 
     R_sol = A_g*I*(alpha_inv + tau_inv*(alpha_c*f_c+alpha_g*(1-f_c))) # [W]
     R_ter = A_cu*sigma*tau_inv*(epsilon_atm*T_atm**4 - epsilon_inv*((T_cu(T_inv, T_ext))+273.15)**4) # [W]
-    return R_sol + R_ter
+    return R_sol, R_ter
 
 # Conduction - Convection effect
 
@@ -192,7 +192,8 @@ DPV = lambda T_inv, RH_inv: 6.1078*np.exp(17.269*T_inv/(T_inv+237.3))*(1-RH_inv/
 def ET_0(I, T_inv, T_ext, T_ss, RH_inv, RH_ext, w_speed, W, p):
     delta_ = delta(T_inv)
     gamma_ = gamma(T_inv, p)
-    R_n_ = np.maximum(0, R_n(I, T_inv, T_ext, RH_ext)*0.0036/A_g)
+    Rn_sun, Rn_rad = R_n(I, T_inv, T_ext, RH_ext)
+    R_n_ = np.maximum(0, (Rn_sun + Rn_rad)*0.0036/A_g)
     DPV_ = DPV(T_inv, RH_inv)
     return (0.408*delta_*np.maximum(R_n_ - Q_g(T_inv, T_ss), 0) + 37*gamma_*w_speed*DPV_/T_inv)/(delta_ + gamma_*(1+0.34*w_speed))
 
@@ -200,6 +201,13 @@ def ET_0(I, T_inv, T_ext, T_ss, RH_inv, RH_ext, w_speed, W, p):
 ET_c = lambda ET_0_, k_c: ET_0_*k_c
 
 Q_evp = lambda ET_c, T_inv: lambda_0(T_inv)*ET_c
+
+def Q_evp_tom(T_inv, T_ext, RH_inv, I, RH_ext, w_speed):
+    Rn_sun, _ = R_n(I, T_inv, T_ext, RH_ext)
+    DPV_ = DPV(T_inv, RH_inv) 
+    Q_evp_ = A_c*(0.2*Rn_sun + 5.5*DPV_ + 5.3*w_speed)
+    return Q_evp_
+
 
 A_c = A_g*0.8
 
@@ -244,7 +252,8 @@ x_inv_sat = lambda T_inv: 5.5638*np.exp(0.0572*T_inv)
 def x_c(T_inv, T_ext, x_inv):
     """Calculates the condensation effect in the Green House [g/(s m3)]"""
     T_cu = (T_inv + T_ext)/2
-    g_c = np.maximum(0, 250.0*np.sign(T_inv-T_cu)*np.abs(T_inv-T_cu)**(1./3.))
+    #g_c = np.maximum(0, 250.0*np.sign(T_inv-T_cu)*np.abs(T_inv-T_cu)**(1./3.))
+    g_c = np.maximum(0, A_cu/A_g*1.64e-3*np.sign(T_inv-T_cu)*np.abs(T_inv-T_cu)**(1./3.))
     x_inv_sat_ = x_inv_sat(T_inv)
     return g_c*(0.2522*np.exp(0.0485*T_inv)*(T_inv - T_ext) - (x_inv_sat_ - x_inv))
 
@@ -266,12 +275,12 @@ def Verlet(f, x, d, u, h):
     pass
 
 
-def integrate_RK4(f, x0, t0, tf, d, u, N):
+def integrate(f, x0, t0, tf, d, u, N):
     "integrates the function f using the Runge-Kutta 4th order method"
     x = x0
     h = (tf - t0) / N
     for i in range(N):
-        x = Euler(f, x, d, u, h)
+        x = RK4(f, x, d, u, h)
         x[2] = np.maximum(x[2], 0)
     return x
 
@@ -305,13 +314,15 @@ def GH_climate_ode(x, d, u):
     ET_pc_ = ET_c(ET_0_, K_c)
 
     # heat balance computation 
-    Q_rad = R_n(I_s, T_inv, T_ext, RH_ext)
+    Rn_sun, Rn_rad = R_n(I_s, T_inv, T_ext, RH_ext)
+    Q_rad = Rn_sun + Rn_rad 
     Q_g = Q_soil(T_inv, T_ss)
     Q_evp_ = Q_evp(ET_pc_, T_inv)
+    #Q_evp_ = Q_evp_tom(T_inv, T_ext, RH_inv, I_s, RH_ext, w_speed)
     Q_cc_ = Q_cc(T_inv, T_ext, w_speed) 
     Q_ren_ = Q_ren(X_inv, RH_ext, T_inv, T_ext, w_speed, W)  
     
-    Q_t = Q_rad - Q_g - Q_cc_ # - Q_ren_ #- Q_evp_ # 
+    Q_t = Q_rad - Q_g - Q_cc_ # - Q_evp_ # - Q_ren_  
 
     d_T_inv = Q_t/((rho_air*c_pa + X_inv*c_pv/1000)*V_inv)
     d_T_ss = Q_g/(A_g*L_ss*rho_g*c_pg)
