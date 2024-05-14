@@ -19,9 +19,13 @@ import numpy as np
 from environments.GH_env import*
 
 gh_env = GH_env()
-
-x = gh_env.reset()
-x1 = gh_env.step(np.array([0.0]))
+N = 144
+x_s = np.zeros((N+1, 3))
+x_s[0] = gh_env.reset()
+for i in range(N):
+    if i > 60:
+        print('debug')
+    x_s[i+1] = gh_env.step(np.array([0]))
 
 
 """

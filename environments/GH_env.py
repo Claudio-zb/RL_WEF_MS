@@ -154,7 +154,9 @@ def Q_g(T_inv, T_ss):
 
 R_inf = 1
 
-lambda_0 = lambda T_inv: 2502535.259 - 2385.76424*T_inv 
+def lambda_0(T_inv): 
+    """Calculates the latent heat of vaporization [J/kg]"""
+    return 2502535.259 - 2385.76424*T_inv 
 
 X_ext = lambda RH_ext, T_ext: 0.6219*RH_ext*np.exp(17.269*T_ext/(T_ext+237.3))/(p_atm - (RH_ext/100)*np.exp(17.269*T_ext/(T_ext+237.3)))
 
@@ -163,14 +165,15 @@ w_speed_w = lambda w_speed: w_speed_2(w_speed)*np.log(67.8*z_w - 5.42)/4.87 # ve
 #G = lambda w_speed_w = C_d * np.sqrt(2*9.81*)
 def Ren_air(w_speed, W):
     G = w_speed_w(w_speed)*A_w
-    return 3600*G/V_inv if W > 0 else R_inf
+    # return 3600*G/V_inv if W > 0 else R_inf
+    return G/V_inv if W > 0 else R_inf/100
 
 def Q_ren(X_inv, RH_ext, T_inv, T_ext, w_speed, W):
     Ren = Ren_air(w_speed, W) #ojito
     X_ext_ = X_ext(RH_ext, T_ext) # humedad exterior absoluta m3/m3
-    outcome = V_inv*Ren/3600*(rho_air*c_pa*(T_inv - T_ext) 
-                              + lambda_0(T_inv)*(X_inv - X_ext_)
-                              + c_pv*(X_inv*T_inv - X_ext_*T_ext))
+    outcome = V_inv*Ren/3600*rho_air*(c_pa*(T_inv - T_ext) 
+                                        + (lambda_0(T_inv)*(X_inv - X_ext_)/1000)
+                                        + (c_pv/1000)*(X_inv*(T_inv + 273.15) - X_ext_*(T_ext + 273.15)))
     return outcome # de nuevo en W
 
 def X_ren(X_inv, RH_ext, T_ext, X_ext, w_speed, W):
@@ -180,7 +183,7 @@ def X_ren(X_inv, RH_ext, T_ext, X_ext, w_speed, W):
 
 #%% Evapotranspiration Effect  
 
-delta = lambda T_inv: 1000*4098*0.6107*np.exp(17.269*T_inv/(T_inv+237.3))/(T_inv+237.3)**2 # [Pa]
+delta = lambda T_inv: 4098*0.6107*np.exp(17.269*T_inv/(T_inv+237.3))/(T_inv+237.3)**2 # [Pa]
 gamma = lambda T_inv, p: c_pa*p/(0.6219*lambda_0(T_inv))
 
 K_s = 1.0
@@ -195,7 +198,7 @@ def ET_0(I, T_inv, T_ext, T_ss, RH_inv, RH_ext, w_speed, W, p):
     Rn_sun, Rn_rad = R_n(I, T_inv, T_ext, RH_ext)
     R_n_ = np.maximum(0, (Rn_sun + Rn_rad)*0.0036/A_g)
     DPV_ = DPV(T_inv, RH_inv)
-    return (0.408*delta_*np.maximum(R_n_ - Q_g(T_inv, T_ss), 0) + 37*gamma_*w_speed*DPV_/T_inv)/(delta_ + gamma_*(1+0.34*w_speed))
+    return (0.408*delta_*np.maximum(R_n_ - Q_g(T_inv, T_ss), 0) + gamma_*900*w_speed*DPV_/(T_inv+273.15))/(delta_ + gamma_*(1+0.34*w_speed))/(3600*24)
 
 
 ET_c = lambda ET_0_, k_c: ET_0_*k_c
@@ -317,12 +320,12 @@ def GH_climate_ode(x, d, u):
     Rn_sun, Rn_rad = R_n(I_s, T_inv, T_ext, RH_ext)
     Q_rad = Rn_sun + Rn_rad 
     Q_g = Q_soil(T_inv, T_ss)
-    Q_evp_ = Q_evp(ET_pc_, T_inv)
-    #Q_evp_ = Q_evp_tom(T_inv, T_ext, RH_inv, I_s, RH_ext, w_speed)
+    #Q_evp_ = Q_evp(ET_pc_, T_inv)
+    Q_evp_ = Q_evp_tom(T_inv, T_ext, RH_inv, I_s, RH_ext, w_speed)
     Q_cc_ = Q_cc(T_inv, T_ext, w_speed) 
     Q_ren_ = Q_ren(X_inv, RH_ext, T_inv, T_ext, w_speed, W)  
     
-    Q_t = Q_rad - Q_g - Q_cc_ # - Q_evp_ # - Q_ren_  
+    Q_t = Q_rad - Q_g - Q_cc_ - Q_ren_ - Q_evp_  
 
     d_T_inv = Q_t/((rho_air*c_pa + X_inv*c_pv/1000)*V_inv)
     d_T_ss = Q_g/(A_g*L_ss*rho_g*c_pg)
