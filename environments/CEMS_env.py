@@ -10,9 +10,9 @@ from sklearn.preprocessing import StandardScaler
 
 from utils_functions.funcionesEMS import *
 from gymnasium import spaces
-from environments.custom_env import DiscreteCustomEnv
+from environments.custom_env import ContinousCustomEnv
 
-class EMS_env(DiscreteCustomEnv):
+class ContinousEMSEnv(ContinousCustomEnv):
     """
     Environment for the Energy Management System
     """
@@ -22,6 +22,7 @@ class EMS_env(DiscreteCustomEnv):
         Initialize the environment
         :param render:
         """
+
         self.fig = None
         self.axs = None
         if render:
@@ -101,16 +102,20 @@ class EMS_env(DiscreteCustomEnv):
         # Irr, Q_p, Pbat
 
         # Bounds for actions
-        self.action_low = np.array([0.0, 0.0],
+        self.action_low = np.array([0.0],
                                    dtype=np.float32)
 
-        self.action_high = np.array([100, 100],
+        self.action_high = np.array([100],
                                     dtype=np.float32)
 
-        self.action_space = spaces.Discrete(4)
-        super().__init__(np.array([0.0, 25., 50., 75., 100.], dtype=np.float32))
-        #self.action_values = np.array(np.meshgrid(self.Irr_levels, self.Q_p_levels), dtype=np.float32).T.reshape(-1, 2)
-        #self.action_values = np.array([0.0, 25., 50., 75., 100.], dtype=np.float32)
+        super().__init__(self.action_low, self.action_high)
+
+        # Agent params
+        self.action_space = spaces.Box(low=self.action_low,
+                                           high=self.action_high,
+                                           shape=(1,),
+                                           dtype=np.float32)
+
         self.observation_space = spaces.Box(low=obs_low,
                                             high=obs_high,
                                             shape=(11,),
@@ -122,8 +127,6 @@ class EMS_env(DiscreteCustomEnv):
         :param action: Action to be executed
         :return: tuple of (next_observation, reward, terminated, truncated, info)
         """
-        action = self.map_action(action)
-        action = action.flatten()
 
         truncated = False
         terminated = False
@@ -132,9 +135,8 @@ class EMS_env(DiscreteCustomEnv):
         moment_of_the_day = self.k % 144
         self.accumulated_P_consumed += self.demanda[self.k]
 
-        # Store the previous values of the variables to compute the reward
-
         # V_ref, V_Irr, Irr, Vt, Q_p, SoE, P_fv, demand, sin, cos, deficit_flag
+
         observation = np.array([self.V_ref,
                                 self.V_Irr,
                                 self.Irr,
@@ -147,7 +149,7 @@ class EMS_env(DiscreteCustomEnv):
                                 np.cos(2*np.pi*moment_of_the_day/143), 
                                 self.E_residual])
 
-        
+        # Store the previous values of the variables to compute the reward
         self.Q_p = action[0]
 
         self.Irr = 10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
@@ -159,9 +161,8 @@ class EMS_env(DiscreteCustomEnv):
         amount_to_irrigate = dt * (self.Irr * 1e-5)
 
         Vt_to_fill = Vt_max - self.Vt - amount_to_irrigate  # Amount of water that can be filled
-        
-        # if Vt_to_fill <= 0 < self.Q_p:  # If the tank is full and the pump is feeding, the pump is turned off
-        #     self.Q_p = 0
+        if Vt_to_fill <= 0 < self.Q_p:  # If the tank is full and the pump is feeding, the pump is turned off
+            self.Q_p = 0
 
         P_Q_p = B_p * (self.Q_p * 1e-5) * h_p_const / 1e3  # water pump power [kW]
 
@@ -458,11 +459,11 @@ def default_rwd_fun(s, a, s_next):
     #else:
     #    print("pasó un día brivones")
     
-    reward += -1.0 if s[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
+    reward += -1.0 if s_next[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
     
     e_balance = s_next[-1]
 
-    reward += e_balance if e_balance < 0 else 0.0 
+    reward += -1.0 if e_balance < 0 else 0.0 
 
     return np.array([reward], dtype=np.float32)
     

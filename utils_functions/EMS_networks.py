@@ -103,9 +103,50 @@ class Q_network(nn.Module):
 
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
-            obs = torch.tensor(obs, dtype=torch.float32)
-            obs = obs.unsqueeze(0).to(self.device)
+            obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
+            if obs.dim() == 1: 
+                obs = obs.unsqueeze(0)
         return self.structure(obs)
+    
+    def _init_weights(self):
+        for layer in self.structure:
+            if isinstance(layer, nn.Linear):
+                init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
+
+class Continous_Q_network(nn.Module):
+    def __init__(self, input_dim, output_dim, device):
+        super(Q_network, self).__init__()
+        self.device = device
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.width = 128
+        self.structure = nn.Sequential(
+            nn.BatchNorm1d(input_dim + output_dim),
+            nn.Linear(input_dim, self.width),
+            nn.BatchNorm1d(self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, self.width),
+            nn.BatchNorm1d(self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, 48),
+            nn.ReLU(),
+            nn.Linear(48, 1)
+        )
+        self._init_weights()
+
+    def forward(self, observation, action):
+        if isinstance(obs, np.ndarray):
+            obs = torch.tensor(observation, dtype=torch.float32)
+            obs = obs.unsqueeze(0).to(self.device)
+
+        input = torch.cat([obs, action], dim=1)
+        return self.structure(input)
     
     def _init_weights(self):
         for layer in self.structure:
@@ -150,3 +191,4 @@ class LSTM_Q_Network(nn.Module):
         mlp_output = self.mlp_input(last_obs)
         x = torch.cat([h, mlp_output], dim=1)
         return self.hidden_structure(x)
+    

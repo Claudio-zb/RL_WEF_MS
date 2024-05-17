@@ -13,3 +13,5 @@ class LSTM_transform:
 
     def get(self):
         return np.array(self.buffer)
+    
+

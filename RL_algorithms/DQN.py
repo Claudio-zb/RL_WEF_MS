@@ -23,9 +23,6 @@ class DQN(RL_algorithm):
     https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
     """
 
-    def show_trajectory(self, policy):
-        self.env.show_sample(policy)
-
     def __init__(self, env: Custom_env, options=None) -> None:
         """Initializes the DQN algorithm class. 
         It creates the policy and target networks, the optimizer and the memory."""

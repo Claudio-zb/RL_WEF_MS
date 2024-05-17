@@ -18,18 +18,14 @@ import numpy as np
 
 from environments.GH_env import*
 
-gh_env = GH_env()
+#gh_env = GH_env()
 
-x = gh_env.reset()
-x1 = gh_env.step(np.array([0.0]))
+#x = gh_env.reset()
+#x1 = gh_env.step(np.array([0.0]))
 
-
-"""
-#%%
 env = EMS_env()
 dqn = DQN(env)
 
 trainer = TrainerUI(env, dqn)
 
 trainer.run()
-"""

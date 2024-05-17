@@ -19,15 +19,6 @@ class RL_algorithm(ABC):
         :return: training statistics and the learned policy
         """
         pass
-
-    @abstractmethod
-    def show_trajectory(self, policy):
-        """
-        Render the environment using the current policy
-        :param policy:
-        :return:
-        """
-        pass
     
 
     @abstractmethod
