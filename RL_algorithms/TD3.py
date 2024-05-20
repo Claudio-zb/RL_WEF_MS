@@ -8,7 +8,7 @@ from torch.optim import AdamW
 
 from utils_functions.EMS_networks import Continous_Q_network, ActorNN
 from utils_functions.ReplayMemory import ReplayMemory, Transition
-from environments.custom_env import Custom_env
+from environments.custom_env import ContinousCustomEnv
 import numpy as np
 from RL_algorithms.RL_algorithm import RL_algorithm
 from sklearn.preprocessing import StandardScaler
@@ -16,28 +16,27 @@ from typing import Union, Tuple, Any
 from matplotlib.figure import Figure
 
 class TD3(RL_algorithm):
-    def __init__(self, env:Custom_env, options = None) -> None:
+    def __init__(self, env:ContinousCustomEnv, options = None) -> None:
         self.env = env
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
         self._init_hyperparameters(options)
 
         self.memory = ReplayMemory(10000)
-        self.env = env
+        self.env: ContinousCustomEnv = env
         self.obs_dim = env.observation_space.shape[0]
-        self.action_dim = env.action_space.n
+        self.action_dim = env.action_space.shape[0]
         self.action_high = env.action_space.high
         self.action_low = env.action_space.low
 
-        self.critic_1 = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
-        self.target_critic_1 = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
+        self.critic_1:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
+        self.target_critic_1:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
 
-        self.critic_2 = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)        
-        self.target_critic_2 = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
+        self.critic_2:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)        
+        self.target_critic_2:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
 
-
-        self.policy_net = ActorNN(self.obs_dim, self.action_dim, device).to(device)
-        self.target_policy_net = ActorNN(self.obs_dim, self.action_dim, device).to(device)
+        self.policy_net:nn.Module = ActorNN(self.obs_dim, self.action_dim, self.action_high, self.action_low).to(device)
+        self.target_policy_net:nn.Module = ActorNN(self.obs_dim, self.action_dim, self.action_high, self.action_low).to(device)
 
         # make sure the weights are the same
         self.target_critic_1.load_state_dict(self.critic_1.state_dict())
@@ -60,14 +59,7 @@ class TD3(RL_algorithm):
 
         self.ep_steps = 0
         self.ep_random_steps = 0
-        #self.scaler = StandardScaler()
-        #self._init_scaler()
-
-        # priority experience replay
-        self.replay_period = 4
-        self.priority_alpha = 0.6
-        self.priority_beta = 0.4
-        self.delta = 0
+        
 
     def one_ep_training(self, i_episode: int = 0):
         '''Train the agent for one episode'''
@@ -76,16 +68,18 @@ class TD3(RL_algorithm):
         self.ep_random_steps = 0
         self.ep_steps = 0
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-        state = self.normalize_state(state)
         ep_rewards = []
         for t in count():  # begin episode
-            self.critic_net.eval()
+            self.critic_1.eval()
+            self.critic_2.eval()
             self.policy_net.eval()
 
-            action = self.policy_net(state).detach().cpu().numpy().flatten()
-            action = np.clip(action + np.random.normal(0, 0.1, self.action_dim), self.action_low, self.action_high)
+            action = self.policy_net(state)
+            action = torch.clamp(action + torch.randn_like(action) * self.policy_noise, 
+                                 torch.tensor(self.action_low).to(device), 
+                                 torch.tensor(self.action_high).to(device))
 
-            observation, reward, terminated, truncated, _ = self.env.step(action)
+            observation, reward, terminated, truncated, _ = self.env.step(action.detach().cpu().numpy().flatten())
             self.ep_steps += 1
             ep_rewards.append(reward)
             reward = torch.tensor(reward, device=device)
@@ -99,7 +93,7 @@ class TD3(RL_algorithm):
                 action_randomness = self.ep_random_steps / (t + 1)
 
                 if len(self.memory) >= self.BATCH_SIZE:
-                    transitions, indices = self.memory.sample(self.BATCH_SIZE)
+                    transitions = self.memory.sample(self.BATCH_SIZE)
                     batch = Transition(*zip(*transitions))
                     state_batch = torch.cat(batch.state)
                     action_batch = torch.cat(batch.action)
@@ -140,14 +134,14 @@ class TD3(RL_algorithm):
         '''Optimize the model'''
         self.critic_1.train()
         self.critic_2.train()
+        self.target_critic_1.train()
+        self.target_critic_2.train()
         self.policy_net.train()
+        self.target_policy_net.train()
 
         if len(self.memory) < self.BATCH_SIZE:
             return 
-        transitions, indices = self.memory.sample(self.BATCH_SIZE)
-        # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
-        # detailed explanation). This converts batch-array of Transitions
-        # to Transition of batch-arrays.
+        transitions = self.memory.sample(self.BATCH_SIZE)
         batch = Transition(*zip(*transitions))
 
         # Compute a mask of non-final states and concatenate the batch elements
@@ -157,52 +151,37 @@ class TD3(RL_algorithm):
         non_final_next_states = torch.cat([s for s in batch.next_state
                                            if s is not None])
         state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action).to(self.device)
+        action_batch = torch.cat(batch.action).to(self.device).detach()
         reward_batch = torch.cat(batch.reward)
 
-        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-        # columns of actions taken. These are the actions which would've been taken
-        # for each batch state according to policy_net
-        state_action_values_1 = self.critic_net_(state_batch, action_batch)
-        state_action_values_2 = self.critic_net_(state_batch, action_batch)
-
         # Compute V(s_{t+1}) for all next states.
-        # Expected values of actions for non_final_next_states are computed based
-        # on the "older" target_net; selecting their best reward with max(1).values
-        # This is merged based on the mask, such that we'll have either the expected
-        # state value or 0 in case the state was final.
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device, dtype=torch.float32)
         a_next = self.target_policy_net(non_final_next_states)
 
-        q_next_1 = self.target_critic_1(non_final_next_states, a_next)
-        q_next_2 = self.target_critic_2(non_final_next_states, a_next)
+        q_next_1 = self.target_critic_1(non_final_next_states, a_next).squeeze(-1)
+        q_next_2 = self.target_critic_2(non_final_next_states, a_next).squeeze(-1)
 
         q_next = torch.min(q_next_1, q_next_2)
 
         with torch.no_grad():
-            next_state_values[non_final_mask] = q_next
+            next_state_values[non_final_mask] = q_next 
         # Compute the expected Q values
-        expected_state_action_values = (next_state_values * self.gamma) + reward_batch.squeeze(-1)
+        expected_state_action_values = (next_state_values.detach() * self.gamma) + reward_batch.squeeze(-1)
 
         # Update Both Critic Networks
-        # Compute Huber loss
-        #criterion = nn.SmoothL1Loss(reduction='none')
         criterion = nn.MSELoss(reduction='none')
-        loss1 = criterion(state_action_values_1, expected_state_action_values.unsqueeze(1))
-        loss2 = criterion(state_action_values_2, expected_state_action_values.unsqueeze(1))
 
-        # Average loss
-        loss1 = loss1.mean()
-        loss2 = loss2.mean()
-
-        # Optimize the models
         self.critic_1_optimizer.zero_grad()
+        state_action_values_1 = self.critic_1(state_batch, action_batch)
+        loss1 = criterion(state_action_values_1, expected_state_action_values.unsqueeze(1)).mean()
         loss1.backward()
         torch.nn.utils.clip_grad_value_(self.critic_1.parameters(), 100)
         self.critic_1_optimizer.step()
         self.critic_1_scheduler.step()
 
         self.critic_2_optimizer.zero_grad()
+        state_action_values_2 = self.critic_2(state_batch, action_batch)
+        loss2 = criterion(state_action_values_2, expected_state_action_values.unsqueeze(1)).mean()
         loss2.backward()
         torch.nn.utils.clip_grad_value_(self.critic_2.parameters(), 100)
         self.critic_2_optimizer.step()
@@ -215,6 +194,7 @@ class TD3(RL_algorithm):
 
             self.policy_optimizer.zero_grad()
             policy_loss.backward()
+            self.policy_optimizer.step()
             self.policy_scheduler.step()
     
         return
@@ -238,3 +218,87 @@ class TD3(RL_algorithm):
             self.policy_freq = options['policy_freq']
 
         return
+
+    def learn(self, n_iter: int) -> tuple[dict, nn.Module]:
+        training_stats = {
+            "mean_episode_rewards": [],
+            "std_episode_rewards": [],
+            "Q_values_target": [],
+            "Q_values_policy": [],
+            "action_randomness": [],
+            "steps": []
+        }
+        for i in range(n_iter):
+            mean_ep_rwd, std_ep_rwd, action_randomness, q_target_1_values, q_target_2_values = self.one_ep_training(i)
+            training_stats["mean_episode_rewards"].append(mean_ep_rwd)
+            training_stats["std_episode_rewards"].append(std_ep_rwd)
+            training_stats["Q_values_target"].append(q_target_1_values)
+            training_stats["Q_values_policy"].append(q_target_2_values)
+            training_stats["action_randomness"].append(action_randomness)
+            training_stats["steps"].append(self.ep_steps)
+            
+            if i % 10 == 0:
+                self.update_training_plots(i)
+        return training_stats, self.target_policy_net
+    
+    def get_training_fig(self) -> Figure:
+        return self.stats_fig
+
+    def update_training_plots(self, episode: int): 
+        """Updates the training plots"""
+
+        self.stats_axs[0].clear()
+        self.stats_axs[1].clear()
+        self.stats_axs[2].clear()
+
+        window_length = 10
+
+        if episode < 1000:
+
+            mean_rewards = self._training_stats["mean_episode_rewards"][0:episode]
+            #draw the std deviation
+            std_rewards = self._training_stats["std_episode_rewards"][0:episode]
+
+            windowed_rewards = np.convolve(mean_rewards, np.ones(10) / 10, mode='valid')
+
+            # durations = self._training_stats["steps"][0:episode]
+            target_values = self._training_stats["Q_values_target"][0:episode]
+            policy_values = self._training_stats["Q_values_policy"][0:episode]
+            # windowed_duration = np.convolve(durations, np.ones(10) / 10, mode='valid')
+
+            self.stats_axs[0].plot(range(0, episode), mean_rewards, label="Mean reward")
+            self.stats_axs[0].plot(range(window_length - 1, episode), windowed_rewards, label="Windowed reward")
+            self.stats_axs[0].fill_between(range(0, episode), mean_rewards - std_rewards, mean_rewards + std_rewards, alpha=0.2)
+
+            self.stats_axs[1].plot(range(0, episode), target_values, label="Target values")
+            self.stats_axs[1].plot(range(0, episode), policy_values, label="Policy value")
+            # self.stats_axs[1].plot(range(window_length - 1, episode), windowed_duration, label="Windowed duration")
+
+            self.stats_axs[2].plot(range(0, episode), self._training_stats["action_randomness"][0:episode],
+                                   label="Action randomness")
+        else:
+            mean_rewards = self._training_stats["mean_episode_rewards"][episode - 1000:episode]
+            # durations = self._training_stats["steps"][episode - 1000:episode]
+            target_values = self._training_stats["Q_values_target"][episode - 1000:episode]
+            policy_values = self._training_stats["Q_values_policy"][episode - 1000:episode]
+            windowed_rewards = np.convolve(mean_rewards, np.ones(window_length) / window_length, mode='valid')
+            # windowed_duration = np.convolve(durations, np.ones(10) / 10, mode='valid')
+
+            self.stats_axs[0].plot(range(episode - 1000, episode), mean_rewards, label="Mean reward")
+            self.stats_axs[0].plot(range(episode - 1000 + window_length - 1, episode),
+                                   windowed_rewards, label="Windowed reward")
+
+            self.stats_axs[1].plot(range(episode - 1000, episode), target_values, label="Target Values")
+            self.stats_axs[1].plot(range(episode - 1000, episode), policy_values, label="Policy Values")
+
+            # self.stats_axs[1].plot(range(episode - 1000 + window_length - 1, episode),
+            #                       windowed_duration, label="Windowed duration")
+            self.stats_axs[2].plot(range(episode - 1000, episode),
+                                   self._training_stats["action_randomness"][episode - 1000:episode],
+                                   label="Action randomness")
+        self.stats_axs[1].legend()
+        self.stats_axs[0].legend()
+        return
+
+    def get_policy(self) -> nn.Module:
+        return self.target_policy_net

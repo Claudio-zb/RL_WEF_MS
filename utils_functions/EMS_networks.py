@@ -115,14 +115,14 @@ class Q_network(nn.Module):
 
 class Continous_Q_network(nn.Module):
     def __init__(self, input_dim, output_dim, device):
-        super(Q_network, self).__init__()
+        super(Continous_Q_network, self).__init__()
         self.device = device
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.width = 128
         self.structure = nn.Sequential(
             nn.BatchNorm1d(input_dim + output_dim),
-            nn.Linear(input_dim, self.width),
+            nn.Linear(input_dim + output_dim, self.width),
             nn.BatchNorm1d(self.width),
             nn.ReLU(),
             nn.Linear(self.width, self.width),
@@ -141,11 +141,11 @@ class Continous_Q_network(nn.Module):
         self._init_weights()
 
     def forward(self, observation, action):
-        if isinstance(obs, np.ndarray):
-            obs = torch.tensor(observation, dtype=torch.float32)
-            obs = obs.unsqueeze(0).to(self.device)
+        if isinstance(observation, np.ndarray):
+            observation = torch.tensor(observation, dtype=torch.float32)
+            observation = observation.unsqueeze(0).to(self.device)
 
-        input = torch.cat([obs, action], dim=1)
+        input = torch.cat([observation, action], dim=-1)
         return self.structure(input)
     
     def _init_weights(self):

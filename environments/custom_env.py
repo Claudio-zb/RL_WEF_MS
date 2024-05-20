@@ -147,7 +147,7 @@ class DiscreteCustomEnv(Custom_env):
             if scaler is not None:
                 action = policy(scaler.transform(states[i:i+1])).max(1).indices.view(1, 1)
             else:
-                action = policy(states[i]).max(1).indices.view(1, 1)
+                action = policy(states[i]).max(1).indices.view(1, 1) # the index
             actions[i] = self.action_values[action]
 
             x_next, _, terminated, truncated, _ = self.step(action)

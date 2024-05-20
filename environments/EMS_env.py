@@ -32,7 +32,7 @@ class EMS_env(DiscreteCustomEnv):
             self.fig.set_size_inches(10, 10)
 
         # Hyperparams
-        self.max_steps: int = 288
+        self.max_steps: int = 143
         self.start_index:int = 0
         self.k:int = 0
         self.time:int = 0
@@ -107,8 +107,9 @@ class EMS_env(DiscreteCustomEnv):
         self.action_high = np.array([100, 100],
                                     dtype=np.float32)
 
-        self.action_space = spaces.Discrete(4)
-        super().__init__(np.array([0.0, 25., 50., 75., 100.], dtype=np.float32))
+        self.action_space = spaces.Discrete(16)
+        #super().__init__(np.array([0.0, 25., 50., 75., 100.], dtype=np.float32))
+        super().__init__(np.array(np.meshgrid(self.Q_p_levels, self.Irr_levels), dtype=np.float32).T.reshape(-1, 2))
         #self.action_values = np.array(np.meshgrid(self.Irr_levels, self.Q_p_levels), dtype=np.float32).T.reshape(-1, 2)
         #self.action_values = np.array([0.0, 25., 50., 75., 100.], dtype=np.float32)
         self.observation_space = spaces.Box(low=obs_low,
@@ -150,7 +151,7 @@ class EMS_env(DiscreteCustomEnv):
         
         self.Q_p = action[0]
 
-        self.Irr = 10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
+        self.Irr = action[1] #10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
 
         if self.Vt <= Vt_min:  # If the tank is empty, there is no irrigation
             if self.Irr > 0:
@@ -180,11 +181,11 @@ class EMS_env(DiscreteCustomEnv):
         self.k = self.k + 1
         self.accumulated_P_pump += P_Q_p
 
-        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. a day is over
-            self.V_Irr = 0.0
-            self.V_ref = 5*np.random.rand()
+        # if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. a day is over
+        #     self.V_Irr = 0.0
+        #     self.V_ref = 5*np.random.rand()
 
-        if (self.k % 288) == 0:  # The time at s' is 00:00 i.e. the final day is over
+        if (self.k % 143) == 0:  # The time at s' is 00:00 i.e. the final day is over
             terminated = True
             print(f"Accumulated power consumed: {self.accumulated_P_pump/(self.accumulated_P_consumed + self.accumulated_P_pump)}")
 
@@ -196,8 +197,8 @@ class EMS_env(DiscreteCustomEnv):
                                     self.SoE,
                                     self.p_fv[self.k],
                                     self.demanda[self.k], 
-                                    np.sin(2*np.pi*(self.k % 144)/143),
-                                    np.cos(2*np.pi*(self.k % 144)/143),
+                                    np.sin(2*np.pi*(self.k % 143)/143),
+                                    np.cos(2*np.pi*(self.k % 143)/143),
                                     self.E_residual])
 
         reward = self.reward_fun(observation, action, observation_next)
@@ -280,9 +281,9 @@ class EMS_env(DiscreteCustomEnv):
         self.SoE = Soe
         self.Irr = Irr_prev
         self.V_Irr = V_irr
-        self.radiacion = self.radiation_data[self.start_index:self.start_index + n_steps + 1]
-        self.temperatura = self.temperature_data[self.start_index:self.start_index + n_steps + 1]
-        self.p_fv = solar_power(self.radiacion, self.temperatura)
+        self.radiacion = self.radiation_data[self.start_index:self.start_index + n_steps + 1] + 1e-4*np.random.randn(n_steps + 1)
+        self.temperatura = self.temperature_data[self.start_index:self.start_index + n_steps + 1] + 1e-2*np.random.randn(n_steps + 1)
+        self.p_fv = solar_power(self.radiacion, self.temperatura) + 1e-4*np.random.randn(n_steps + 1)
         self.demanda = self.demand_data[self.start_index:self.start_index + n_steps + 1]
         self.Q_p = Q_p_prev
         self.V_ref = V_ref #self.V_refs[day_picked]
@@ -310,66 +311,58 @@ class EMS_env(DiscreteCustomEnv):
         :return:
         """
 
-        states, actions, rewards = self.sample_trajectory(policy, scaler = scaler, max_steps=288, rew_fun=self.reward_fun)
+        states, actions, rewards = self.sample_trajectory(policy, scaler = scaler, max_steps=143, rew_fun=self.reward_fun)
         for ax in self.axs.flat:
             ax.clear()
 
-        t = np.linspace(0, 48, len(actions))
+        t = np.linspace(0, 24, len(actions))
 
         SoE = states[:, 5]
         P_Q_p = B_p * (actions[:,0] * 1e-5) * h_p_const / 1e3
         self.axs[0, 0].step(t, states[:-1, 0], where='post', label='V_ref')
         self.axs[0, 0].step(t, states[:-1, 1], where='post', label='V_Irr')
-        self.axs[0, 0].set_title('Water demand fulfilled')
+        self.axs[0, 0].set_title('Water demand fulfilled', weight = 'bold')
         # self.axs[0].set_xlabel('Time (h)')
         self.axs[0, 0].set_ylabel('Water volume (m3)')
-        actual_irrigation = np.concatenate((np.diff(states[:144, 1]),
-                                            np.array([0.0]),
-                                            np.diff(states[144:-1, 1]),
-                                            np.array([0.0])))/600*1e5
-        #self.axs[0, 1].step(t, actions[:, 0], where='post', label='Irr')
+        actual_irrigation = np.diff(states[:, 1])
+        self.axs[0, 1].step(t, actions[:, 1], where='post', label='Irr')
         self.axs[0, 1].step(t, actual_irrigation, where='post', label='Actual_Irr')
-        self.axs[0, 1].set_title('Irrigation level')
+        self.axs[0, 1].set_title('Irrigation level', weight = 'bold')
         self.axs[0, 1].set_ylabel('Irrigation level (%)')
         self.axs[0, 1].legend()
 
         self.axs[1, 0].step(t, SoE[:-1], where='post', label='Soe')
-        self.axs[1, 0].set_title('SoE batteries')
+        self.axs[1, 0].set_title('SoE batteries', weight = 'bold')
         # self.axs[2].set_xlabel('Time (h)')
         self.axs[1, 0].set_ylabel('SoE (kWh)')
 
         self.axs[1, 1].step(t, states[:-1, 7], where='post', label='P_d')
         self.axs[1, 1].step(t, states[:-1, 6], where='post', label='P_sun')
         self.axs[1, 1].step(t, P_Q_p, where='post', label='P_pump')
-        self.axs[1, 1].set_title('Community demand')
+        self.axs[1, 1].set_title('Community demand', weight = 'bold')
         # self.axs[3].set_xlabel('Time (h)')
         self.axs[1, 1].set_ylabel('Power (kW)')
 
         self.axs[2, 0].step(t, states[:-1, 3], where='post', label='V_tank')
-        self.axs[2, 0].set_title('Tank volume')
+        self.axs[2, 0].set_title('Tank volume', weight = 'bold')
         self.axs[2, 0].set_xlabel('Time (h)')
         self.axs[2, 0].set_ylabel('Volume (m3)')
 
         self.axs[2, 1].step(t, actions[:, 0], where='post', label='Q_pump')
         #self.axs[2, 1].step(t, Qp + actual_irrigation, where='post', label='Actual_Q_pump')
-        self.axs[2, 1].set_title('Pump')
+        self.axs[2, 1].set_title('Pump', weight = 'bold')
         self.axs[2, 1].set_xlabel('Time (h)')
         self.axs[2, 1].set_ylabel('(%)')
 
         self.axs[3, 0].step(t, states[:-1,-1], where='post', label='E_residual')
-        self.axs[3, 0].set_title('Power balance')
+        self.axs[3, 0].set_title('Power balance', weight = 'bold')
 
 
         self.axs[3, 1].step(t, rewards, where='post', label='rewards')
-        self.axs[3, 1].set_title('Transition Rewards')
+        self.axs[3, 1].set_title('Transition Rewards', weight = 'bold')
 
-        self.axs[0, 0].legend()
-        self.axs[0, 1].legend()
-        self.axs[1, 0].legend()
-        self.axs[1, 1].legend()
-        self.axs[2, 0].legend()
-        self.axs[2, 1].legend()
-
+        for ax in self.axs.flat:
+            ax.legend()
         
     def close(self):
         """
@@ -447,22 +440,24 @@ def default_rwd_fun(s, a, s_next):
     reward = 0.0
     next_error = s[0] - s_next[1]
     current_error = s[0] - s[1]
-    #delta_error = np.abs(next_error) - np.abs(current_error)
-
+    
+    delta_error = np.abs(current_error) - np.abs(next_error)
+    reward = delta_error
     #if s_next[-3] != 0:
         #if s[3] >= Vt_max:
             #reward = -1.0 if delta_error > 0 else 0.0
 
     #reward = -1.0 if s_next[3] <= Vt_min + 0.1 else 0.0 # penalize if the tank is empty
-    reward = -1 + np.exp(-0.1 * (Vt_max - s_next[3])**2) # prioritize filling the tank        
+    #reward = -1 + np.exp(-0.1 * (Vt_max - s_next[3])**2) # prioritize filling the tank        
+    #reward = -1.0 + np.exp(-0.1 * (next_error)**2)
     #else:
     #    print("pasó un día brivones")
     
-    reward += -1.0 if s[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
+    #reward += -1.0 if s[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
     
     e_balance = s_next[-1]
 
-    reward += e_balance if e_balance < 0 else 0.0 
+    reward += 2*e_balance if e_balance < 0 else e_balance
 
     return np.array([reward], dtype=np.float32)
     

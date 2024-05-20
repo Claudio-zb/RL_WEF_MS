@@ -70,16 +70,8 @@ class TrainerUI:
         self.values_q_net = []
         self.values_target_net = []
         self.epsilon = []
-        
-        # directory to save the results
-        current_datetime = datetime.now()
-        date_time_str = current_datetime.strftime("%Y%m%d_%H%M%S")
-        alg_name = "DQN"
-        directory_name = f"{alg_name}_{date_time_str}"
-        path = "training_results/ems"  # Change this to your desired path
-        full_path = os.path.join(path, directory_name)
-        os.makedirs(full_path)
-        self.full_path = full_path
+
+        self.full_path = ""
 
     def update_plot(self) -> None:        
         '''Update the plot with the new data from the queue'''
@@ -115,14 +107,23 @@ class TrainerUI:
     def start_plot(self) -> None:
         '''Start the plot update process in a separate thread'''
         def target():
+            
+            current_datetime = datetime.now()
+            date_time_str = current_datetime.strftime("%Y%m%d_%H%M%S")
+            directory_name = f"{self.alg.__class__.__name__}_{date_time_str}"
+            path = "training_results/ems"  # Change this to your desired path
+            self.full_path = os.path.join(path, directory_name)
+            os.makedirs(self.full_path)
+            
             for ax in self.axs:
                 ax.legend()
             while True:
                 if self.i_episode % 10 == 0:
-                    self.env.show_sample(self.alg.target_net, self.alg.scaler)
+                    self.env.show_sample(self.alg.get_policy(), None)
                 if self.i_episode % 50 == 0:
-                    self.save_results()
+                    self.save_model(self.alg.__class__.__name__, self.i_episode)
                 if self.i_episode == 1000 or self.stop_training:
+                    self.save_results(self.alg.__class__.__name__)
                     break
                 self.q.put(self.alg.one_ep_training(self.i_episode))
                 self.i_episode += 1
@@ -136,32 +137,23 @@ class TrainerUI:
             self.stop_training = True
             self.root.after_cancel(self.job)
             self.job = None
-            self.save_results()
+            self.save_results(self.alg.__class__.__name__)
 
     def run(self):
         # Run the application
         self.root.mainloop()
     
-    def save_results(self, alg_name:str = "DQN"):
-        # Get the current date and time
-        current_datetime = datetime.now()
-        date_time_str = current_datetime.strftime("%Y%m%d_%H%M%S")
-        directory_name = f"{alg_name}_{date_time_str}"
-        path = "training_results/ems"  # Change this to your desired path
-        full_path = os.path.join(path, directory_name)
-        os.makedirs(full_path)
-        stats = self.stats_to_df()
-        torch.save(self.alg.target_net, full_path + r"\policy.pt")
-        stats.to_csv(full_path + r"\training_results.csv")
-        joblib.dump(self.alg.scaler, full_path + r"\scaler.pkl")
+    def save_results(self):
+        "Saves the results of the training in a csv file and the final model in a .pt file"
 
-    def save_model(self, alg_name:str = "DQN"):
-        # Get the current date and time
-        
         stats = self.stats_to_df()
-        torch.save(self.alg.target_net, self.full_path + r"\policy.pt")
+        torch.save(self.alg.get_policy(), self.full_path + f"\policy_final.pt")
         stats.to_csv(self.full_path + r"\training_results.csv")
-        joblib.dump(self.alg.scaler, self.full_path + r"\scaler.pkl")
+
+    def save_model(self, i_episode:int):
+        "Saves the current policy model in a .pt file"
+        torch.save(self.alg.get_policy(), self.full_path + f"\policy_ep_{i_episode}.pt")
+
 
     def update_stats(self):
         """Update the statistics with the new data from the queue"""

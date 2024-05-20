@@ -47,8 +47,9 @@ class DQN(RL_algorithm):
 
         self.ep_steps = 0
         self.ep_random_steps = 0
-        self.scaler = StandardScaler()
-        self._init_scaler()
+        self.scaler = None # StandardScaler()
+        if self.scaler is not None:
+            self._init_scaler()
 
         # priority experience replay
         self.replay_period = 4
@@ -64,6 +65,7 @@ class DQN(RL_algorithm):
         sample_states = np.zeros((n_samples, self.obs_dim))
         for idx in range(n_samples):  # Collect 10000 samples
             state, _ = self.env.reset()
+            state[1] = np.random.randint(0, 4)
             state[-1] = np.random.randint(0, 2) 
             state[-2] = np.random.rand()*2 - 1 
             state[-3] = np.random.rand() *2 - 1 
@@ -97,12 +99,13 @@ class DQN(RL_algorithm):
         for i_episode in range(n_episodes):
             # Initialize the environment and get it's state
             if i_episode % 10 == 0:
-                self.env.show_sample(self.target_net)
+                self.env.show_sample(self.target_net, self.scaler)
             state, info = self.env.reset()
             self.ep_random_steps = 0
             self.ep_steps = 0
             state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-            state = self.normalize_state(state)
+            if self.scaler is not None:
+                state = self.normalize_state(state)
             ep_rewards = []
             if i_episode >= 2000:
                 print("Time to debug!")
@@ -254,7 +257,7 @@ class DQN(RL_algorithm):
             self.lr = 1e-3
             self.EPS_START = 0.95
             self.EPS_END = 0.001
-            self.EPS_DECAY = 100
+            self.EPS_DECAY = 50 #100
             self.TAU = 0.005
 
         else:
@@ -345,7 +348,8 @@ class DQN(RL_algorithm):
         self.ep_random_steps = 0
         self.ep_steps = 0
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-        state = self.normalize_state(state)
+        if self.scaler is not None:
+            state = self.normalize_state(state)
         ep_rewards = []
         for t in count():  # begin episode
             self.policy_net.eval()
@@ -397,4 +401,6 @@ class DQN(RL_algorithm):
 
         return mean_ep_rwd, std_ep_rwd, action_randomness, q_values_target, q_values_policy
     
+    def get_policy(self) -> nn.Module:
+        return self.target_net
 

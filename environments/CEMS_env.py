@@ -102,10 +102,10 @@ class ContinousEMSEnv(ContinousCustomEnv):
         # Irr, Q_p, Pbat
 
         # Bounds for actions
-        self.action_low = np.array([0.0],
+        self.action_low = np.array([0.0, 0.0],
                                    dtype=np.float32)
 
-        self.action_high = np.array([100],
+        self.action_high = np.array([100, 100],
                                     dtype=np.float32)
 
         super().__init__(self.action_low, self.action_high)
@@ -113,7 +113,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
         # Agent params
         self.action_space = spaces.Box(low=self.action_low,
                                            high=self.action_high,
-                                           shape=(1,),
+                                           shape=(2,),
                                            dtype=np.float32)
 
         self.observation_space = spaces.Box(low=obs_low,
@@ -321,7 +321,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
         P_Q_p = B_p * (actions[:,0] * 1e-5) * h_p_const / 1e3
         self.axs[0, 0].step(t, states[:-1, 0], where='post', label='V_ref')
         self.axs[0, 0].step(t, states[:-1, 1], where='post', label='V_Irr')
-        self.axs[0, 0].set_title('Water demand fulfilled')
+        self.axs[0, 0].set_title('Water demand fulfilled', weight = 'bold')
         # self.axs[0].set_xlabel('Time (h)')
         self.axs[0, 0].set_ylabel('Water volume (m3)')
         actual_irrigation = np.concatenate((np.diff(states[:144, 1]),
@@ -330,7 +330,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
                                             np.array([0.0])))/600*1e5
         #self.axs[0, 1].step(t, actions[:, 0], where='post', label='Irr')
         self.axs[0, 1].step(t, actual_irrigation, where='post', label='Actual_Irr')
-        self.axs[0, 1].set_title('Irrigation level')
+        self.axs[0, 1].set_title('Irrigation level', weight = 'bold')
         self.axs[0, 1].set_ylabel('Irrigation level (%)')
         self.axs[0, 1].legend()
 
@@ -342,34 +342,29 @@ class ContinousEMSEnv(ContinousCustomEnv):
         self.axs[1, 1].step(t, states[:-1, 7], where='post', label='P_d')
         self.axs[1, 1].step(t, states[:-1, 6], where='post', label='P_sun')
         self.axs[1, 1].step(t, P_Q_p, where='post', label='P_pump')
-        self.axs[1, 1].set_title('Community demand')
+        self.axs[1, 1].set_title('Community demand', weight = 'bold')
         # self.axs[3].set_xlabel('Time (h)')
         self.axs[1, 1].set_ylabel('Power (kW)')
 
         self.axs[2, 0].step(t, states[:-1, 3], where='post', label='V_tank')
-        self.axs[2, 0].set_title('Tank volume')
+        self.axs[2, 0].set_title('Tank volume', weight = 'bold')
         self.axs[2, 0].set_xlabel('Time (h)')
         self.axs[2, 0].set_ylabel('Volume (m3)')
 
         self.axs[2, 1].step(t, actions[:, 0], where='post', label='Q_pump')
         #self.axs[2, 1].step(t, Qp + actual_irrigation, where='post', label='Actual_Q_pump')
-        self.axs[2, 1].set_title('Pump')
+        self.axs[2, 1].set_title('Pump', weight = 'bold')
         self.axs[2, 1].set_xlabel('Time (h)')
         self.axs[2, 1].set_ylabel('(%)')
 
-        self.axs[3, 0].step(t, states[:-1,-1], where='post', label='E_residual')
-        self.axs[3, 0].set_title('Power balance')
-
+        self.axs[3, 0].step(t, states[1:,-1], where='post', label='E_residual')
+        self.axs[3, 0].set_title('Power balance', weight = 'bold')
 
         self.axs[3, 1].step(t, rewards, where='post', label='rewards')
-        self.axs[3, 1].set_title('Transition Rewards')
+        self.axs[3, 1].set_title('Transition Rewards', weight = 'bold')
 
-        self.axs[0, 0].legend()
-        self.axs[0, 1].legend()
-        self.axs[1, 0].legend()
-        self.axs[1, 1].legend()
-        self.axs[2, 0].legend()
-        self.axs[2, 1].legend()
+        for ax in self.axs.flat:
+            ax.legend()
 
         
     def close(self):

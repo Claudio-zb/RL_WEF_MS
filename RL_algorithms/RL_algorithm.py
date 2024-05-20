@@ -45,3 +45,12 @@ class RL_algorithm(ABC):
         :return mean_ep_rwd, std_ep_rwd, action_randomness, q_values_target, q_values_policy:
         """
         pass
+
+    @abstractmethod
+    def get_policy(self) -> nn.Module:
+        """
+        Get the policy
+        :return:
+        """
+        pass
+        
