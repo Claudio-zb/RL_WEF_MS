@@ -28,8 +28,8 @@ L_ss = 0.15 # [m]
 
 # Efecto radiación solar 
 
-z:float = 10.0 # m
-p_atm:float = 101.3*((293 - 0.0065*z)/293)**5.26 # atm pressure 
+z:float = 10.0 # [m] altura del invernadero
+p_atm:float = 101.3*((293 - 0.0065*z)/293)**5.26 # atm pressure [kPA] 
 A_g:float = 60.0 # Area del suelo del invernadero [m^2]
 rho_g:float = 1500.0 # kg/m^3
 

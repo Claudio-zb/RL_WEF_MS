@@ -157,9 +157,12 @@ class DiscreteCustomEnv(Custom_env):
                 actions = actions[:i + 1]
                 break
         policy.train()
-        rewards = np.zeros_like(actions)
+        rewards = np.zeros(max_steps)
         if rew_fun is not None:
             for i in range(len(actions)):
                 rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
-
+        else:
+            rew_fun = self.reward_fun
+            for i in range(len(actions)):
+                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
         return states, actions, rewards

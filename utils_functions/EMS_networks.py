@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import numpy as np
 from torch.nn import init
+from torch.nn import functional as F
 
 
 class ActorNN(nn.Module):
@@ -10,35 +11,30 @@ class ActorNN(nn.Module):
     """
 
     def __init__(self, input_dim: int, output_dim: int,
-                 upper_bound: np.ndarray, lower_bound: np.ndarray):
+                 upper_bound: torch.Tensor, lower_bound: torch.Tensor, device = 'cuda'):
         super(ActorNN, self).__init__()
-        self.upper_bound = torch.tensor(upper_bound, dtype=torch.float32).cuda()
-        self.lower_bound = torch.tensor(lower_bound, dtype=torch.float32).cuda()
+        self.device = device
+        self.upper_bound = upper_bound
+        self.lower_bound = lower_bound
         self.shared_fc = nn.Sequential(
             nn.Linear(input_dim, 128),
             nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.Linear(128, output_dim),
-            nn.BatchNorm1d(output_dim),
+            nn.Linear(128, output_dim)
         )
         self._init_weights()
 
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
-            obs = torch.tensor(obs, dtype=torch.float32).cuda()
+            obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
         shared_output = self.shared_fc(obs)
-        x = torch.sigmoid(shared_output)
-        x = x * (self.upper_bound - self.lower_bound) + self.lower_bound
-        return x
+        shared_output = torch.tanh(shared_output)*self.upper_bound
+        
+        return shared_output
 
     def _init_weights(self):
         for layer in self.shared_fc:
@@ -80,7 +76,7 @@ class Q_network(nn.Module):
         self.device = device
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.width = 128
+        self.width = 256
         self.structure = nn.Sequential(
             nn.BatchNorm1d(input_dim),
             nn.Linear(input_dim, self.width),
@@ -88,12 +84,6 @@ class Q_network(nn.Module):
             nn.ReLU(),
             nn.Linear(self.width, self.width),
             nn.BatchNorm1d(self.width),
-            nn.ReLU(),
-            nn.Linear(self.width, self.width),
-            nn.ReLU(),
-            nn.Linear(self.width, self.width),
-            nn.ReLU(),
-            nn.Linear(self.width, self.width),
             nn.ReLU(),
             nn.Linear(self.width, 48),
             nn.ReLU(),
@@ -112,6 +102,48 @@ class Q_network(nn.Module):
         for layer in self.structure:
             if isinstance(layer, nn.Linear):
                 init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
+
+class TD3Critic(nn.Module):
+    def __init__(self, input_dim, output_dim, width = 128):
+        super(TD3Critic, self).__init__()
+        self.width = width
+        self.q1_sequence = nn.Sequential(
+            nn.BatchNorm1d(input_dim + output_dim),
+            nn.Linear(input_dim + output_dim, self.width),
+            nn.BatchNorm1d(self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, self.width),
+            nn.BatchNorm1d(self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, 48),
+            nn.ReLU(),
+            nn.Linear(48, output_dim)
+        )
+        self.q2_sequence = nn.Sequential(
+            nn.BatchNorm1d(input_dim + output_dim),
+            nn.Linear(input_dim + output_dim, self.width),
+            nn.BatchNorm1d(self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, self.width),
+            nn.BatchNorm1d(self.width),
+            nn.ReLU(),
+            nn.Linear(self.width, 48),
+            nn.ReLU(),
+            nn.Linear(48, output_dim)
+        )
+     
+    def forward(self, state, action):
+        sa = torch.cat([state, action], 1)
+
+        q1 = self.q1_sequence(sa)
+        q2 = self.q2_sequence(sa)
+
+        return q1, q2
+
+    def Q1(self, state, action):
+        sa = torch.cat([state, action], 1)
+        q1 = self.q1_sequence(sa)
+        return q1
 
 class Continous_Q_network(nn.Module):
     def __init__(self, input_dim, output_dim, device):

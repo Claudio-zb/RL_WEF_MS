@@ -34,7 +34,7 @@ $$
 
 Donde $E [\frac{g }{ m^2 \cdot s}] $ corresponde al flujo de vapor debido a la transpiración de la planta, $C [\frac{g }{ m^2 \cdot s}]$ es el flujo de humedad concerniente a la condensación y $V [\frac{g }{ m^2 \cdot s}]$ es el flujo de humedad concerniente a la ventilación.
 
-#### Evapotransipiración
+#### Evapotranspiración
 
 $$
 E=g_E\left(x_{\text {crop }}-x_{inv}\right)
@@ -96,12 +96,30 @@ $$
 \varphi_{win} \approx |A_{window} [\%] \cdot w_{wind} [m/s]|
 $$
 
-### Dinámica de la temperatura
+### Dinámica de la temperatura del aire
 
 $$
-\frac{d}{dt} T_{inv} = \frac{d}{dt}Q_{inv} \cdot \frac{1}{m} = \frac{W_{inv}}{m}
+\frac{d}{dt} T_{inv} = \frac{Q_{rad} - Q_{ss} - Q_{cc} - Q_{evp} - Q_{ren}}{(\rho_{air} \cdot c_{pa} + x_{inv} \cdot c_{pv}) \cdot V_{inv}}
 $$
 
 $$
-W_{inv}
+Q_{rad} = S_s \cdot [I_s \cdot (\alpha + \tau \alpha_s)] + S_c \cdot \sigma \cdot \tau_{ter} \cdot (\epsilon_{atm} \cdot T_{atm}^4 - \epsilon_{ter} \cdot T_c^{4})
 $$
+
+$$
+Q_{evp} = \lambda_0 \cdot ET_c
+$$
+
+$$
+Q_{ss} = K_s \cdot S_c \cdot\left(T_{inv}-T_{ss}\right) / p
+$$
+
+$$
+Q_{\text {ren}}={V}_{\text {inv }} \cdot  R \cdot \rho \cdot\left[{c}_{{pa}} \cdot\left(T_{inv} - T_{ext}\right)+\lambda_0 \cdot\left(x_{i}-x_{e}\right)\right. \left.+ c_{pv} \cdot\left(x_{i} \cdot T_{inv}-x_{e} \cdot T_{ext}\right)\right]
+$$
+
+$$
+Q_{cc} = S_d \cdot K_{cc} \cdot (T_{inv} - T_{ext})
+$$
+
+### Dinámica de la temperatura del suelo

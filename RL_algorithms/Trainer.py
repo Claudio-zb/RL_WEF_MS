@@ -121,7 +121,7 @@ class TrainerUI:
                 if self.i_episode % 10 == 0:
                     self.env.show_sample(self.alg.get_policy(), None)
                 if self.i_episode % 50 == 0:
-                    self.save_model(self.alg.__class__.__name__, self.i_episode)
+                    self.save_model(self.i_episode)
                 if self.i_episode == 1000 or self.stop_training:
                     self.save_results(self.alg.__class__.__name__)
                     break
@@ -137,7 +137,7 @@ class TrainerUI:
             self.stop_training = True
             self.root.after_cancel(self.job)
             self.job = None
-            self.save_results(self.alg.__class__.__name__)
+        self.save_results(self.alg.__class__.__name__)
 
     def run(self):
         # Run the application

@@ -1,4 +1,5 @@
 import random
+import copy
 from itertools import count
 
 import matplotlib.pyplot as plt
@@ -6,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 
-from utils_functions.EMS_networks import Continous_Q_network, ActorNN
+from utils_functions.EMS_networks import *
 from utils_functions.ReplayMemory import ReplayMemory, Transition
 from environments.custom_env import ContinousCustomEnv
 import numpy as np
@@ -20,37 +21,28 @@ class TD3(RL_algorithm):
         self.env = env
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
-        self._init_hyperparameters(options)
 
         self.memory = ReplayMemory(10000)
         self.env: ContinousCustomEnv = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
-        self.action_high = env.action_space.high
-        self.action_low = env.action_space.low
+        self.action_high = torch.tensor(env.action_space.high, dtype=torch.float32).to(device)
+        self.action_low = torch.tensor(env.action_space.low, dtype=torch.float32).to(device)
+        self._init_hyperparameters(options)
 
-        self.critic_1:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
-        self.target_critic_1:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
+        self.critic:nn.Module = TD3Critic(self.obs_dim, self.action_dim).to(device)
+        self.target_critic:nn.Module = copy.deepcopy(self.critic)
 
-        self.critic_2:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)        
-        self.target_critic_2:nn.Module = Continous_Q_network(self.obs_dim, self.action_dim, device).to(device)
 
         self.policy_net:nn.Module = ActorNN(self.obs_dim, self.action_dim, self.action_high, self.action_low).to(device)
-        self.target_policy_net:nn.Module = ActorNN(self.obs_dim, self.action_dim, self.action_high, self.action_low).to(device)
-
-        # make sure the weights are the same
-        self.target_critic_1.load_state_dict(self.critic_1.state_dict())
-        self.target_critic_2.load_state_dict(self.critic_2.state_dict())
-        self.target_policy_net.load_state_dict(self.policy_net.state_dict())
+        self.target_policy_net:nn.Module = copy.deepcopy(self.policy_net)
 
 
-        self.critic_1_optimizer = AdamW(self.critic_1.parameters(), lr=self.lr, amsgrad=True)
-        self.critic_2_optimizer = AdamW(self.critic_2.parameters(), lr=self.lr, amsgrad=True)
+        self.critic_optimizer = AdamW(self.critic.parameters(), lr=self.lr, amsgrad=True)
         self.policy_optimizer = AdamW(self.policy_net.parameters(), lr=self.lr, amsgrad=True)
         
-        self.critic_1_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.critic_1_optimizer, gamma=0.9999)
-        self.critic_2_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.critic_2_optimizer, gamma=0.9999)
-        self.policy_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.policy_optimizer, gamma=0.9999)
+        self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.critic_optimizer, gamma=0.99)
+        self.policy_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.policy_optimizer, gamma=0.99)
         
         self._training_stats = None
 
@@ -70,15 +62,10 @@ class TD3(RL_algorithm):
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         ep_rewards = []
         for t in count():  # begin episode
-            self.critic_1.eval()
-            self.critic_2.eval()
+            self.critic.eval()
             self.policy_net.eval()
 
             action = self.policy_net(state)
-            action = torch.clamp(action + torch.randn_like(action) * self.policy_noise, 
-                                 torch.tensor(self.action_low).to(device), 
-                                 torch.tensor(self.action_high).to(device))
-
             observation, reward, terminated, truncated, _ = self.env.step(action.detach().cpu().numpy().flatten())
             self.ep_steps += 1
             ep_rewards.append(reward)
@@ -86,7 +73,6 @@ class TD3(RL_algorithm):
             done = terminated or truncated
 
             if done:
-                next_state = None
                 ep_rewards = np.array(ep_rewards).flatten()
                 mean_ep_rwd = ep_rewards.mean()
                 std_ep_rwd = ep_rewards.std()
@@ -98,13 +84,16 @@ class TD3(RL_algorithm):
                     state_batch = torch.cat(batch.state)
                     action_batch = torch.cat(batch.action)
 
-                    q_target_1_values = self.critic_1(state_batch, action_batch).mean().item()
-                    q_target_2_values = self.critic_2(state_batch, action_batch).mean().item()
+                    q_values = self.critic.Q1(state_batch, action_batch).mean().item()
+                    q_target_values = self.target_critic.Q1(state_batch, action_batch).mean().item()
+                else:
+                    q_values = 0
+                    q_target_values = 0
             else:
                 next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
             # Store the transition in memory
-            self.memory.push(state, action, next_state, reward)
+            self.memory.push(state, action, next_state, reward, done)
 
             # Move to the next state
             state = next_state
@@ -115,27 +104,16 @@ class TD3(RL_algorithm):
 
             # Soft update of the target network's weights
             # θ′ ← τ θ + (1 − τ )θ′
-            
-            for target_param, param in zip(self.target_critic_1.parameters(), self.critic_1.parameters()):
-                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
-
-            for target_param, param in zip(self.target_critic_2.parameters(), self.critic_2.parameters()):
-                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
-
-            for target_param, param in zip(self.target_policy_net.parameters(), self.policy_net.parameters()):
-                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
 
             if done:
                 break
 
-        return mean_ep_rwd, std_ep_rwd, action_randomness, q_target_1_values, q_target_2_values
+        return mean_ep_rwd, std_ep_rwd, action_randomness, q_values, q_target_values
     
     def optimize_model(self) -> None:
         '''Optimize the model'''
-        self.critic_1.train()
-        self.critic_2.train()
-        self.target_critic_1.train()
-        self.target_critic_2.train()
+        self.critic.train()
+        self.target_critic.train()
         self.policy_net.train()
         self.target_policy_net.train()
 
@@ -144,69 +122,66 @@ class TD3(RL_algorithm):
         transitions = self.memory.sample(self.BATCH_SIZE)
         batch = Transition(*zip(*transitions))
 
-        # Compute a mask of non-final states and concatenate the batch elements
-        # (a final state would've been the one after which simulation ended)
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                                batch.next_state)), device=self.device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state
-                                           if s is not None])
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action).to(self.device).detach()
-        reward_batch = torch.cat(batch.reward)
-
-        # Compute V(s_{t+1}) for all next states.
-        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device, dtype=torch.float32)
-        a_next = self.target_policy_net(non_final_next_states)
-
-        q_next_1 = self.target_critic_1(non_final_next_states, a_next).squeeze(-1)
-        q_next_2 = self.target_critic_2(non_final_next_states, a_next).squeeze(-1)
-
-        q_next = torch.min(q_next_1, q_next_2)
+        state = torch.cat(batch.state)
+        action = torch.cat(batch.action).to(self.device).detach()
+        reward = torch.cat(batch.reward).type(torch.float32)
+        next_state = torch.cat(batch.next_state)
+        done = torch.tensor(batch.isdone)
+        not_done = torch.logical_not(done).to(self.device)
 
         with torch.no_grad():
-            next_state_values[non_final_mask] = q_next 
-        # Compute the expected Q values
-        expected_state_action_values = (next_state_values.detach() * self.gamma) + reward_batch.squeeze(-1)
+            noise = (
+				torch.randn_like(action) * self.policy_noise
+			).clamp(-self.noise_clip, self.noise_clip)
 
-        # Update Both Critic Networks
-        criterion = nn.MSELoss(reduction='none')
+            next_action = (
+				self.target_policy_net(next_state) + noise
+			).clamp(self.action_low, self.action_high)
 
-        self.critic_1_optimizer.zero_grad()
-        state_action_values_1 = self.critic_1(state_batch, action_batch)
-        loss1 = criterion(state_action_values_1, expected_state_action_values.unsqueeze(1)).mean()
-        loss1.backward()
-        torch.nn.utils.clip_grad_value_(self.critic_1.parameters(), 100)
-        self.critic_1_optimizer.step()
-        self.critic_1_scheduler.step()
+            # Compute the target Q value
+            target_Q1, target_Q2 = self.target_critic(next_state, next_action)
+            target_Q = torch.max(target_Q1, target_Q2)
+            target_Q = reward.unsqueeze(-1) + not_done.unsqueeze(-1) * self.gamma * target_Q
 
-        self.critic_2_optimizer.zero_grad()
-        state_action_values_2 = self.critic_2(state_batch, action_batch)
-        loss2 = criterion(state_action_values_2, expected_state_action_values.unsqueeze(1)).mean()
-        loss2.backward()
-        torch.nn.utils.clip_grad_value_(self.critic_2.parameters(), 100)
-        self.critic_2_optimizer.step()
-        self.critic_2_scheduler.step()
+        # Get current Q estimates
+        current_Q1, current_Q2 = self.critic(state, action)
 
-        # Update policy network
+		# Compute critic loss
+        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+
+        # Optimize the critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+
+		# Delayed policy updates
         if self.ep_steps % self.policy_freq == 0:
-            policy_loss = -self.critic_1(state_batch, self.policy_net(state_batch)).mean()
-            policy_loss = policy_loss.mean()
 
+			# Compute actor losse
+            actor_loss = -self.critic.Q1(state, self.policy_net(state)).mean()
+
+            # Optimize the actor 
             self.policy_optimizer.zero_grad()
-            policy_loss.backward()
+            actor_loss.backward()
             self.policy_optimizer.step()
-            self.policy_scheduler.step()
-    
-        return
+
+            # Update the frozen target models
+            for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
+                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
+
+            for param, target_param in zip(self.policy_net.parameters(), self.target_policy_net.parameters()):
+                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
+
+            return
     def _init_hyperparameters(self, options=None):
         """Initialize the hyperparameters of the algorithm"""
         if options is None:
-            self.gamma = 0.99
-            self.lr = 0.001
-            self.BATCH_SIZE = 128
+            self.gamma = 0.95   
+            self.lr = 0.0001
+            self.BATCH_SIZE = 256
             self.TAU = 0.005
-            self.policy_noise = 0.2
-            self.noise_clip = 0.5
+            self.policy_noise = 0.2*self.action_high
+            self.noise_clip = 0.5*self.action_high
             self.policy_freq = 2
         else:
             self.gamma = options['gamma']

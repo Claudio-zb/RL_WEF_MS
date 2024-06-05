@@ -252,13 +252,13 @@ class DQN(RL_algorithm):
         :return:
         """
         if options is None:
-            self.BATCH_SIZE = 128
-            self.gamma = 0.95
+            self.BATCH_SIZE = 256
+            self.gamma = 0.90
             self.lr = 1e-3
             self.EPS_START = 0.95
             self.EPS_END = 0.001
             self.EPS_DECAY = 50 #100
-            self.TAU = 0.005
+            self.TAU = 0.001
 
         else:
             self.BATCH_SIZE = options['BATCH_SIZE']
@@ -361,7 +361,6 @@ class DQN(RL_algorithm):
             done = terminated or truncated
 
             if done:
-                next_state = None
                 ep_rewards = np.array(ep_rewards).flatten()
                 mean_ep_rwd = ep_rewards.mean()
                 std_ep_rwd = ep_rewards.std()

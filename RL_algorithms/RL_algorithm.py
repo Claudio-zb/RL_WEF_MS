@@ -8,7 +8,10 @@ class RL_algorithm(ABC):
     Abstract class for RL algorithms. All RL algorithms should inherit from this class. The main methods are:
     - learn: learn the policy for the environment. It executes the training loop. Returns the training statistics and
     the learned policy.
-    - show_trajectory: render the environment using the current policy
+    - show_trajectory: render the environment using the current policy.
+    - one_ep_training: execute one episode of training. Returns the mean reward, std reward, action randomness, 
+                       q_values_target and q_values_policy.
+    - get_policy: get the policy.
     """
 
     @abstractmethod
@@ -19,7 +22,6 @@ class RL_algorithm(ABC):
         :return: training statistics and the learned policy
         """
         pass
-    
 
     @abstractmethod
     def update_training_plots(self, i_episode: int):

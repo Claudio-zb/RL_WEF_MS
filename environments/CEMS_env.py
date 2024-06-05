@@ -33,7 +33,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
             self.fig.set_size_inches(10, 10)
 
         # Hyperparams
-        self.max_steps: int = 288
+        self.max_steps: int = 143
         self.start_index:int = 0
         self.k:int = 0
         self.time:int = 0
@@ -105,7 +105,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
         self.action_low = np.array([0.0, 0.0],
                                    dtype=np.float32)
 
-        self.action_high = np.array([100, 100],
+        self.action_high = np.array([1, 1],
                                     dtype=np.float32)
 
         super().__init__(self.action_low, self.action_high)
@@ -150,21 +150,21 @@ class ContinousEMSEnv(ContinousCustomEnv):
                                 self.E_residual])
 
         # Store the previous values of the variables to compute the reward
-        self.Q_p = action[0]
+        self.Q_p = action[0] # [l/s]
 
-        self.Irr = 10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
+        self.Irr = action[1] # [l/s] #10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
 
         if self.Vt <= Vt_min:  # If the tank is empty, there is no irrigation
             if self.Irr > 0:
                 self.Irr = 0
 
-        amount_to_irrigate = dt * (self.Irr * 1e-5)
+        amount_to_irrigate = dt * (self.Irr * 1e-3)
 
         Vt_to_fill = Vt_max - self.Vt - amount_to_irrigate  # Amount of water that can be filled
         if Vt_to_fill <= 0 < self.Q_p:  # If the tank is full and the pump is feeding, the pump is turned off
             self.Q_p = 0
 
-        P_Q_p = B_p * (self.Q_p * 1e-5) * h_p_const / 1e3  # water pump power [kW]
+        P_Q_p = B_p * (self.Q_p * 1e-3) * h_p_const / 1e3  # water pump power [kW]
 
         self.Pbat, self.SoE, self.E_residual = manage_batteries(self.SoE,
                                                                 self.p_fv[self.k],
@@ -173,7 +173,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
         
         deficit_flag = 0 if self.E_residual >= 0 else 1
 
-        amount_to_pump = dt * (self.Q_p * 1e-5) # Volume [m3]
+        amount_to_pump = dt * (self.Q_p * 1e-3) # Volume [m3]
 
         self.Vt = np.clip(self.Vt + amount_to_pump - amount_to_irrigate, Vt_min, Vt_max)
         self.V_Irr = self.V_Irr + amount_to_irrigate
@@ -181,13 +181,8 @@ class ContinousEMSEnv(ContinousCustomEnv):
         self.k = self.k + 1
         self.accumulated_P_pump += P_Q_p
 
-        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. a day is over
-            self.V_Irr = 0.0
-            self.V_ref = 5*np.random.rand()
-
-        if (self.k % 288) == 0:  # The time at s' is 00:00 i.e. the final day is over
+        if (self.k % 143) == 0:  # The time at s' is 00:00 i.e. the final day is over
             terminated = True
-            print(f"Accumulated power consumed: {self.accumulated_P_pump/(self.accumulated_P_consumed + self.accumulated_P_pump)}")
 
         observation_next = np.array([self.V_ref,
                                     self.V_Irr,
@@ -197,8 +192,8 @@ class ContinousEMSEnv(ContinousCustomEnv):
                                     self.SoE,
                                     self.p_fv[self.k],
                                     self.demanda[self.k], 
-                                    np.sin(2*np.pi*(self.k % 144)/143),
-                                    np.cos(2*np.pi*(self.k % 144)/143),
+                                    np.sin(2*np.pi*(self.k % 143)/143),
+                                    np.cos(2*np.pi*(self.k % 143)/143),
                                     self.E_residual])
 
         reward = self.reward_fun(observation, action, observation_next)
@@ -224,8 +219,8 @@ class ContinousEMSEnv(ContinousCustomEnv):
                                                          V_ref=3.5*np.random.rand(),
                                                          V_tank=(Vt_max - Vt_min) * np.random.random_sample() + Vt_min,
                                                          Soe=(SoE_max - SoE_min) * np.random.random_sample() + SoE_min,
-                                                         Irr_prev=self.Irr_levels[np.random.randint(0, 4)],
-                                                         Q_p_prev=self.Q_p_levels[np.random.randint(0, 4)],
+                                                         Irr_prev=0.0,
+                                                         Q_p_prev=0.0,
                                                          instant_k=0,
                                                          V_irr=0.0)
 
@@ -311,24 +306,21 @@ class ContinousEMSEnv(ContinousCustomEnv):
         :return:
         """
 
-        states, actions, rewards = self.sample_trajectory(policy, scaler = scaler, max_steps=288, rew_fun=self.reward_fun)
+        states, actions, rewards = self.sample_trajectory(policy, scaler = scaler, max_steps=243, rew_fun=self.reward_fun)
         for ax in self.axs.flat:
             ax.clear()
 
-        t = np.linspace(0, 48, len(actions))
+        t = np.linspace(0, 24, len(actions))
 
         SoE = states[:, 5]
-        P_Q_p = B_p * (actions[:,0] * 1e-5) * h_p_const / 1e3
+        P_Q_p = B_p * (actions[:,0] * 1e-3) * h_p_const / 1e3
         self.axs[0, 0].step(t, states[:-1, 0], where='post', label='V_ref')
         self.axs[0, 0].step(t, states[:-1, 1], where='post', label='V_Irr')
         self.axs[0, 0].set_title('Water demand fulfilled', weight = 'bold')
         # self.axs[0].set_xlabel('Time (h)')
         self.axs[0, 0].set_ylabel('Water volume (m3)')
-        actual_irrigation = np.concatenate((np.diff(states[:144, 1]),
-                                            np.array([0.0]),
-                                            np.diff(states[144:-1, 1]),
-                                            np.array([0.0])))/600*1e5
-        #self.axs[0, 1].step(t, actions[:, 0], where='post', label='Irr')
+        actual_irrigation = np.diff(states[:, 1])/600*1e5
+        self.axs[0, 1].step(t, actions[:, 1]*100, where='post', label='Irr')
         self.axs[0, 1].step(t, actual_irrigation, where='post', label='Actual_Irr')
         self.axs[0, 1].set_title('Irrigation level', weight = 'bold')
         self.axs[0, 1].set_ylabel('Irrigation level (%)')
@@ -351,7 +343,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
         self.axs[2, 0].set_xlabel('Time (h)')
         self.axs[2, 0].set_ylabel('Volume (m3)')
 
-        self.axs[2, 1].step(t, actions[:, 0], where='post', label='Q_pump')
+        self.axs[2, 1].step(t, actions[:, 0]*100, where='post', label='Q_pump')
         #self.axs[2, 1].step(t, Qp + actual_irrigation, where='post', label='Actual_Q_pump')
         self.axs[2, 1].set_title('Pump', weight = 'bold')
         self.axs[2, 1].set_xlabel('Time (h)')
@@ -440,21 +432,22 @@ def default_rwd_fun(s, a, s_next):
     :param a: action
     :param s_next: next state
     :param e_penal: penalty for energy deficit"""
-    reward = 0.0
+    
     next_error = s[0] - s_next[1]
     current_error = s[0] - s[1]
     #delta_error = np.abs(next_error) - np.abs(current_error)
-
+    reward = -1 + np.exp(-0.1*next_error**2)
     #if s_next[-3] != 0:
         #if s[3] >= Vt_max:
             #reward = -1.0 if delta_error > 0 else 0.0
 
-    #reward = -1.0 if s_next[3] <= Vt_min + 0.1 else 0.0 # penalize if the tank is empty
-    reward = -1 + np.exp(-0.1 * (Vt_max - s_next[3])**2) # prioritize filling the tank        
+    #reward = -1.0 if s_next[3] <= Vt_min + 0.1 else 0.0 # penalize if the tank is empty      
     #else:
     #    print("pasó un día brivones")
+
+    reward += -a[0]**2 - a[1]**2
     
-    reward += -1.0 if s_next[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
+    reward += -1.0 if s_next[3] >= Vt_max and a[0] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
     
     e_balance = s_next[-1]
 

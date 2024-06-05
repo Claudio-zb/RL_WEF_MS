@@ -2,7 +2,7 @@
 #%%
 from RL_algorithms.DQN import DQN
 from RL_algorithms.TD3 import TD3
-from environments.EMS_env import EMS_env
+from environments.EMS_env import EMS_env, EMS_env2
 from environments.CEMS_env import ContinousEMSEnv
 from environments.GH_env import GH_env
 from json import load
@@ -17,19 +17,14 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from time import sleep, perf_counter
 from RL_algorithms.Trainer import TrainerUI
 import numpy as np 
+from environments.Quad_env import Quad_env
 
 from environments.GH_env import*
+from environments.CEMS_env import*
 
-#gh_env = GH_env()
+env = Quad_env()#ContinousEMSEnv()
+rl_algorithm = TD3(env)
 
-#x = gh_env.reset()
-#x1 = gh_env.step(np.array([0.0]))
-
-#env = EMS_env()
-#dqn = DQN(env)
-env = ContinousEMSEnv()
-td3 = TD3(env)
-
-trainer = TrainerUI(env, td3)
+trainer = TrainerUI(env, rl_algorithm)
 
 trainer.run()

@@ -20,9 +20,9 @@ def get_demand() -> np.ndarray:
     dt = 600
     for i in range(s_hourly_demand[0]):
         for j in range(s_hourly_demand[1]):
-            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j]*0.01  # * dt / 3600
+            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j] * dt / 3600
     demand = demand.flatten()
-    return demand
+    return demand*3
 
 
 def get_temperatura(season: str = 'ver') -> np.ndarray:
@@ -75,7 +75,7 @@ def solar_power(rad: Union[float, np.ndarray], temp: Union[float, np.ndarray]) -
     :return: Solar power in kW
 
     """
-    Pn = 1 # 90  # 90 * (600 / 3600)
+    Pn = 90 * (600 / 3600)
     a_fv = -.0045
     Tn = 25
     T_cell = temp + rad / 800 * (Tn - 20)
@@ -161,8 +161,8 @@ def manage_batteries(SoE: float,
         :param P_pump:
         :return: Pbat, next_SoE, E_residual
         """
-        E_surplus = 0
-        E_deficit = 0
+        E_surplus = 0.0
+        E_deficit = 0.0
 
         P_residual = P_fv - P_demanded - P_pump
         if not -Pbat_max <= P_residual <= Pbat_max:  # The surplus is out of the power bounds of the battery
@@ -173,7 +173,7 @@ def manage_batteries(SoE: float,
             P_not_used = 0
             Pbat = P_residual
 
-        delta_SoE = np.max([Pbat, 0]) * n_c * (dt / 3600) + np.min([Pbat, 0]) / n_d * (dt / 3600)
+        delta_SoE = np.max([Pbat, 0]) * n_c * (dt / 3600) + np.min([Pbat, 0]) / n_d * (dt / 3600) # [kWh]
         next_SoE = SoE + delta_SoE
 
         if SoE_min <= next_SoE <= SoE_max:  # The recharge is done immediately

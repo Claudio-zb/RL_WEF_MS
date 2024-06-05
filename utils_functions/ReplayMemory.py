@@ -3,7 +3,7 @@ import random
 import numpy as np
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
+                        ('state', 'action', 'next_state', 'reward', 'isdone'))
 
 PPOTransition = namedtuple('PPOTransition',
                            ('state', 'action', 'next_state', 'reward', 'reward_to_go'))
