@@ -354,7 +354,7 @@ class DQN(RL_algorithm):
         for t in count():  # begin episode
             self.policy_net.eval()
             action = self.select_action(state, i_episode)
-            observation, reward, terminated, truncated, _ = self.env.step(action)
+            observation, reward, terminated, truncated, _ = self.env.step(self.env.map_action(action))
             self.ep_steps += 1
             ep_rewards.append(reward)
             reward = torch.tensor(reward, device=device)

@@ -12,7 +12,7 @@ from utils_functions.ReplayMemory import PPOReplayMemory, PPOTransition
 
 class PPO(RL_algorithm):
     """
-    This class implements the PPO algorithm with Experience Replay. It can handle continuous action spaces.
+    This class implements the PPO algorithm.
     """
 
     def update_training_plots(self, i_episode: int):

@@ -57,6 +57,14 @@ class Custom_env(ABC, gym.Env):
         :return: initial observation
         """
         pass
+    
+    @abstractmethod
+    def get_figure(self):
+        """
+        Get the figure for the environment
+        :return: figure
+        """
+        pass
 
 class ContinousCustomEnv(Custom_env):
     """
@@ -85,7 +93,7 @@ class ContinousCustomEnv(Custom_env):
             x0, _ = self.reset()
         states[0] = x0
 
-        actions = np.zeros((max_steps, self.action_space.shape[0]))
+        actions = np.zeros((max_steps, self.action_low.shape[0]))
 
         for i in range(max_steps):
 
@@ -103,7 +111,7 @@ class ContinousCustomEnv(Custom_env):
                 actions = actions[:i + 1]
                 break
         policy.train()
-        rewards = np.zeros_like(actions)
+        rewards = np.zeros(len(actions))
         if rew_fun is not None:
             for i in range(len(actions)):
                 rewards[i] = rew_fun(states[i], actions[i], states[i + 1])

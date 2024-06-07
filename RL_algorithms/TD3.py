@@ -5,7 +5,7 @@ from itertools import count
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-from torch.optim import AdamW
+from torch.optim import RAdam
 
 from utils_functions.EMS_networks import *
 from utils_functions.ReplayMemory import ReplayMemory, Transition
@@ -38,11 +38,11 @@ class TD3(RL_algorithm):
         self.target_policy_net:nn.Module = copy.deepcopy(self.policy_net)
 
 
-        self.critic_optimizer = AdamW(self.critic.parameters(), lr=self.lr, amsgrad=True)
-        self.policy_optimizer = AdamW(self.policy_net.parameters(), lr=self.lr, amsgrad=True)
+        self.critic_optimizer = RAdam(self.critic.parameters(), lr=self.lr)
+        self.policy_optimizer = RAdam(self.policy_net.parameters(), lr=self.lr)
         
-        self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.critic_optimizer, gamma=0.99)
-        self.policy_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.policy_optimizer, gamma=0.99)
+        self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.critic_optimizer, gamma=1.0)
+        self.policy_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.policy_optimizer, gamma=1.0)
         
         self._training_stats = None
 
@@ -51,7 +51,7 @@ class TD3(RL_algorithm):
 
         self.ep_steps = 0
         self.ep_random_steps = 0
-        
+        self.eps_threshold = 1.0
 
     def one_ep_training(self, i_episode: int = 0):
         '''Train the agent for one episode'''
@@ -64,8 +64,8 @@ class TD3(RL_algorithm):
         for t in count():  # begin episode
             self.critic.eval()
             self.policy_net.eval()
-
-            action = self.policy_net(state)
+            explo_noise = (torch.randn(self.action_dim, device = device)*.3)*np.exp(-i_episode/100)
+            action = torch.clamp(self.policy_net(state).to(device) + explo_noise, self.action_low, self.action_high)
             observation, reward, terminated, truncated, _ = self.env.step(action.detach().cpu().numpy().flatten())
             self.ep_steps += 1
             ep_rewards.append(reward)
@@ -76,8 +76,6 @@ class TD3(RL_algorithm):
                 ep_rewards = np.array(ep_rewards).flatten()
                 mean_ep_rwd = ep_rewards.mean()
                 std_ep_rwd = ep_rewards.std()
-                action_randomness = self.ep_random_steps / (t + 1)
-
                 if len(self.memory) >= self.BATCH_SIZE:
                     transitions = self.memory.sample(self.BATCH_SIZE)
                     batch = Transition(*zip(*transitions))
@@ -106,7 +104,9 @@ class TD3(RL_algorithm):
             # θ′ ← τ θ + (1 − τ )θ′
 
             if done:
+                action_randomness = .3*np.exp(-i_episode/100)
                 break
+            
 
         return mean_ep_rwd, std_ep_rwd, action_randomness, q_values, q_target_values
     
@@ -140,7 +140,7 @@ class TD3(RL_algorithm):
 
             # Compute the target Q value
             target_Q1, target_Q2 = self.target_critic(next_state, next_action)
-            target_Q = torch.max(target_Q1, target_Q2)
+            target_Q = torch.min(target_Q1, target_Q2)
             target_Q = reward.unsqueeze(-1) + not_done.unsqueeze(-1) * self.gamma * target_Q
 
         # Get current Q estimates
@@ -152,6 +152,7 @@ class TD3(RL_algorithm):
         # Optimize the critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        torch.nn.utils.clip_grad_value_(self.critic.parameters(), 50)
         self.critic_optimizer.step()
 
 		# Delayed policy updates
@@ -176,13 +177,13 @@ class TD3(RL_algorithm):
     def _init_hyperparameters(self, options=None):
         """Initialize the hyperparameters of the algorithm"""
         if options is None:
-            self.gamma = 0.95   
+            self.gamma = 0.5   
             self.lr = 0.0001
             self.BATCH_SIZE = 256
             self.TAU = 0.005
             self.policy_noise = 0.2*self.action_high
             self.noise_clip = 0.5*self.action_high
-            self.policy_freq = 2
+            self.policy_freq = 4
         else:
             self.gamma = options['gamma']
             self.lr = options['lr']

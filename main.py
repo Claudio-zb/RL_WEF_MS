@@ -22,8 +22,8 @@ from environments.Quad_env import Quad_env
 from environments.GH_env import*
 from environments.CEMS_env import*
 
-env = Quad_env()#ContinousEMSEnv()
-rl_algorithm = TD3(env)
+env = ContinousEMSEnv()
+rl_algorithm = DQN(env)
 
 trainer = TrainerUI(env, rl_algorithm)
 

@@ -25,6 +25,10 @@ class TrainerUI:
         self.root = tk.Tk()
         self.root.title("RL Trainer")
 
+        top = tk.Toplevel(self.root)
+        top.title("Environment Sample")
+
+
         # Create a figure and axes
         self.fig = Figure()
         self.axs = [self.fig.add_subplot(3, 1, i+1) for i in range(3)]
@@ -42,8 +46,15 @@ class TrainerUI:
 
         # Create a canvas and add the figure to it
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
-        #self.canvas.get_tk_widget().pack()
         self.canvas.draw()
+
+        self.env_fig = self.env.get_figure()
+
+        # Create a canvas for the environment sample
+        self.env_canvas = FigureCanvasTkAgg(self.env_fig, master=top)
+        self.env_canvas.draw()
+        self.env_canvas.get_tk_widget().pack()
+
 
         # Add the canvas to the window
         self.canvas.get_tk_widget().pack()
@@ -118,12 +129,18 @@ class TrainerUI:
             for ax in self.axs:
                 ax.legend()
             while True:
-                if self.i_episode % 10 == 0:
-                    self.env.show_sample(self.alg.get_policy(), None)
+                if self.i_episode % 10 == 0: # Show a sample of the environment every 10 episodes
+                    self.env.show_sample(self.alg.get_policy())
+                    for ax in self.env_fig.get_axes():
+                        ax.relim()
+                        ax.autoscale_view()
+                    self.env_canvas.draw_idle()
+                    self.env_canvas.flush_events()
+
                 if self.i_episode % 50 == 0:
                     self.save_model(self.i_episode)
-                if self.i_episode == 1000 or self.stop_training:
-                    self.save_results(self.alg.__class__.__name__)
+                if self.i_episode == 5000 or self.stop_training:
+                    self.save_results()
                     break
                 self.q.put(self.alg.one_ep_training(self.i_episode))
                 self.i_episode += 1
@@ -147,12 +164,12 @@ class TrainerUI:
         "Saves the results of the training in a csv file and the final model in a .pt file"
 
         stats = self.stats_to_df()
-        torch.save(self.alg.get_policy(), self.full_path + f"\policy_final.pt")
+        torch.save(self.alg.get_policy(), self.full_path + f"\\policy_final.pt")
         stats.to_csv(self.full_path + r"\training_results.csv")
 
     def save_model(self, i_episode:int):
         "Saves the current policy model in a .pt file"
-        torch.save(self.alg.get_policy(), self.full_path + f"\policy_ep_{i_episode}.pt")
+        torch.save(self.alg.get_policy(), self.full_path + f"\\policy_ep_{i_episode}.pt")
 
 
     def update_stats(self):

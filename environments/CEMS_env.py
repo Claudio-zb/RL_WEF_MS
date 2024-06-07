@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from utils_functions.funcionesEMS import *
 from gymnasium import spaces
 from environments.custom_env import ContinousCustomEnv
+from matplotlib import figure
 
 class ContinousEMSEnv(ContinousCustomEnv):
     """
@@ -23,21 +24,53 @@ class ContinousEMSEnv(ContinousCustomEnv):
         :param render:
         """
 
-        self.fig = None
-        self.axs = None
+        self.fig: figure.Figure = None
+        self.axs = []
+        self.lines = None
         if render:
-            plt.ion()
-            self.fig, self.axs = plt.subplots(4, 2)
+            self.fig = figure.Figure()
+            self.axs = [self.fig.add_subplot(4, 2, i+1) for i in range(4*2)]
             self.fig.suptitle('Energy Management System')
             self.fig.tight_layout()
             self.fig.set_size_inches(10, 10)
+            self.lines = []
+
+            # lines for the reference traking
+            self.lines.append(self.axs[0].plot([], [], label="V_ref")[0])
+            self.lines.append(self.axs[0].plot([], [], label="V_Irr")[0])
+
+            # lines for the irrigation
+            self.lines.append(self.axs[1].plot([], [], label="Irrigation")[0])
+
+            # lines for soe
+            self.lines.append(self.axs[2].plot([], [], label="SoE")[0])
+
+            # lines for the power consumed by the community
+            self.lines.append(self.axs[3].plot([], [], label="P_d")[0])
+            self.lines.append(self.axs[3].plot([], [], label="P_pump")[0])
+            self.lines.append(self.axs[3].plot([], [], label="P_sun")[0])
+
+            # lines for the tank volume
+            self.lines.append(self.axs[4].plot([], [], label="V_tank")[0])
+
+            # lines for the pump
+            self.lines.append(self.axs[5].plot([], [], label="Q_pump")[0])
+
+            # lines for the power balance
+            self.lines.append(self.axs[6].plot([], [], label="E_residual")[0])
+
+            # lines for the rewards
+            self.lines.append(self.axs[7].plot([], [], label="Rewards")[0])
+
+        self.Irr_levels = np.array([0.0, 10.0, 20.0, 30.0])
+        self.Q_p_levels = np.array([0.0, 33.33, 66.66, 100])
+
 
         # Hyperparams
         self.max_steps: int = 143
         self.start_index:int = 0
         self.k:int = 0
         self.time:int = 0
-        self.transform = None
 
         # Load meteorological data and demand
 
@@ -120,6 +153,19 @@ class ContinousEMSEnv(ContinousCustomEnv):
                                             high=obs_high,
                                             shape=(11,),
                                             dtype=np.float32)
+        
+        self.action_space = spaces.Discrete(16)
+        #super().__init__(np.array([0.0, 25., 50., 75., 100.], dtype=np.float32))
+        self.action_values = np.array(np.meshgrid(self.Q_p_levels, self.Irr_levels), dtype=np.float32).T.reshape(-1, 2)
+
+    def map_action(self, action: torch.Tensor|np.ndarray) -> np.ndarray:
+        """
+            Map the action from the policy to the action of the environment
+            :param action:
+            :return:
+            """
+        index = action.item()
+        return np.array([self.action_values[index]])
 
     def step(self, action: np.ndarray) -> tuple[ndarray, ndarray, bool, bool, dict[str, Any]]:
         """
@@ -150,9 +196,9 @@ class ContinousEMSEnv(ContinousCustomEnv):
                                 self.E_residual])
 
         # Store the previous values of the variables to compute the reward
-        self.Q_p = action[0] # [l/s]
+        self.Q_p = np.clip(action[0], 0, 1) # [l/s]
 
-        self.Irr = action[1] # [l/s] #10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
+        self.Irr = np.clip(action[1], 0, 1) # [l/s] #10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
 
         if self.Vt <= Vt_min:  # If the tank is empty, there is no irrigation
             if self.Irr > 0:
@@ -307,56 +353,80 @@ class ContinousEMSEnv(ContinousCustomEnv):
         """
 
         states, actions, rewards = self.sample_trajectory(policy, scaler = scaler, max_steps=243, rew_fun=self.reward_fun)
-        for ax in self.axs.flat:
-            ax.clear()
+        qp = actions[:, 0]
+        P_q = B_p * (qp * 1e-3) * h_p_const / 1e3
 
-        t = np.linspace(0, 24, len(actions))
+        t = np.linspace(0, 24, states.shape[0] - 1)
 
-        SoE = states[:, 5]
-        P_Q_p = B_p * (actions[:,0] * 1e-3) * h_p_const / 1e3
-        self.axs[0, 0].step(t, states[:-1, 0], where='post', label='V_ref')
-        self.axs[0, 0].step(t, states[:-1, 1], where='post', label='V_Irr')
-        self.axs[0, 0].set_title('Water demand fulfilled', weight = 'bold')
-        # self.axs[0].set_xlabel('Time (h)')
-        self.axs[0, 0].set_ylabel('Water volume (m3)')
-        actual_irrigation = np.diff(states[:, 1])/600*1e5
-        self.axs[0, 1].step(t, actions[:, 1]*100, where='post', label='Irr')
-        self.axs[0, 1].step(t, actual_irrigation, where='post', label='Actual_Irr')
-        self.axs[0, 1].set_title('Irrigation level', weight = 'bold')
-        self.axs[0, 1].set_ylabel('Irrigation level (%)')
-        self.axs[0, 1].legend()
+        # update lines
 
-        self.axs[1, 0].step(t, SoE[:-1], where='post', label='Soe')
-        self.axs[1, 0].set_title('SoE batteries')
-        # self.axs[2].set_xlabel('Time (h)')
-        self.axs[1, 0].set_ylabel('SoE (kWh)')
+        self.lines[0].set_data(t, states[:-1, 0])
+        self.lines[1].set_data(t, states[:-1, 1])
 
-        self.axs[1, 1].step(t, states[:-1, 7], where='post', label='P_d')
-        self.axs[1, 1].step(t, states[:-1, 6], where='post', label='P_sun')
-        self.axs[1, 1].step(t, P_Q_p, where='post', label='P_pump')
-        self.axs[1, 1].set_title('Community demand', weight = 'bold')
-        # self.axs[3].set_xlabel('Time (h)')
-        self.axs[1, 1].set_ylabel('Power (kW)')
+        self.lines[2].set_data(t, actions[:, 1]*100)
 
-        self.axs[2, 0].step(t, states[:-1, 3], where='post', label='V_tank')
-        self.axs[2, 0].set_title('Tank volume', weight = 'bold')
-        self.axs[2, 0].set_xlabel('Time (h)')
-        self.axs[2, 0].set_ylabel('Volume (m3)')
+        self.lines[3].set_data(t, states[:-1, 5])
 
-        self.axs[2, 1].step(t, actions[:, 0]*100, where='post', label='Q_pump')
-        #self.axs[2, 1].step(t, Qp + actual_irrigation, where='post', label='Actual_Q_pump')
-        self.axs[2, 1].set_title('Pump', weight = 'bold')
-        self.axs[2, 1].set_xlabel('Time (h)')
-        self.axs[2, 1].set_ylabel('(%)')
+        self.lines[4].set_data(t, states[:-1, 7])
+        self.lines[5].set_data(t, P_q)
+        self.lines[6].set_data(t, states[1:, 6])
 
-        self.axs[3, 0].step(t, states[1:,-1], where='post', label='E_residual')
-        self.axs[3, 0].set_title('Power balance', weight = 'bold')
+        self.lines[7].set_data(t, states[:-1, 3])
 
-        self.axs[3, 1].step(t, rewards, where='post', label='rewards')
-        self.axs[3, 1].set_title('Transition Rewards', weight = 'bold')
+        self.lines[8].set_data(t, actions[:, 0]*100)
 
-        for ax in self.axs.flat:
-            ax.legend()
+        self.lines[9].set_data(t, states[:-1, -1])    
+        #self.lines[10].set_data(t, rewards)
+
+        self.lines[10].set_data(t, rewards[0:len(t)])
+
+
+        # SoE = states[:, 5]
+        # P_Q_p = B_p * (actions[:,0] * 1e-3) * h_p_const / 1e3
+        # self.axs[0, 0].step(t, states[:-1, 0], where='post', label='V_ref')
+        # self.axs[0, 0].step(t, states[:-1, 1], where='post', label='V_Irr')
+        # self.axs[0, 0].set_title('Water demand fulfilled', weight = 'bold')
+        # # self.axs[0].set_xlabel('Time (h)')
+        # self.axs[0, 0].set_ylabel('Water volume (m3)')
+        # actual_irrigation = np.diff(states[:, 1])/600*1e5
+        # self.axs[0, 1].step(t, actions[:, 1]*100, where='post', label='Irr')
+        # self.axs[0, 1].step(t, actual_irrigation, where='post', label='Actual_Irr')
+        # self.axs[0, 1].set_title('Irrigation level', weight = 'bold')
+        # self.axs[0, 1].set_ylabel('Irrigation level (%)')
+        # self.axs[0, 1].legend()
+
+        # self.axs[1, 0].step(t, SoE[:-1], where='post', label='Soe')
+        # self.axs[1, 0].set_title('SoE batteries')
+        # # self.axs[2].set_xlabel('Time (h)')
+        # self.axs[1, 0].set_ylabel('SoE (kWh)')
+
+        # self.axs[1, 1].step(t, states[:-1, 7], where='post', label='P_d')
+        # self.axs[1, 1].step(t, states[:-1, 6], where='post', label='P_sun')
+        # self.axs[1, 1].step(t, P_Q_p, where='post', label='P_pump')
+        # self.axs[1, 1].set_title('Community demand', weight = 'bold')
+        # # self.axs[3].set_xlabel('Time (h)')
+        # self.axs[1, 1].set_ylabel('Power (kW)')
+
+        # self.axs[2, 0].step(t, states[:-1, 3], where='post', label='V_tank')
+        # self.axs[2, 0].set_title('Tank volume', weight = 'bold')
+        # self.axs[2, 0].set_xlabel('Time (h)')
+        # self.axs[2, 0].set_ylabel('Volume (m3)')
+
+        # self.axs[2, 1].step(t, actions[:, 0]*100, where='post', label='Q_pump')
+        # #self.axs[2, 1].step(t, Qp + actual_irrigation, where='post', label='Actual_Q_pump')
+        # self.axs[2, 1].set_title('Pump', weight = 'bold')
+        # self.axs[2, 1].set_xlabel('Time (h)')
+        # self.axs[2, 1].set_ylabel('(%)')
+
+        # self.axs[3, 0].step(t, states[1:,-1], where='post', label='E_residual')
+        # self.axs[3, 0].set_title('Power balance', weight = 'bold')
+
+        # self.axs[3, 1].step(t, rewards, where='post', label='rewards')
+        # self.axs[3, 1].set_title('Transition Rewards', weight = 'bold')
+
+
+    def get_figure(self):
+        return self.fig
 
         
     def close(self):
@@ -435,23 +505,23 @@ def default_rwd_fun(s, a, s_next):
     
     next_error = s[0] - s_next[1]
     current_error = s[0] - s[1]
-    #delta_error = np.abs(next_error) - np.abs(current_error)
-    reward = -1 + np.exp(-0.1*next_error**2)
+    reward = -2 + 2*np.exp(-0.05*next_error**2)
     #if s_next[-3] != 0:
         #if s[3] >= Vt_max:
             #reward = -1.0 if delta_error > 0 else 0.0
 
-    #reward = -1.0 if s_next[3] <= Vt_min + 0.1 else 0.0 # penalize if the tank is empty      
-    #else:
-    #    print("pasó un día brivones")
-
-    reward += -a[0]**2 - a[1]**2
     
-    reward += -1.0 if s_next[3] >= Vt_max and a[0] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
     
     e_balance = s_next[-1]
 
-    reward += -1.0 if e_balance < 0 else 0.0 
+    reward += e_balance*2 if e_balance < 0 else 0.0 
+    """
+    if a[0] < 0 or a[1] < 0:
+        reward = -5.0
+
+    # penalizations 
+    reward += -4.0 if s_next[3] >= Vt_max and a[0] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
+    reward += -4.0 if s_next[3] <= Vt_min and a[1] > 0 else 0.0  # penalize unfeasible action (irrigation is on and tank is empty)"""
 
     return np.array([reward], dtype=np.float32)
     

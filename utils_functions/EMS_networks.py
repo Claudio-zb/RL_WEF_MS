@@ -17,6 +17,7 @@ class ActorNN(nn.Module):
         self.upper_bound = upper_bound
         self.lower_bound = lower_bound
         self.shared_fc = nn.Sequential(
+            nn.BatchNorm1d(input_dim),
             nn.Linear(input_dim, 128),
             nn.BatchNorm1d(128),
             nn.ReLU(),
@@ -32,7 +33,7 @@ class ActorNN(nn.Module):
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
         shared_output = self.shared_fc(obs)
-        shared_output = torch.tanh(shared_output)*self.upper_bound
+        shared_output = torch.tanh(shared_output)*self.upper_bound/2 + .5
         
         return shared_output
 
@@ -76,7 +77,7 @@ class Q_network(nn.Module):
         self.device = device
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.width = 256
+        self.width = 128 
         self.structure = nn.Sequential(
             nn.BatchNorm1d(input_dim),
             nn.Linear(input_dim, self.width),
@@ -85,9 +86,7 @@ class Q_network(nn.Module):
             nn.Linear(self.width, self.width),
             nn.BatchNorm1d(self.width),
             nn.ReLU(),
-            nn.Linear(self.width, 48),
-            nn.ReLU(),
-            nn.Linear(48, output_dim)
+            nn.Linear(self.width, output_dim)
         )
         self._init_weights()
 
