@@ -18,11 +18,11 @@ from matplotlib.figure import Figure
 
 class TD3(RL_algorithm):
     def __init__(self, env:ContinousCustomEnv, options = None) -> None:
-        self.env = env
+        self.env:ContinousCustomEnv = env
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
 
-        self.memory = ReplayMemory(10000)
+        self.memory = ReplayMemory(1_000_000)
         self.env: ContinousCustomEnv = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
@@ -53,7 +53,7 @@ class TD3(RL_algorithm):
         self.ep_random_steps = 0
         self.eps_threshold = 1.0
 
-    def one_ep_training(self, i_episode: int = 0):
+    def one_ep_training(self, i_episode: int = 0) -> Tuple[float, float, float, float, float]:
         '''Train the agent for one episode'''
         device = self.device
         state, info = self.env.reset()
@@ -92,16 +92,8 @@ class TD3(RL_algorithm):
 
             # Store the transition in memory
             self.memory.push(state, action, next_state, reward, done)
-
-            # Move to the next state
             state = next_state
-
-            # Perform one step of the optimization (on the policy network)
-            # Optimization is done every batch_size steps
             self.optimize_model()
-
-            # Soft update of the target network's weights
-            # θ′ ← τ θ + (1 − τ )θ′
 
             if done:
                 action_randomness = .3*np.exp(-i_episode/100)
@@ -124,7 +116,7 @@ class TD3(RL_algorithm):
 
         state = torch.cat(batch.state)
         action = torch.cat(batch.action).to(self.device).detach()
-        reward = torch.cat(batch.reward).type(torch.float32)
+        reward = torch.tensor(batch.reward, device=self.device).type(torch.float32)
         next_state = torch.cat(batch.next_state)
         done = torch.tensor(batch.isdone)
         not_done = torch.logical_not(done).to(self.device)
@@ -181,8 +173,8 @@ class TD3(RL_algorithm):
             self.lr = 0.0001
             self.BATCH_SIZE = 256
             self.TAU = 0.005
-            self.policy_noise = 0.2*self.action_high
-            self.noise_clip = 0.5*self.action_high
+            self.policy_noise = 0.1*self.action_high
+            self.noise_clip = 0.2*self.action_high
             self.policy_freq = 4
         else:
             self.gamma = options['gamma']

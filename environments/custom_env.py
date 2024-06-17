@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from typing import Callable
 
 
-class Custom_env(ABC, gym.Env):
+class CustomEnv(ABC, gym.Env):
     """
     Abstract class for a custom environment
     """
@@ -15,7 +15,6 @@ class Custom_env(ABC, gym.Env):
     @abstractmethod
     def sample_trajectory(self,
                           policy: Callable,
-                          scaler: StandardScaler = None,
                           max_steps: int = 288,
                           rew_fun=None,
                           initial_conditions: dict = None,
@@ -23,7 +22,6 @@ class Custom_env(ABC, gym.Env):
         """
         Sample a trajectory from the environment using the given policy.
         :param policy: Policy to be used
-        :param scaler: Scaler to be used for the states
         :param max_steps: Maximum number of steps to be taken
         :param rew_fun: Reward function to be used
         :param initial_conditions: Initial conditions for the environment
@@ -32,7 +30,7 @@ class Custom_env(ABC, gym.Env):
         pass
 
     @abstractmethod
-    def show_sample(self, policy, scaler):
+    def show_sample(self, policy):
         """
         Render the environment
         :param policy: policy to be used
@@ -66,7 +64,7 @@ class Custom_env(ABC, gym.Env):
         """
         pass
 
-class ContinousCustomEnv(Custom_env):
+class ContinousCustomEnv(CustomEnv):
     """
     Abstract Class for continous action custom environments
     """
@@ -76,7 +74,6 @@ class ContinousCustomEnv(Custom_env):
     
     def sample_trajectory(self,
                           policy: Callable,
-                          scaler: StandardScaler = None,
                           max_steps: int = 288,
                           rew_fun=None,
                           initial_conditions: dict = None,
@@ -96,11 +93,7 @@ class ContinousCustomEnv(Custom_env):
         actions = np.zeros((max_steps, self.action_low.shape[0]))
 
         for i in range(max_steps):
-
-            if scaler is not None:
-                action = policy(scaler.transform([states[i]]))
-            else:
-                action = policy((states[i]))
+            action = policy((states[i]))
             action = action.squeeze().detach().cpu().numpy()
             actions[i] = action
 
@@ -119,7 +112,7 @@ class ContinousCustomEnv(Custom_env):
         return states, actions, rewards
 
 
-class DiscreteCustomEnv(Custom_env):
+class DiscreteCustomEnv(CustomEnv):
     """
     Abstract Class for continous action custom environments
     """
@@ -129,7 +122,6 @@ class DiscreteCustomEnv(Custom_env):
     
     def sample_trajectory(self,
                           policy: Callable,
-                          scaler: StandardScaler = None,
                           max_steps: int = 288,
                           rew_fun=None,
                           initial_conditions: dict = None,
@@ -152,10 +144,7 @@ class DiscreteCustomEnv(Custom_env):
             actions = np.zeros((max_steps, 1))
 
         for i in range(max_steps):
-            if scaler is not None:
-                action = policy(scaler.transform(states[i:i+1])).max(1).indices.view(1, 1)
-            else:
-                action = policy(states[i]).max(1).indices.view(1, 1) # the index
+            action = policy(states[i]).max(1).indices.view(1, 1) # the index
             actions[i] = self.action_values[action]
 
             x_next, _, terminated, truncated, _ = self.step(action)

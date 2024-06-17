@@ -1,5 +1,5 @@
 import tkinter as tk
-from environments.custom_env import Custom_env
+from environments.custom_env import CustomEnv
 from RL_algorithms.RL_algorithm import RL_algorithm
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 class TrainerUI:
     '''Class to train the RL agent and plot the results in real time using tkinter'''
-    def __init__(self, env:Custom_env, alg:RL_algorithm):
+    def __init__(self, env:CustomEnv, alg:RL_algorithm):
         
         self.env = env
         self.alg = alg
@@ -106,10 +106,11 @@ class TrainerUI:
         # plot the epsilon values
 
         self.lines[4].set_data(range(len(self.epsilon)), self.epsilon)
-
         for ax in self.axs:
             ax.relim()
             ax.autoscale_view()
+        
+        self.axs[0].set_ylim(-10, 2)
         #self.canvas.draw()
         self.canvas.draw_idle()
         self.canvas.flush_events()
@@ -154,7 +155,7 @@ class TrainerUI:
             self.stop_training = True
             self.root.after_cancel(self.job)
             self.job = None
-        self.save_results(self.alg.__class__.__name__)
+        self.save_results()
 
     def run(self):
         # Run the application
@@ -195,7 +196,7 @@ class TrainerUI:
 class Trainer():
     """Class to train a RL agent over a custom environment"""
 
-    def __init__(self, env: Custom_env, rl_algorithm: RL_algorithm):
+    def __init__(self, env: CustomEnv, rl_algorithm: RL_algorithm):
         self.env = env
         self.rl_algorithm = rl_algorithm
 

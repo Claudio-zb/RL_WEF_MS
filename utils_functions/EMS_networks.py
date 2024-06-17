@@ -92,16 +92,39 @@ class Q_network(nn.Module):
 
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
-            obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
+            obs = torch.tensor(obs, dtype=torch.float32)
             if obs.dim() == 1: 
                 obs = obs.unsqueeze(0)
-        return self.structure(obs)
+        return self.structure(obs.to(self.device))
     
     def _init_weights(self):
         for layer in self.structure:
             if isinstance(layer, nn.Linear):
                 init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
 
+class DuelingQNetwork(nn.Module):
+    def __init__(self, input_dim, output_dim, device):
+        super(DuelingQNetwork, self).__init__()
+        self.device = device
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.width = 128
+        self.Value = nn.Linear(self.width, 1)
+        self.Advantange = nn.Linear(self.width, output_dim)
+        self.fc1 = nn.Linear(input_dim, self.width)
+        self.fc2 = nn.Linear(self.width, self.width)
+    
+    def forward(self, obs)->tuple[torch.Tensor, torch.Tensor]:
+        if isinstance(obs, np.ndarray):
+            obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
+            if obs.dim() == 1: 
+                obs = obs.unsqueeze(0)
+        x = F.relu(self.fc1(obs))
+        x = F.relu(self.fc2(x))
+        value = self.Value(x)
+        advantage = self.Advantange(x)
+        Q = value + (advantage - torch.mean(advantage, dim=-1, keepdim=True))
+        return Q
 class TD3Critic(nn.Module):
     def __init__(self, input_dim, output_dim, width = 128):
         super(TD3Critic, self).__init__()

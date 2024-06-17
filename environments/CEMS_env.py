@@ -158,7 +158,7 @@ class ContinousEMSEnv(ContinousCustomEnv):
         #super().__init__(np.array([0.0, 25., 50., 75., 100.], dtype=np.float32))
         self.action_values = np.array(np.meshgrid(self.Q_p_levels, self.Irr_levels), dtype=np.float32).T.reshape(-1, 2)
 
-    def map_action(self, action: torch.Tensor|np.ndarray) -> np.ndarray:
+    def map_action(self, action: torch.Tensor) -> np.ndarray:
         """
             Map the action from the policy to the action of the environment
             :param action:
@@ -197,7 +197,6 @@ class ContinousEMSEnv(ContinousCustomEnv):
 
         # Store the previous values of the variables to compute the reward
         self.Q_p = np.clip(action[0], 0, 1) # [l/s]
-
         self.Irr = np.clip(action[1], 0, 1) # [l/s] #10. if self.V_ref > self.V_Irr and self.Vt > Vt_min else 0.0 # action[0]
 
         if self.Vt <= Vt_min:  # If the tank is empty, there is no irrigation
@@ -217,7 +216,6 @@ class ContinousEMSEnv(ContinousCustomEnv):
                                                                 self.demanda[self.k],
                                                                 P_Q_p)
         
-        deficit_flag = 0 if self.E_residual >= 0 else 1
 
         amount_to_pump = dt * (self.Q_p * 1e-3) # Volume [m3]
 
