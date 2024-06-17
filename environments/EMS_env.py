@@ -39,6 +39,8 @@ class ContinousEMSEnv(CustomEnv):
         self.demand_data:np.ndarray = get_demand()
         self.L = len(self.temperature_data)  # length(temperatura)
         self.N_dias:int = 70
+        self.transform = T_matrix
+        self.transform_dim = self.transform.shape[1]
 
         # Data variables 
 
@@ -71,14 +73,14 @@ class ContinousEMSEnv(CustomEnv):
                             I_min,
                             0.0,
                             0.0, 0.0, 0.0,
-                            -1, -1, 0], dtype=np.float32)
+                            -1, -1], dtype=np.float32)
 
         obs_high = np.array([Vt_max,
                              Vt_max, SoE_max,
                              I_max,
                              Vt_max,
                              Q_p_max, 1000, 1000,
-                             1, 1, 1], dtype=np.float32)
+                             1, 1], dtype=np.float32)
 
 
         # Bounds for actions
@@ -90,7 +92,7 @@ class ContinousEMSEnv(CustomEnv):
 
         self.observation_space = spaces.Box(low=obs_low,
                                             high=obs_high,
-                                            shape=(11,),
+                                            shape=(10,),
                                             dtype=np.float32)
         
         self.action_space = spaces.Box(low=self.action_low,
@@ -109,6 +111,8 @@ class ContinousEMSEnv(CustomEnv):
 
         action = self.map_action(action)
         action = action.flatten()
+        self.Irr = action[1]
+        self.Q_p = action[0]
 
         next_state, P_pump, self.E_residual = EMS_ode(self._get_state(), 
                                                  [self.V_ref, self.p_fv[self.k], self.demanda[self.k]], 
@@ -156,8 +160,8 @@ class ContinousEMSEnv(CustomEnv):
                                                          V_ref=3.5*np.random.rand(),
                                                          V_tank=V_tank,
                                                          Soe=(SoE_max - SoE_min) * np.random.random_sample() + SoE_min,
-                                                         Irr_prev=np.random.rand(),
-                                                         Q_p_prev=np.random.rand(),
+                                                         Irr_prev=0.0, #np.random.rand(),
+                                                         Q_p_prev=0.0, #np.random.rand(),
                                                          instant_k=0,
                                                          V_irr=0.0)
 
@@ -230,7 +234,6 @@ class ContinousEMSEnv(CustomEnv):
                                 self.p_fv[self.k],
                                 self.demanda[self.k], 
                                 0.0,
-                                1.0,
                                 self.E_residual])
 
         return InitialObservation
@@ -416,8 +419,7 @@ class ContinousEMSEnv(CustomEnv):
                         self.SoE,
                         self.p_fv[self.k],
                         self.demanda[self.k], 
-                        np.sin(2*np.pi*(self.k % 143)/143),
-                        np.cos(2*np.pi*(self.k % 143)/143),
+                        self.k,
                         self.E_residual])
         return observation
 class DiscreteEMSEnv(ContinousEMSEnv):
@@ -425,8 +427,8 @@ class DiscreteEMSEnv(ContinousEMSEnv):
     def __init__(self, rwd_function = None, render: bool = True):
         super().__init__(rwd_function, render)
         self.action_space = spaces.Discrete(16)
-        self.Irr_levels = np.array([0.0, .05, .1, .2])
-        self.Q_p_levels = np.array([0.0, .3333, .6666, 1.0])
+        self.Irr_levels = np.array([0.0, .05, .1, I_max])
+        self.Q_p_levels = np.array([0.0, .3333, .6666, Q_p_max])
         self.action_values = np.array(np.meshgrid(self.Q_p_levels, self.Irr_levels), dtype=np.float32).T.reshape(-1, 2)
     
     def map_action(self, action: torch.Tensor) -> np.ndarray:
@@ -497,7 +499,7 @@ def default_rwd_fun(s, a, s_next):
 
     reward = 1 - norm_next_error**2 if norm_next_error > 0 else 1 - 2*norm_next_error**2
 
-    reward = np.maximum(reward, -1.0)
+    reward = np.maximum(2*reward, -1.0)
 
     reward += -1.0 if s[3] <= Vt_min and a[1] > 0 else 0.0 #penalize unfeasible action (irrigation is on and tank is empty)
 
@@ -526,6 +528,7 @@ def EMS_ode(x,d,u) -> Tuple[np.ndarray, float, float]:
     V_irr = x[0] # Irrigatated volume [m3]
     V_tank = x[1] # Tank volume [m3]
     SoE = x[2] # State of Energy [kWh]
+    #s = x[3] # Descenso del pozo
 
     V_ref = d[0] # Reference volume [m3]
     P_sun = d[1] # Solar power [kW]

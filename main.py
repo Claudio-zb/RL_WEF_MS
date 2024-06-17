@@ -12,10 +12,10 @@ N = 1000
 
 env = DiscreteEMSEnv()
 rl_alg = DuelingDDQN(env)
-trainer = TrainerUI(env, rl_alg)
-trainer.run()
+#trainer = TrainerUI(env, rl_alg)
+#trainer.run()
 
-# N = 1000
-# for i in range(N):
-#     stats = rl_alg.one_ep_training(i)
-#     print(f"Episode {i}: {stats[0], stats[1]}")
+N = 1000
+for i in range(N):
+    stats = rl_alg.one_ep_training(i)
+    print(f"Episode {i}: {stats[0], stats[1]}")

@@ -33,12 +33,15 @@ class DDQN(RL_algorithm):
         self.env = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
+        self.transform_dim = env.transform.shape[0]
 
-        self.memory = PrioritizedReplayBuffer(state_size=self.obs_dim, 
-                                              action_size=1, 
+        self.transform = torch.tensor(env.transform).to(device)
+
+        self.memory = PrioritizedReplayBuffer(state_size=self.transform_dim, 
+                                              action_size=1, # 1 becuase it's discrete action algorithm
                                               buffer_size=100_000)
 
-        self.policy_net = Q_network(self.obs_dim, self.action_dim, device).to(device)
+        self.policy_net = Q_network(self.transform_dim, self.action_dim, device).to(device)
         self.target_net = copy.deepcopy(self.policy_net).to(device)
 
         self.optimizer = RAdam(self.policy_net.parameters(), lr=self.lr)
@@ -93,7 +96,6 @@ class DDQN(RL_algorithm):
             return 
         batch, weights, tree_idxs = self.memory.sample(self.BATCH_SIZE)
         state, action, reward, next_state, done = batch
-
         state_action_values = self.policy_net(state).gather(1, action.unsqueeze(1))
 
         with torch.no_grad():
@@ -130,7 +132,6 @@ class DDQN(RL_algorithm):
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 return self.policy_net(state).max(1).indices.view(1, 1)
-
         else:
             self.ep_random_steps += 1
             return torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long)
@@ -237,38 +238,37 @@ class DDQN(RL_algorithm):
         :return: the mean reward, the standard deviation of the rewards, the action randomness, the Q values of the target and policy networks"""
         device = self.device
         state, info = self.env.reset()
+        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         self.ep_random_steps = 0
         self.ep_steps = 0
-        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         ep_rewards = []
         for t in count():  # begin episode
+            t_state = torch.matmul(self.transform, state.T).T
             self.policy_net.eval()
-            action = self.select_action(state, i_episode)
+            action = self.select_action(t_state, i_episode)
             observation, reward, terminated, truncated, _ = self.env.step(action)
             self.ep_steps += 1
             ep_rewards.append(reward)
             reward = torch.tensor(reward, device=device)
             done = terminated or truncated
+                
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+            t_next_state = torch.matmul(self.transform, next_state.T).T
+
+            # Store the transition in memory
+            self.memory.add((t_state, action, reward, t_next_state, int(done)))
+
+            # Move to the next state
+            state = next_state
+            self.optimize_model()
+
+            self.global_steps += 1
 
             if done:
                 ep_rewards = np.array(ep_rewards).flatten()
                 mean_ep_rwd = ep_rewards.mean()
                 std_ep_rwd = ep_rewards.std()
                 action_randomness = self.ep_random_steps / (t + 1)
-                
-            else:
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-
-            # Store the transition in memory
-                self.memory.add((state, action, reward, next_state, int(done)))
-
-                # Move to the next state
-                state = next_state
-                self.optimize_model()
-
-                self.global_steps += 1
-
-            if done:
                 break
 
         return mean_ep_rwd, std_ep_rwd, action_randomness, 0, 0#q_values_target, q_values_policy
@@ -280,9 +280,8 @@ class DuelingDDQN(DDQN):
     """Dueling double DQN with prioritized experienced replay"""
     def __init__(self, env: CustomEnv, options=None):
         super().__init__(env, options)
-        self.policy_net = DuelingQNetwork(self.obs_dim, self.action_dim, self.device).to(self.device)
+        self.policy_net = DuelingQNetwork(self.transform_dim, self.action_dim, self.device).to(self.device)
         self.target_net = copy.deepcopy(self.policy_net).to(self.device)
 
         self.optimizer = RAdam(self.policy_net.parameters(), lr=self.lr, decoupled_weight_decay=True)
         
-    

@@ -71,6 +71,7 @@ class ContinousCustomEnv(CustomEnv):
     def __init__(self, action_low, action_high):
         self.action_low = action_low
         self.action_high = action_high
+        self.transform:np.ndarray = None
     
     def sample_trajectory(self,
                           policy: Callable,
