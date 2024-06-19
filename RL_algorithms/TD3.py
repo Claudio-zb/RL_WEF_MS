@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.optim import RAdam
 
 from utils_functions.EMS_networks import *
-from utils_functions.ReplayMemory import ReplayMemory, Transition
+from utils_functions.ReplayMemory import PrioritizedReplayBuffer, Transition
 from environments.custom_env import ContinousCustomEnv
 import numpy as np
 from RL_algorithms.RL_algorithm import RL_algorithm
@@ -21,8 +21,9 @@ class TD3(RL_algorithm):
         self.env:ContinousCustomEnv = env
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
+        self.global_steps = 0
 
-        self.memory = ReplayMemory(1_000_000)
+        self.memory = PrioritizedReplayBuffer(env.observation_space.shape[0], env.action_space.shape[0], 1_000_000, discrete_action_space=False)
         self.env: ContinousCustomEnv = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
@@ -59,12 +60,12 @@ class TD3(RL_algorithm):
         state, info = self.env.reset()
         self.ep_random_steps = 0
         self.ep_steps = 0
-        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        state = torch.tensor(state, dtype=torch.float32, device=device)
         ep_rewards = []
         for t in count():  # begin episode
             self.critic.eval()
             self.policy_net.eval()
-            explo_noise = (torch.randn(self.action_dim, device = device)*.3)*np.exp(-i_episode/100)
+            explo_noise = (torch.randn(self.action_dim, device = device)*.1)*np.exp(-i_episode/30)
             action = torch.clamp(self.policy_net(state).to(device) + explo_noise, self.action_low, self.action_high)
             observation, reward, terminated, truncated, _ = self.env.step(action.detach().cpu().numpy().flatten())
             self.ep_steps += 1
@@ -72,30 +73,25 @@ class TD3(RL_algorithm):
             reward = torch.tensor(reward, device=device)
             done = terminated or truncated
 
+            # Store the transition in memory
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device)
+            self.memory.add((state, action, reward, next_state, int(done)))
+            self.optimize_model()
+            state = next_state
+            self.global_steps += 1
+
             if done:
                 ep_rewards = np.array(ep_rewards).flatten()
                 mean_ep_rwd = ep_rewards.mean()
                 std_ep_rwd = ep_rewards.std()
-                if len(self.memory) >= self.BATCH_SIZE:
-                    transitions = self.memory.sample(self.BATCH_SIZE)
-                    batch = Transition(*zip(*transitions))
-                    state_batch = torch.cat(batch.state)
-                    action_batch = torch.cat(batch.action)
-
+                if self.global_steps >= self.BATCH_SIZE:
+                    batch, weights, tree_idxs = self.memory.sample(self.BATCH_SIZE)
+                    state_batch, action_batch, reward, next_state, done = batch
                     q_values = self.critic.Q1(state_batch, action_batch).mean().item()
                     q_target_values = self.target_critic.Q1(state_batch, action_batch).mean().item()
                 else:
                     q_values = 0
                     q_target_values = 0
-            else:
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-
-            # Store the transition in memory
-            self.memory.push(state, action, next_state, reward, done)
-            state = next_state
-            self.optimize_model()
-
-            if done:
                 action_randomness = .3*np.exp(-i_episode/100)
                 break
             
@@ -105,26 +101,18 @@ class TD3(RL_algorithm):
     def optimize_model(self) -> None:
         '''Optimize the model'''
         self.critic.train()
-        self.target_critic.train()
         self.policy_net.train()
-        self.target_policy_net.train()
 
-        if len(self.memory) < self.BATCH_SIZE:
+        if self.global_steps < self.BATCH_SIZE:
             return 
-        transitions = self.memory.sample(self.BATCH_SIZE)
-        batch = Transition(*zip(*transitions))
+        batch, weights, tree_idxs = self.memory.sample(self.BATCH_SIZE)
+        state, action, reward, next_state, done = batch
 
-        state = torch.cat(batch.state)
-        action = torch.cat(batch.action).to(self.device).detach()
-        reward = torch.tensor(batch.reward, device=self.device).type(torch.float32)
-        next_state = torch.cat(batch.next_state)
-        done = torch.tensor(batch.isdone)
-        not_done = torch.logical_not(done).to(self.device)
 
         with torch.no_grad():
             noise = (
 				torch.randn_like(action) * self.policy_noise
-			).clamp(-self.noise_clip, self.noise_clip)
+			).clamp(-self.noise_clip*self.action_low, self.noise_clip*self.action_high)
 
             next_action = (
 				self.target_policy_net(next_state) + noise
@@ -133,22 +121,28 @@ class TD3(RL_algorithm):
             # Compute the target Q value
             target_Q1, target_Q2 = self.target_critic(next_state, next_action)
             target_Q = torch.min(target_Q1, target_Q2)
-            target_Q = reward.unsqueeze(-1) + not_done.unsqueeze(-1) * self.gamma * target_Q
-
+            target_Q = reward.unsqueeze(-1) + (1-done).unsqueeze(-1) * self.gamma * target_Q
+            #current_Q1 = self.critic.Q1(state, action)
+            #td_error = torch.abs(current_Q1 - target_Q).detach()
+        
+        self.critic_optimizer.zero_grad()
         # Get current Q estimates
         current_Q1, current_Q2 = self.critic(state, action)
 
-		# Compute critic loss
-        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+		# Compute critic loss            
+        critic_loss = (torch.mean((current_Q1 - target_Q)**2)*.5 
+                       + torch.mean((current_Q2 - target_Q)**2) *.5)
+        #td_error = torch.abs(current_Q1 - target_Q).detach()
+        #self.memory.update_priorities(tree_idxs, td_error.cpu().squeeze(1).numpy())
 
         # Optimize the critic
-        self.critic_optimizer.zero_grad()
+        
         critic_loss.backward()
         torch.nn.utils.clip_grad_value_(self.critic.parameters(), 50)
         self.critic_optimizer.step()
 
 		# Delayed policy updates
-        if self.ep_steps % self.policy_freq == 0:
+        if self.ep_steps % self.policy_freq == 1:
 
 			# Compute actor losse
             actor_loss = -self.critic.Q1(state, self.policy_net(state)).mean()
@@ -159,13 +153,14 @@ class TD3(RL_algorithm):
             self.policy_optimizer.step()
 
             # Update the frozen target models
-            for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
-                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
+            with torch.no_grad():
+                for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
+                    target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
 
-            for param, target_param in zip(self.policy_net.parameters(), self.target_policy_net.parameters()):
-                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
+                for param, target_param in zip(self.policy_net.parameters(), self.target_policy_net.parameters()):
+                    target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
 
-            return
+        return
     def _init_hyperparameters(self, options=None):
         """Initialize the hyperparameters of the algorithm"""
         if options is None:
@@ -173,9 +168,9 @@ class TD3(RL_algorithm):
             self.lr = 0.0001
             self.BATCH_SIZE = 256
             self.TAU = 0.005
-            self.policy_noise = 0.1*self.action_high
-            self.noise_clip = 0.2*self.action_high
-            self.policy_freq = 4
+            self.policy_noise = 0.05*(self.action_high - self.action_low)
+            self.noise_clip = 0.1
+            self.policy_freq = 2
         else:
             self.gamma = options['gamma']
             self.lr = options['lr']

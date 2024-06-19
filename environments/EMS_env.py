@@ -515,6 +515,37 @@ def default_rwd_fun(s, a, s_next):
 
     return np.array([reward], dtype=np.float32)
 
+def continous_rwd_fun(s, a, s_next):
+    """ Default reward function 
+    :param s: current state
+    :param a: action
+    :param s_next: next state
+    :param e_penal: penalty for energy deficit"""
+    reward = 0.0
+    norm_next_error = (s[0] - s_next[1])/s[0] # Normalize the error to be a fraction of the daily demand
+    
+    #reward = 1 - norm_next_error if norm_next_error > 0 else 1 + 2*norm_next_error
+
+    reward = 1 - norm_next_error**2 if norm_next_error > 0 else 1 - 2*norm_next_error**2
+
+    reward = np.maximum(reward, -1.0)
+
+    reward += -1.0 if s[3] <= Vt_min and a[1] > 0 else 0.0 #penalize unfeasible action (irrigation is on and tank is empty)
+
+    reward += -1.0 if s[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
+    
+    e_balance = s_next[-1]
+
+    reward += e_balance if e_balance < 0 else e_balance
+
+    if a[0] < 0.0 or 1.0 < a[0]:
+        reward -= abs(a[0])
+    
+    if a[1] < 0.0 or 1.0 < a[1]:
+        reward -= abs(a[1])
+
+    return np.array([reward], dtype=np.float32)
+
 
 def EMS_ode(x,d,u) -> Tuple[np.ndarray, float, float]:
     """The ODE of the micorgrid system

@@ -28,3 +28,17 @@ class DQN_agent(Abstract_agent):
         with torch.no_grad():
             action = self.model(state).max(1).indices.view(1, 1)
         return action.item()
+
+def ems_transform(state):
+    # normalzation
+    new_obs = []
+    new_obs.append(state[0] / 1000)
+    new_obs.append(state[1] / 1000)
+    new_obs.append(state[2] / 1000)
+    new_obs.append(state[3] / 1000)
+    new_obs.append(state[4] / 1000)
+    new_obs.append(state[5] / 1000)
+    new_obs.append(state[6] / 1000)
+    new_obs.append(state[7] / 1000)
+    
+    return

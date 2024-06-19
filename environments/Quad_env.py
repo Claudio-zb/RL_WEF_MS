@@ -3,7 +3,7 @@ import torch
 from gymnasium import spaces
 import matplotlib
 import matplotlib.pyplot as plt
-from environments.custom_env import Custom_env
+from environments.custom_env import CustomEnv
 from environments.custom_env import ContinousCustomEnv
 from typing import Union
 from matplotlib.figure import Figure
@@ -17,8 +17,8 @@ class Quad_env(ContinousCustomEnv):
 
     def __init__(self, render:bool = True):
         
-        action_low = -1.0
-        action_high = 1.0
+        action_low = np.array([-1.0], dtype=np.float32)
+        action_high = np.array([1.0], dtype=np.float32)
         super().__init__(action_low, action_high)
 
         
@@ -47,12 +47,7 @@ class Quad_env(ContinousCustomEnv):
         self.window = None
         self.clock = None
 
-        if render:
-            plt.ion()
-            self.fig, self.axs = plt.subplots(3, 1)
-            self.fig.suptitle('System Response')
-            self.fig.tight_layout()
-            self.fig.set_size_inches(10, 10)
+        self._init_figure()
 
     def _get_obs(self) -> np.ndarray:
         """
@@ -129,6 +124,15 @@ class Quad_env(ContinousCustomEnv):
         info = self._get_info()
 
         return observation, reward, terminated, truncated, info
+    
+    def get_figure(self) -> Figure:
+        """
+        Get the figure for the environment
+        :return: figure
+        """
+        return self.fig
+    
+
 
     def show_sample(self, policy, scaler = None):
         """
@@ -139,22 +143,20 @@ class Quad_env(ContinousCustomEnv):
 
         states, actions, rewards = self.sample_trajectory(policy, 
                                                           rew_fun=reward_fun)
-        for ax in self.axs.flat:
+        for ax in self.axs:
             ax.clear()
         t = np.arange(states.shape[0])
-        self.axs[0].step(t, states[:, 0], label='y', where='post')
-        self.axs[0].plot(states[:, -1], label='y_ref')
-        self.axs[0].set_title('Output')
-        self.axs[0].legend()
+        t = np.linspace(0, 24, states.shape[0] - 1)
 
-        self.axs[1].step(t[0:-1], np.cumsum(actions), label='u', where='post')
-        self.axs[1].step(t[0:-1], actions, label='du', where='post')
-        self.axs[1].set_title('Input')
-        self.axs[1].legend()
+        # update lines
 
-        self.axs[2].step(t[0:-1], rewards, label='reward', where='post')
-        self.axs[2].set_title('Reward')
-        self.axs[2].legend()
+        self.lines[0].set_data(t, states[:-1, 0])
+        self.lines[1].set_data(t, states[:-1, 1])
+
+        self.lines[2].set_data(t, actions)
+        self.lines[3].set_data(t, np.cumsum(actions))
+
+        self.lines[4].set_data(t, rewards)
 
 
     def close(self):
@@ -176,6 +178,29 @@ class Quad_env(ContinousCustomEnv):
     
     def load_initial_conditions(self, initial_conditions: dict) -> np.ndarray:
         return None
+    
+    def _init_figure(self):
+        self.fig: Figure = None
+        self.axs = []
+        self.lines = None
+        if self.render:
+            self.fig = Figure()
+            self.axs = [self.fig.add_subplot(3, 1, i+1) for i in range(3)]
+            self.fig.suptitle('linear system response')
+            self.fig.tight_layout()
+            self.fig.set_size_inches(10, 10)
+            self.lines = []
+
+            # lines for the reference traking
+            self.lines.append(self.axs[0].plot([], [], label="y_ref")[0])
+            self.lines.append(self.axs[0].plot([], [], label="y")[0])
+
+            # lines for the irrigation
+            self.lines.append(self.axs[1].plot([], [], label="du")[0])
+            self.lines.append(self.axs[1].plot([], [], label="u")[0])
+
+            # lines for soe
+            self.lines.append(self.axs[2].plot([], [], label="reward")[0])
     
 def reward_fun(s,a,s_next):
     next_x = s_next[0]

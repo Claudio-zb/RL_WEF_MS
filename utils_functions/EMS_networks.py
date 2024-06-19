@@ -17,9 +17,7 @@ class ActorNN(nn.Module):
         self.upper_bound = upper_bound
         self.lower_bound = lower_bound
         self.shared_fc = nn.Sequential(
-            nn.BatchNorm1d(input_dim),
             nn.Linear(input_dim, 128),
-            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
@@ -30,10 +28,8 @@ class ActorNN(nn.Module):
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
             obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
-        if obs.dim() == 1:
-            obs = obs.unsqueeze(0)
         shared_output = self.shared_fc(obs)
-        shared_output = torch.tanh(shared_output)*self.upper_bound/2 + .5
+        shared_output = torch.tanh(shared_output)*(self.upper_bound-self.lower_bound)/2 + .5
         
         return shared_output
 
@@ -139,7 +135,7 @@ class TD3Critic(nn.Module):
             nn.ReLU(),
             nn.Linear(self.width, 48),
             nn.ReLU(),
-            nn.Linear(48, output_dim)
+            nn.Linear(48, 1)
         )
         self.q2_sequence = nn.Sequential(
             nn.BatchNorm1d(input_dim + output_dim),
@@ -151,7 +147,7 @@ class TD3Critic(nn.Module):
             nn.ReLU(),
             nn.Linear(self.width, 48),
             nn.ReLU(),
-            nn.Linear(48, output_dim)
+            nn.Linear(48, 1)
         )
      
     def forward(self, state, action):

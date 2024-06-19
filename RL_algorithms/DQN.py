@@ -249,26 +249,21 @@ class DDQN(RL_algorithm):
             ep_rewards.append(reward)
             reward = torch.tensor(reward, device=device)
             done = terminated or truncated
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+
+            # Store the transition in memory
+            self.memory.add((state, action, reward, next_state, int(done)))
+
+            # Move to the next state
+            self.optimize_model()
+            state = next_state
+            self.global_steps += 1
 
             if done:
                 ep_rewards = np.array(ep_rewards).flatten()
                 mean_ep_rwd = ep_rewards.mean()
                 std_ep_rwd = ep_rewards.std()
                 action_randomness = self.ep_random_steps / (t + 1)
-                
-            else:
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-
-            # Store the transition in memory
-                self.memory.add((state, action, reward, next_state, int(done)))
-
-                # Move to the next state
-                state = next_state
-                self.optimize_model()
-
-                self.global_steps += 1
-
-            if done:
                 break
 
         return mean_ep_rwd, std_ep_rwd, action_randomness, 0, 0#q_values_target, q_values_policy
