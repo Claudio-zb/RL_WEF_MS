@@ -128,26 +128,18 @@ class TD3Critic(nn.Module):
         self.q1_sequence = nn.Sequential(
             nn.BatchNorm1d(input_dim + output_dim),
             nn.Linear(input_dim + output_dim, self.width),
-            nn.BatchNorm1d(self.width),
             nn.ReLU(),
             nn.Linear(self.width, self.width),
-            nn.BatchNorm1d(self.width),
             nn.ReLU(),
-            nn.Linear(self.width, 48),
-            nn.ReLU(),
-            nn.Linear(48, 1)
+            nn.Linear(self.width, 1)
         )
         self.q2_sequence = nn.Sequential(
             nn.BatchNorm1d(input_dim + output_dim),
             nn.Linear(input_dim + output_dim, self.width),
-            nn.BatchNorm1d(self.width),
             nn.ReLU(),
             nn.Linear(self.width, self.width),
-            nn.BatchNorm1d(self.width),
             nn.ReLU(),
-            nn.Linear(self.width, 48),
-            nn.ReLU(),
-            nn.Linear(48, 1)
+            nn.Linear(self.width, 1)
         )
      
     def forward(self, state, action):

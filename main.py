@@ -7,10 +7,7 @@ from RL_algorithms.Trainer import TrainerUI
 import gymnasium as gym
 
 env = ContinousEMSEnv()
-from RL_algorithms.TD3 import TD3
-rl_alg = TD3(env)
+algorith = TD3(env)
 
-N = 1000
-for i in range(N):
-    stats = rl_alg.one_ep_training(i)
-    print(f"Episode {i}: {stats[0], stats[1]}")
+trainer = TrainerUI(env, algorith)
+trainer.run()

@@ -66,8 +66,8 @@ class TD3(RL_algorithm):
             self.critic.eval()
             self.policy_net.eval()
             explo_noise = (torch.randn(self.action_dim, device = device)*.1)*np.exp(-i_episode/30)
-            action = torch.clamp(self.policy_net(state).to(device) + explo_noise, self.action_low, self.action_high)
-            observation, reward, terminated, truncated, _ = self.env.step(action.detach().cpu().numpy().flatten())
+            action = torch.clamp(self.policy_net(state).to(device) + explo_noise, self.action_low, self.action_high).detach()
+            observation, reward, terminated, truncated, _ = self.env.step(action.cpu().numpy().flatten())
             self.ep_steps += 1
             ep_rewards.append(reward)
             reward = torch.tensor(reward, device=device)
@@ -87,8 +87,9 @@ class TD3(RL_algorithm):
                 if self.global_steps >= self.BATCH_SIZE:
                     batch, weights, tree_idxs = self.memory.sample(self.BATCH_SIZE)
                     state_batch, action_batch, reward, next_state, done = batch
-                    q_values = self.critic.Q1(state_batch, action_batch).mean().item()
-                    q_target_values = self.target_critic.Q1(state_batch, action_batch).mean().item()
+                    with torch.no_grad():
+                        q_values = self.critic.Q1(state_batch, action_batch).mean().item()
+                        q_target_values = self.target_critic.Q1(state_batch, action_batch).mean().item()
                 else:
                     q_values = 0
                     q_target_values = 0
@@ -122,21 +123,22 @@ class TD3(RL_algorithm):
             target_Q1, target_Q2 = self.target_critic(next_state, next_action)
             target_Q = torch.min(target_Q1, target_Q2)
             target_Q = reward.unsqueeze(-1) + (1-done).unsqueeze(-1) * self.gamma * target_Q
-            #current_Q1 = self.critic.Q1(state, action)
-            #td_error = torch.abs(current_Q1 - target_Q).detach()
         
-        self.critic_optimizer.zero_grad()
+        
         # Get current Q estimates
         current_Q1, current_Q2 = self.critic(state, action)
 
-		# Compute critic loss            
-        critic_loss = (torch.mean((current_Q1 - target_Q)**2)*.5 
-                       + torch.mean((current_Q2 - target_Q)**2) *.5)
-        #td_error = torch.abs(current_Q1 - target_Q).detach()
-        #self.memory.update_priorities(tree_idxs, td_error.cpu().squeeze(1).numpy())
+		# Compute critic loss           
+        loss = nn.MSELoss()
+        
+        critic_loss = ((current_Q1-target_Q)**2*weights.to(self.device) + (current_Q2-target_Q)**2*weights.to(self.device)).mean()
+        with torch.no_grad():
+            td_error = (current_Q1 - target_Q).abs()
+
+        self.memory.update_priorities(tree_idxs, td_error.cpu().squeeze(1).numpy())
 
         # Optimize the critic
-        
+        self.critic_optimizer.zero_grad()
         critic_loss.backward()
         torch.nn.utils.clip_grad_value_(self.critic.parameters(), 50)
         self.critic_optimizer.step()
@@ -265,3 +267,9 @@ class TD3(RL_algorithm):
 
     def get_policy(self) -> nn.Module:
         return self.target_policy_net
+    
+class PrioritizedTD3(TD3):
+    def __init__(self, env:ContinousCustomEnv, options = None) -> None:
+        super(PrioritizedTD3, self).__init__(env, options)
+        self.memory = PrioritizedReplayBuffer(env.observation_space.shape[0], env.action_space.shape[0], 1_000_000, discrete_action_space=False)
+    pass

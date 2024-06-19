@@ -109,9 +109,6 @@ class TrainerUI:
         for ax in self.axs:
             ax.relim()
             ax.autoscale_view()
-        
-        self.axs[0].set_ylim(-10, 2)
-        #self.canvas.draw()
         self.canvas.draw_idle()
         self.canvas.flush_events()
         self.job = self.root.after(100, self.update_plot)
