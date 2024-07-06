@@ -17,12 +17,11 @@ def get_demand() -> np.ndarray:
     hourly_demand = np.genfromtxt("./Data/EMS/consumption.csv", delimiter=',')
     s_hourly_demand = hourly_demand.shape
     demand = np.zeros((s_hourly_demand[0], s_hourly_demand[1] * 6))
-    dt = 600
     for i in range(s_hourly_demand[0]):
         for j in range(s_hourly_demand[1]):
-            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j] * dt / 3600
+            demand[i, j * 6:(j + 1) * 6] = hourly_demand[i, j]
     demand = demand.flatten()
-    return demand*3
+    return demand
 
 
 def get_temperatura(season: str = 'ver') -> np.ndarray:
@@ -75,7 +74,7 @@ def solar_power(rad: Union[float, np.ndarray], temp: Union[float, np.ndarray]) -
     :return: Solar power in kW
 
     """
-    Pn = 90 * (600 / 3600)
+    Pn = 90
     a_fv = -.0045
     Tn = 25
     T_cell = temp + rad / 800 * (Tn - 20)
@@ -111,43 +110,6 @@ def follow_ref_rew_1(s, a, s_next) -> np.ndarray:
 
     return np.array([reward], dtype=np.float32)
 
-def follow_ref_rew_2(s, a, s_next) -> np.ndarray:
-    """
-    Reward function for the follow reference task.
-    Also penalizes the energy deficits.
-    :param s: current state
-    :param a: action
-    :param s_next: next state
-    :return: reward
-    """
-    reward = 0
-
-    if np.abs(s[0] - s[1]) > np.abs(s[0] - s_next[1]):
-        reward = reward + 1
-
-    elif s[1] > s[0] and s_next[1] > s[1]:
-            reward = reward - 2
-
-    tank_reward = 0 #(s_next[3])*.8 if s_next[3] <= 5 else 0
-
-    reward = reward + tank_reward
-
-     # unfeasible action penalty
-    if s[3] <= 1 and a[0] > 0: # Irrigating while the tank is empty
-        reward = reward - 5
-
-    if s[3] >= 5 and a[1] > 0: # Pumping while the tank is full
-        reward = reward - 5
-        P_Q_pump = 0
-    else:
-        P_Q_pump = 1000 * 10 * (a[1] * 1e-5) * 20 / 1e3
-
-    Pbat, next_SoE, E_residual = manage_batteries(s_next[5], s_next[7], s[8], P_Q_pump)
-
-    if E_residual < 0:
-        reward = reward - 5
-
-    return np.array([reward], dtype=np.float32)
 
 def manage_batteries(SoE: float,
                     P_fv: float,

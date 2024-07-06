@@ -4,10 +4,8 @@ from environments.EMS_constants import *
 import copy
 import numpy as np
 from numpy import ndarray
-import matplotlib.pyplot as plt
+from scipy.special import exp1
 import torch
-from sklearn.preprocessing import StandardScaler
-
 from utils_functions.funcionesEMS import *
 from gymnasium import spaces
 from environments.custom_env import CustomEnv
@@ -27,7 +25,8 @@ class ContinousEMSEnv(CustomEnv):
         self._init_figure()
 
         # Hyperparams
-        self.max_steps: int = 143
+        self.max_steps: int = 288
+        self.day_steps: int = 144
         self.start_index:int = 0
         self.k:int = 0
         self.time:int = 0
@@ -39,6 +38,8 @@ class ContinousEMSEnv(CustomEnv):
         self.demand_data:np.ndarray = get_demand()
         self.L = len(self.temperature_data)  # length(temperatura)
         self.N_dias:int = 70
+        self.transform = T_matrix
+        self.transform_dim = self.transform.shape[1]
 
         # Data variables 
 
@@ -59,33 +60,37 @@ class ContinousEMSEnv(CustomEnv):
         self.SoE = np.array([0.0])
         self.E_residual = 0.0
         self.day_picked = 0
+        self.dQ = []
+        self.drawndown = 0.0 
 
         if rwd_function is not None:
             self.reward_fun = rwd_function
         else:
-            self.reward_fun = default_rwd_fun
+            self.reward_fun = continous_rwd_fun
 
         # Bounds for observations
         obs_low = np.array([0.0,
-                            Vt_min, SoE_min,
-                            I_min,
+                            Vt_min, I_min,
+                            SoE_min,
                             0.0,
-                            0.0, 0.0, 0.0,
-                            -1, -1, 0], dtype=np.float32)
+                            0.0, 0, 
+                            0.0, 0.0,
+                            -1, -1], dtype=np.float32)
 
         obs_high = np.array([Vt_max,
-                             Vt_max, SoE_max,
-                             I_max,
+                             Vt_max, I_max,
+                             SoE_max,
                              Vt_max,
-                             Q_p_max, 1000, 1000,
-                             1, 1, 1], dtype=np.float32)
+                             Q_p_max, 4, 
+                             1000, 1000,
+                             1, 1], dtype=np.float32)
 
 
         # Bounds for actions
         self.action_low = np.array([0.0, 0.0],
                                    dtype=np.float32)
 
-        self.action_high = np.array([1.0, 1.0],
+        self.action_high = np.array([Q_p_max, I_max],
                                     dtype=np.float32)
 
         self.observation_space = spaces.Box(low=obs_low,
@@ -97,7 +102,6 @@ class ContinousEMSEnv(CustomEnv):
                                         high=self.action_high,
                                         shape=(2,),
                                         dtype=np.float32)
-
     def step(self, action: np.ndarray) -> tuple[ndarray, ndarray, bool, bool, dict[str, Any]]:
         """
         Execute one step of the environment, given an action.
@@ -110,24 +114,37 @@ class ContinousEMSEnv(CustomEnv):
         action = self.map_action(action)
         action = action.flatten()
 
+        action_ = self._low_level_control(action)
+
+        self.dQ[self.k+144] = (action_[0] - self.Q_p)*1e-3
+        
+        self.Q_p = action_[0]
+        self.Irr = action_[1]        
+
         next_state, P_pump, self.E_residual = EMS_ode(self._get_state(), 
-                                                 [self.V_ref, self.p_fv[self.k], self.demanda[self.k]], 
-                                                 action)
+                                                 [self.V_ref, self.p_fv[self.k%144], self.demanda[self.k%144]], 
+                                                 action_)
         
         truncated = False
         terminated = False
 
         Info = {}
-        moment_of_the_day = self.k % 144
-        self.accumulated_P_consumed += self.demanda[self.k]
+        
+        self.k = self.k + 1
         
         self.V_Irr = next_state[0]
         self.Vt = next_state[1]
         self.SoE = next_state[2]
+        self.drawndown = drawndown(self.k+144, self.dQ[0:self.k + 144])
 
-        self.k = self.k + 1
-
-        if (self.k % 143) == 0:  # The time at s' is 00:00 i.e. the final day is over
+        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over
+            self.V_Irr = 0.0
+            self.V_ref = 4.0*np.random.rand()
+            self.p_fv, self.demanda = self._pick_metereological_data(None)
+        
+        if self.k % 288 == 0:
+            self.V_Irr = 0.0
+            self.V_ref = 4.0*np.random.rand()                        
             terminated = True
 
         observation_next = self._get_obs()
@@ -135,6 +152,19 @@ class ContinousEMSEnv(CustomEnv):
         reward = self.reward_fun(observation, action, observation_next)
 
         return observation_next, reward, terminated, truncated, Info
+    
+    def _low_level_control(self, action: np.ndarray) -> np.ndarray:
+        """Low level control for the pump and irrigation"""
+        action_ = np.copy(action)
+        if self.Vt <= Vt_min:
+            action_[1] = 0.0
+        if self.Vt >= Vt_max:
+            action_[0] = 0.0
+        if self.V_ref <= self.V_Irr:
+            action_[1] = 0.0
+        if self.drawndown > 1:
+            action_[0] = 0.0
+        return action_
     
     def map_action(self, policy_output: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
         if torch.is_tensor(policy_output):
@@ -149,52 +179,43 @@ class ContinousEMSEnv(CustomEnv):
         :param options: options for the environment
         :return: tuple of (initial_observation, info)
         """
+        if seed is not None:
+            np.random.seed(seed)
+                    
         self.day_picked = np.random.randint(0, 70)
-
         V_tank = np.minimum((Vt_max - Vt_min) * np.random.random_sample() + Vt_min, (Vt_max - Vt_min) * np.random.random_sample() + Vt_min)
+        V_ref = 3.5*np.random.rand()
+
         InitialObservation = self.set_initial_conditions(self.day_picked,
-                                                         V_ref=3.5*np.random.rand(),
+                                                         V_ref=V_ref,
                                                          V_tank=V_tank,
                                                          Soe=(SoE_max - SoE_min) * np.random.random_sample() + SoE_min,
-                                                         Irr_prev=np.random.rand(),
-                                                         Q_p_prev=np.random.rand(),
+                                                         Irr_prev=0.0, #np.random.rand(),
                                                          instant_k=0,
                                                          V_irr=0.0)
 
-        info = {"day_picked": self.day_picked,
-                "V_tank": self.Vt,
-                "SoE": self.SoE,
-                "Irr_prev": self.Irr,
-                "Q_p_prev": self.Q_p,
-                "instant_k": self.k,
-                "V_irr": self.V_Irr, 
-                "V_ref": self.V_ref}
-        
-        self.accumulated_P_pump = 0.0
-        self.accumulated_P_consumed = 0.0
+        info = {}
 
         return InitialObservation, info
+    
+    def _pick_metereological_data(self, day_picked: int):
+        """returns p_fv, demanda for a given day"""
 
-    def load_initial_conditions(self, info):
-        """
-        Load the initial conditions of the environment
-        :param info: dictionary with the initial conditions
-        :return:
-        """
-        day_picked = info["day_picked"]
-        InitialObservation = self.set_initial_conditions(day_picked,
-                                                         V_ref=info["V_ref"],
-                                                         V_tank=info["V_tank"],
-                                                         Soe=info["SoE"],
-                                                         Irr_prev=info["Irr_prev"],
-                                                         Q_p_prev=info["Q_p_prev"],
-                                                         instant_k=info["instant_k"],
-                                                         V_irr=info["V_irr"]
-                                                         )
+        if day_picked is None:
+            day_picked = np.random.randint(0, 70)
 
-        return InitialObservation
+        n_steps = self.k + self.day_steps
+        start_index = day_picked * self.day_steps # self.max_steps
+        radiacion = self.radiation_data[start_index:start_index + n_steps + 1] + 1e-4*np.random.randn(n_steps + 1)
+        temperatura = self.temperature_data[start_index:start_index + n_steps + 1] + 1e-2*np.random.randn(n_steps + 1)
+        p_fv = solar_power(radiacion, temperatura) + 1e-4*np.random.randn(n_steps + 1)
+        demanda = self.demand_data[start_index:start_index + n_steps + 1]
 
-    def set_initial_conditions(self, day_picked, V_ref, V_tank, Soe, Irr_prev, Q_p_prev, instant_k, V_irr):
+        return p_fv, demanda
+
+
+
+    def set_initial_conditions(self, day_picked, V_ref, V_tank, Soe, Irr_prev, instant_k, V_irr):
         """
         Set the initial conditions of the environment
         :param V_irr:
@@ -203,63 +224,72 @@ class ContinousEMSEnv(CustomEnv):
         :param V_tank:
         :param Soe:
         :param Irr_prev:
-        :param Q_p_prev:
         :return: Initial observation
         """
         self.k = instant_k
-        n_steps = self.k + self.max_steps
-        self.start_index = day_picked * 144 # self.max_steps
+        
         self.Vt = V_tank
         self.SoE = Soe
         self.Irr = Irr_prev
         self.V_Irr = V_irr
-        self.radiacion = self.radiation_data[self.start_index:self.start_index + n_steps + 1] + 1e-4*np.random.randn(n_steps + 1)
-        self.temperatura = self.temperature_data[self.start_index:self.start_index + n_steps + 1] + 1e-2*np.random.randn(n_steps + 1)
-        self.p_fv = solar_power(self.radiacion, self.temperatura) + 1e-4*np.random.randn(n_steps + 1)
-        self.demanda = self.demand_data[self.start_index:self.start_index + n_steps + 1]
-        self.Q_p = Q_p_prev
-        self.V_ref = V_ref #self.V_refs[day_picked]
+        self.V_ref = V_ref
+        self.p_fv, self.demanda = self._pick_metereological_data(day_picked)
         self.Pbat, _, self.E_residual = manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
-
+        self.dQ, self.Q_p = self._create_dQ(V_req=V_ref) 
+        self.drawndown = drawndown(self.k+144, self.dQ[0:144])
         InitialObservation = np.array([self.V_ref,
                                 self.V_Irr,
                                 self.Irr,
                                 self.Vt, 
                                 self.Q_p,
+                                self.drawndown,
                                 self.SoE,
                                 self.p_fv[self.k],
                                 self.demanda[self.k], 
                                 0.0,
-                                1.0,
                                 self.E_residual])
-
         return InitialObservation
+    
+    def _create_dQ(self, V_req) -> Tuple[np.ndarray, float]:
+        "Returns the dQ sequence from a previous day and the last value for the pump action Q_p"
+        L = self.day_steps + self.max_steps
+        prev_Q = np.zeros(self.day_steps)
+        d_Q = np.zeros(L)
+        sum = 0 
+        K = Q_p_max*dt/1000
+        for i in range(L):
+            if sum < V_req:
+                x = np.random.rand()*K
+                if sum + x < V_req:
+                    prev_Q[i] = x
+                    sum += x
+                else:
+                    prev_Q[i] = V_req - sum
+                    break
+            else:
+                break
+        prev_Q = prev_Q/K
+        np.random.shuffle(prev_Q)
+        last_Q = prev_Q[-1]
+        prev_d_Q = np.diff(prev_Q, prepend=0)/1000
+        d_Q[0:self.day_steps] = prev_d_Q
+        return d_Q, last_Q
 
     def sample_trajectory(self,
                           policy: Callable,
                           max_steps: int = 288,
-                          rew_fun=None,
-                          initial_conditions: dict = None,
-                          options: dict = None):
+                          rew_fun=None):
 
-        policy.eval()
         states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
-        
-        if initial_conditions is not None:
-            x0 = self.load_initial_conditions(initial_conditions)
-        elif options is not None:
-            x0, _ = self.reset(options={"t_init": 0})
-        else:
-            x0, _ = self.reset()
+        x0, _ = self.reset()
         states[0] = x0
 
         actions = np.zeros((max_steps, self.action_low.shape[0]))
 
         for i in range(max_steps):
             action = policy(states[i])
-            action = action.squeeze().detach().cpu().numpy()
-            exploration_noise = np.random.normal(0, 0.3, size=action.shape)
-            action = np.clip(action + exploration_noise, self.action_low, self.action_high) 
+            if type(action) == torch.Tensor:
+                action = action.squeeze().detach().cpu().numpy()
             x_next, _, terminated, truncated, _ = self.step(action)
             actions[i] = action
             states[i + 1] = x_next
@@ -267,7 +297,6 @@ class ContinousEMSEnv(CustomEnv):
                 states = states[:i + 2]
                 actions = actions[:i + 1]
                 break
-        policy.train()
         rewards = np.zeros(len(actions))
         if rew_fun is not None:
             for i in range(len(actions)):
@@ -282,11 +311,11 @@ class ContinousEMSEnv(CustomEnv):
         :return:
         """
 
-        states, actions, rewards = self.sample_trajectory(policy, max_steps=243, rew_fun=self.reward_fun)
+        states, actions, rewards = self.sample_trajectory(policy, max_steps=288, rew_fun=self.reward_fun)
         qp = actions[:, 0]
-        P_q = B_p * (qp * 1e-3) * h_p_const / 1e3
+        P_q = np.array([P_Q_p(q, h_p_const) for q in qp]) 
 
-        t = np.linspace(0, 24, states.shape[0] - 1)
+        t = np.linspace(0, 48, states.shape[0] - 1)
 
         # update lines
 
@@ -294,21 +323,28 @@ class ContinousEMSEnv(CustomEnv):
         self.lines[1].set_data(t, states[:-1, 1])
 
         self.lines[2].set_data(t, actions[:, 1]*100)
+        self.lines[3].set_data(t, actions[:, 0]*100)
 
-        self.lines[3].set_data(t, states[:-1, 5])
+        self.lines[4].set_data(t, states[:-1, 6])
 
-        self.lines[4].set_data(t, states[:-1, 7])
-        self.lines[5].set_data(t, P_q)
-        self.lines[6].set_data(t, states[1:, 6])
+        self.lines[5].set_data(t, states[:-1, 8])
+        self.lines[6].set_data(t, P_q)
+        self.lines[7].set_data(t, states[1:, 7])
 
-        self.lines[7].set_data(t, states[:-1, 3])
+        self.lines[8].set_data(t, states[:-1, 3])
+        
+        self.lines[9].set_data(t, states[:-1, 5])
 
-        self.lines[8].set_data(t, actions[:, 0]*100)
+        
 
-        self.lines[9].set_data(t, states[:-1, -1])    
+        self.lines[10].set_data(t, states[:-1, -1])    
         #self.lines[10].set_data(t, rewards)
 
-        self.lines[10].set_data(t, rewards[0:len(t)])
+        self.lines[11].set_data(t, rewards[0:len(t)])
+
+        for ax in self.axs:
+            ax.relim()
+            ax.autoscale_view()
 
     def compare_policies(self,
                          policies: Iterable[Tuple[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]]],
@@ -375,31 +411,61 @@ class ContinousEMSEnv(CustomEnv):
             self.lines = []
 
             # lines for the reference traking
-            self.lines.append(self.axs[0].plot([], [], label="V_ref")[0])
+            self.lines.append(self.axs[0].plot([], [], label="V_req")[0])
             self.lines.append(self.axs[0].plot([], [], label="V_Irr")[0])
+            self.axs[0].set_title("Requerimiento hídrico y volumen irrigado")
+            self.axs[0].set_xlabel("Tiempo [h]")
+            self.axs[0].set_ylabel("Volumen [m3]")
+            self.axs[0].legend()
 
-            # lines for the irrigation
-            self.lines.append(self.axs[1].plot([], [], label="Irrigation")[0])
+            # lines for the irrigation and pump
+            self.lines.append(self.axs[1].plot([], [], label="Irr")[0])
+            self.lines.append(self.axs[1].plot([], [], label="Q_pump")[0])
+            self.axs[1].set_title("Irrigación y bombeo")
+            self.axs[1].set_xlabel("Tiempo [h]")
+            self.axs[1].set_ylabel("Flujo [l/s]")
+            self.axs[1].legend()
 
             # lines for soe
             self.lines.append(self.axs[2].plot([], [], label="SoE")[0])
+            self.axs[2].set_title("State of Energy")
+            self.axs[2].set_xlabel("Tiempo [h]")
+            self.axs[2].set_ylabel("SoE [kWh]")
+            self.axs[2].legend()
 
             # lines for the power consumed by the community
             self.lines.append(self.axs[3].plot([], [], label="P_d")[0])
             self.lines.append(self.axs[3].plot([], [], label="P_pump")[0])
             self.lines.append(self.axs[3].plot([], [], label="P_sun")[0])
+            self.axs[3].set_title("Consumo doméstico, bombeo y solar") 
+            self.axs[3].set_xlabel("Tiempo [h]")
+            self.axs[3].set_ylabel("Potencia [kW]")
+            self.axs[3].legend()
 
             # lines for the tank volume
             self.lines.append(self.axs[4].plot([], [], label="V_tank")[0])
+            self.axs[4].set_title("Volumen del tanque")
+            self.axs[4].set_xlabel("Tiempo [h]")
+            self.axs[4].set_ylabel("Volumen [m3]")
+            
+            #lines for the drawndown 
+            self.lines.append(self.axs[5].plot([], [], label="drawndown")[0])       
+            self.axs[5].set_title("Descenso del pozo")
+            self.axs[5].set_xlabel("Tiempo [h]")
+            self.axs[5].set_ylabel("Descenso [m]")
 
-            # lines for the pump
-            self.lines.append(self.axs[5].plot([], [], label="Q_pump")[0])
 
             # lines for the power balance
             self.lines.append(self.axs[6].plot([], [], label="E_residual")[0])
+            self.axs[6].set_title("Balance de energía")
+            self.axs[6].set_xlabel("Tiempo [h]")
 
             # lines for the rewards
             self.lines.append(self.axs[7].plot([], [], label="Rewards")[0])
+            self.axs[7].set_title("Recompensas")
+            self.axs[7].set_xlabel("Tiempo [h]")
+            self.axs[7].set_ylabel("Rewards")
+            
 
     def _get_state(self) -> np.ndarray:
         """Returns the state of the environment"""
@@ -409,24 +475,25 @@ class ContinousEMSEnv(CustomEnv):
     def _get_obs(self) -> np.ndarray:
         """Return the observation of the environment"""
         observation = np.array([self.V_ref,
-                        self.V_Irr,
-                        self.Irr,
-                        self.Vt, 
-                        self.Q_p,
-                        self.SoE,
-                        self.p_fv[self.k],
-                        self.demanda[self.k], 
-                        np.sin(2*np.pi*(self.k % 143)/143),
-                        np.cos(2*np.pi*(self.k % 143)/143),
-                        self.E_residual])
+                                self.V_Irr,
+                                self.Irr,
+                                self.Vt, 
+                                self.Q_p,
+                                self.drawndown,
+                                self.SoE,
+                                self.p_fv[self.k%144],
+                                self.demanda[self.k%144], 
+                                (self.k%144)/143,
+                                self.E_residual])
         return observation
+        
 class DiscreteEMSEnv(ContinousEMSEnv):
     """Discrete action space implementation of the EMS environment"""
     def __init__(self, rwd_function = None, render: bool = True):
         super().__init__(rwd_function, render)
         self.action_space = spaces.Discrete(16)
-        self.Irr_levels = np.array([0.0, .05, .1, .2])
-        self.Q_p_levels = np.array([0.0, .3333, .6666, 1.0])
+        self.Irr_levels = np.array([0.0, .05, .1, I_max])
+        self.Q_p_levels = np.array([0.0, .3333, .6666, Q_p_max])
         self.action_values = np.array(np.meshgrid(self.Q_p_levels, self.Irr_levels), dtype=np.float32).T.reshape(-1, 2)
     
     def map_action(self, action: torch.Tensor) -> np.ndarray:
@@ -441,20 +508,10 @@ class DiscreteEMSEnv(ContinousEMSEnv):
     def sample_trajectory(self,
                           policy: Callable,
                           max_steps: int = 288,
-                          rew_fun=None,
-                          initial_conditions: dict = None,
-                          options: dict = None):
-        policy.eval()
+                          rew_fun=None):
         states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
-        
-        if initial_conditions is not None:
-            x0 = self.load_initial_conditions(initial_conditions)
-        elif options is not None:
-            x0, _ = self.reset(options={"t_init": 0})
-        else:
-            x0, _ = self.reset()
+        x0, _ = self.reset()
         states[0] = x0
-
         a_shape = self.action_values.shape
         if len(a_shape) > 1:
             actions = np.zeros((max_steps, self.action_values.shape[1]))
@@ -464,7 +521,7 @@ class DiscreteEMSEnv(ContinousEMSEnv):
         for i in range(max_steps):
 
             action = policy(states[i])
-            action = action.max(1).indices.view(1, 1) # the index
+            action = action.max(0).indices.view(1, 1) # the index
             actions[i] = self.action_values[action]
 
             x_next, _, terminated, truncated, _ = self.step(action)
@@ -473,7 +530,6 @@ class DiscreteEMSEnv(ContinousEMSEnv):
                 states = states[:i + 2]
                 actions = actions[:i + 1]
                 break
-        policy.train()
         rewards = np.zeros(max_steps)
         if rew_fun is not None:
             for i in range(len(actions)):
@@ -497,7 +553,7 @@ def default_rwd_fun(s, a, s_next):
 
     reward = 1 - norm_next_error**2 if norm_next_error > 0 else 1 - 2*norm_next_error**2
 
-    reward = np.maximum(reward, -1.0)
+    reward = np.maximum(2*reward, -1.0)
 
     reward += -1.0 if s[3] <= Vt_min and a[1] > 0 else 0.0 #penalize unfeasible action (irrigation is on and tank is empty)
 
@@ -526,17 +582,19 @@ def continous_rwd_fun(s, a, s_next):
     
     #reward = 1 - norm_next_error if norm_next_error > 0 else 1 + 2*norm_next_error
 
-    reward = 1 - norm_next_error**2 if norm_next_error > 0 else 1 - 2*norm_next_error**2
+    reward = 1 - norm_next_error**2 if norm_next_error > 0 else 1 - 2*norm_next_error**2 # ta gucci
 
-    reward = np.maximum(reward, -1.0)
+    reward = np.maximum(reward, -1.0) # ta gucci
 
-    reward += -1.0 if s[3] <= Vt_min and a[1] > 0 else 0.0 #penalize unfeasible action (irrigation is on and tank is empty)
+    reward += -a[1] if s[3] <= Vt_min and a[1] > 0 else 0.0 #penalize unfeasible action (irrigation is on and tank is empty)
 
-    reward += -1.0 if s[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
+    reward += -a[0] if s[3] >= Vt_max and a[0] > 0 else 0.0 #penalize unfeasible action (pump is on and tank is full)
+
+    reward += -1.0 if s[5] > 1 else 0.0 # penalize drawndown
     
     e_balance = s_next[-1]
 
-    reward += e_balance if e_balance < 0 else e_balance
+    reward += e_balance if e_balance < 0 else 0.0
 
     if a[0] < 0.0 or 1.0 < a[0]:
         reward -= abs(a[0])
@@ -544,8 +602,7 @@ def continous_rwd_fun(s, a, s_next):
     if a[1] < 0.0 or 1.0 < a[1]:
         reward -= abs(a[1])
 
-    return np.array([reward], dtype=np.float32)
-
+    return reward
 
 def EMS_ode(x,d,u) -> Tuple[np.ndarray, float, float]:
     """The ODE of the micorgrid system
@@ -557,6 +614,7 @@ def EMS_ode(x,d,u) -> Tuple[np.ndarray, float, float]:
     V_irr = x[0] # Irrigatated volume [m3]
     V_tank = x[1] # Tank volume [m3]
     SoE = x[2] # State of Energy [kWh]
+    #s = x[3] # Descenso del pozo
 
     V_ref = d[0] # Reference volume [m3]
     P_sun = d[1] # Solar power [kW]
@@ -584,14 +642,101 @@ def EMS_ode(x,d,u) -> Tuple[np.ndarray, float, float]:
     V_tank_next = np.clip(V_tank + amount_to_pump - amount_to_irrigate, Vt_min, Vt_max)
     V_Irr_next = V_irr + amount_to_irrigate
 
-    P_Q_p = B_p * (Q_pump * 1e-5) * h_p_const / 1e3  # water pump power [kW]
+    P_Q_p_ = P_Q_p(Q_pump, h_p_const)  # water pump power [kW]
 
     P_bat, SoE_next, E_residual = manage_batteries(SoE,
                                                    P_sun,
                                                    P_demand,
-                                                   P_Q_p)
+                                                   P_Q_p_)
     x_next = np.array([V_Irr_next,
                        V_tank_next,
                        SoE_next])
     
     return x_next, P_bat, E_residual
+
+def drawndown(k:int, dQ:np.ndarray): # drawndown of the well
+    assert k == len(dQ), "The length of dQ should match the number of temporal k points"
+    l = np.arange(1,k+1)
+    arg = (r_pozos**2*S)/(4*T*(k-l+1)*600)
+    sum = np.dot(dQ, exp1(arg))
+    s_val = 1/(4*np.pi*T) * sum
+    return s_val
+
+
+def P_Q_p(q_p:float, h_p:float):
+    """Water pump power [kW]
+    :param q_p: flow rate [l/s]
+    :param h_p: height [m]
+    :return: power [kW]"""
+    P_Q_p_ = B_p * (q_p * 1e-3) * (h_p) / 1e3 
+    return P_Q_p_
+
+class NormalizedEnv(CustomEnv):
+    """Wrappes the environment to be used in the training"""
+    def __init__(self, env):
+        self.env = env
+        self.transform = T_matrix
+        self.observation_space = env.observation_space
+        self.observation_dim = env.observation_space.shape[0]-2
+        self.action_space = env.action_space
+
+    def reset(self):
+        obs, info = self.env.reset()
+        t_obs = np.matmul(self.transform, obs)
+        return t_obs, info
+    
+    def step(self, action):
+        s, reward, terminated, truncated, info = self.env.step(action)
+        t_s = np.matmul(self.transform, s)
+        return t_s, reward, terminated, truncated, info
+    
+    def show_sample(self, policy):
+        policy_ = lambda x: policy(np.matmul(self.transform, x))
+        return self.env.show_sample(policy_)
+    
+    def sample_trajectory(self, policy: Callable[..., Any], max_steps: int = 288, rew_fun=None, initial_conditions: dict = None, options: dict = None):
+        policy = lambda x: policy(np.matmul(self.transform, x))
+        return self.env.sample_trajectory(policy, 
+                                         max_steps, 
+                                         rew_fun, 
+                                         initial_conditions, 
+                                         options)
+    def get_figure(self):
+        return self.env.get_figure()
+    def map_action(self, policy_output: torch.Tensor) -> ndarray:
+        return self.env.map_action(policy_output)	
+    
+    def sample_trajectory(self,
+                          policy: Callable,
+                          max_steps: int = 288,
+                          rew_fun=None):
+
+        states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
+        x0, _ = self.reset()
+        states[0] = x0
+
+        actions = np.zeros((max_steps, self.action_low.shape[0]))
+
+        for i in range(max_steps):
+            action = policy(states[i])
+            if type(action) == torch.Tensor:
+                action = action.squeeze().detach().cpu().numpy()
+            x_next, _, terminated, truncated, _ = self.step(action)
+            actions[i] = action
+            states[i + 1] = x_next
+            if terminated or truncated:
+                states = states[:i + 2]
+                actions = actions[:i + 1]
+                break
+        rewards = np.zeros(len(actions))
+        if rew_fun is not None:
+            for i in range(len(actions)):
+                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
+
+        return states, actions, rewards
+    
+
+env = NormalizedEnv(ContinousEMSEnv())
+
+env.reset()
+env.step(np.array([1, 2.0]))

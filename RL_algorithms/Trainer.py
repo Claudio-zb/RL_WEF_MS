@@ -104,8 +104,8 @@ class TrainerUI:
         self.lines[3].set_data(range(len(self.values_target_net)), self.values_target_net) 
 
         # plot the epsilon values
-
-        self.lines[4].set_data(range(len(self.epsilon)), self.epsilon)
+        epsilon = np.array(self.epsilon)
+        self.lines[4].set_data(range(len(epsilon)), epsilon)
         for ax in self.axs:
             ax.relim()
             ax.autoscale_view()

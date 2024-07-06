@@ -3,6 +3,7 @@ from torch import nn
 import numpy as np
 from torch.nn import init
 from torch.nn import functional as F
+import RL_algorithms.RL_algorithm as utils
 
 
 class ActorNN(nn.Module):
@@ -18,9 +19,9 @@ class ActorNN(nn.Module):
         self.lower_bound = lower_bound
         self.shared_fc = nn.Sequential(
             nn.Linear(input_dim, 128),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(128, 128),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(128, output_dim)
         )
         self._init_weights()
@@ -29,7 +30,7 @@ class ActorNN(nn.Module):
         if isinstance(obs, np.ndarray):
             obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
         shared_output = self.shared_fc(obs)
-        shared_output = torch.tanh(shared_output)*(self.upper_bound-self.lower_bound)/2 + .5
+        shared_output = (torch.tanh(shared_output)/2 + .5) * (self.upper_bound - self.lower_bound) + self.lower_bound
         
         return shared_output
 
@@ -46,18 +47,13 @@ class ValueNN(nn.Module):
 
     def __init__(self, input_dim):
         super(ValueNN, self).__init__()
-
+        width = 256
         self.structure = nn.Sequential(
-            nn.BatchNorm1d(input_dim),
-            nn.Linear(input_dim, 128),
-            nn.BatchNorm1d(128),
+            nn.Linear(input_dim, width),
             nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.BatchNorm1d(128),
+            nn.Linear(width, width),
             nn.ReLU(),
-            nn.Linear(128, 48),
-            nn.ReLU(),
-            nn.Linear(48, 1),
+            nn.Linear(width, 1),
         )
 
     def forward(self, obs):
@@ -75,12 +71,9 @@ class Q_network(nn.Module):
         self.output_dim = output_dim
         self.width = 128 
         self.structure = nn.Sequential(
-            nn.BatchNorm1d(input_dim),
             nn.Linear(input_dim, self.width),
-            nn.BatchNorm1d(self.width),
             nn.ReLU(),
             nn.Linear(self.width, self.width),
-            nn.BatchNorm1d(self.width),
             nn.ReLU(),
             nn.Linear(self.width, output_dim)
         )
@@ -126,7 +119,6 @@ class TD3Critic(nn.Module):
         super(TD3Critic, self).__init__()
         self.width = width
         self.q1_sequence = nn.Sequential(
-            nn.BatchNorm1d(input_dim + output_dim),
             nn.Linear(input_dim + output_dim, self.width),
             nn.ReLU(),
             nn.Linear(self.width, self.width),
@@ -134,7 +126,6 @@ class TD3Critic(nn.Module):
             nn.Linear(self.width, 1)
         )
         self.q2_sequence = nn.Sequential(
-            nn.BatchNorm1d(input_dim + output_dim),
             nn.Linear(input_dim + output_dim, self.width),
             nn.ReLU(),
             nn.Linear(self.width, self.width),
@@ -161,24 +152,14 @@ class Continous_Q_network(nn.Module):
         self.device = device
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.width = 128
+        self.width = 256
         self.structure = nn.Sequential(
-            nn.BatchNorm1d(input_dim + output_dim),
             nn.Linear(input_dim + output_dim, self.width),
-            nn.BatchNorm1d(self.width),
             nn.ReLU(),
             nn.Linear(self.width, self.width),
             nn.BatchNorm1d(self.width),
             nn.ReLU(),
-            nn.Linear(self.width, self.width),
-            nn.ReLU(),
-            nn.Linear(self.width, self.width),
-            nn.ReLU(),
-            nn.Linear(self.width, self.width),
-            nn.ReLU(),
-            nn.Linear(self.width, 48),
-            nn.ReLU(),
-            nn.Linear(48, 1)
+            nn.Linear(self.width, 1)
         )
         self._init_weights()
 
@@ -204,23 +185,19 @@ class LSTM_Q_Network(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
-        self.lstm_input = nn.LSTMCell(input_dim, 128)
-        self.mlp_input = nn.Linear(input_dim, 128)
+        self.lstm_input = nn.LSTMCell(input_dim, 256)
         self.hidden_structure = nn.Sequential(
             nn.Linear(256, 128),
-            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, 48),
-            nn.ReLU(),
-            nn.Linear(48, output_dim)
+            nn.Linear(128, output_dim)
         )
     
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
             obs = torch.tensor(obs, dtype=torch.float32)
-            obs = obs.unsqueeze(1).to(self.device)
+            obs = obs.unsqueeze(-1).to(self.device)
         
         # compute the features
         for i in range(obs.size(0)):
@@ -234,3 +211,36 @@ class LSTM_Q_Network(nn.Module):
         x = torch.cat([h, mlp_output], dim=1)
         return self.hidden_structure(x)
     
+class DoubleQCritic(nn.Module):
+    """Critic network, employes double Q-learning."""
+    def __init__(self, obs_dim, action_dim, hidden_dim, hidden_depth):
+        super().__init__()
+
+        self.Q1 = utils.mlp(obs_dim + action_dim, hidden_dim, 1, hidden_depth)
+        self.Q2 = utils.mlp(obs_dim + action_dim, hidden_dim, 1, hidden_depth)
+
+        self.outputs = dict()
+        self.apply(utils.weight_init)
+
+    def forward(self, obs, action):
+        assert obs.size(0) == action.size(0)
+
+        obs_action = torch.cat([obs, action], dim=-1)
+        q1 = self.Q1(obs_action)
+        q2 = self.Q2(obs_action)
+
+        self.outputs['q1'] = q1
+        self.outputs['q2'] = q2
+
+        return q1, q2
+
+    def log(self, logger, step):
+        for k, v in self.outputs.items():
+            logger.log_histogram(f'train_critic/{k}_hist', v, step)
+
+        assert len(self.Q1) == len(self.Q2)
+        for i, (m1, m2) in enumerate(zip(self.Q1, self.Q2)):
+            assert type(m1) == type(m2)
+            if type(m1) is nn.Linear:
+                logger.log_param(f'train_critic/q1_fc{i}', m1, step)
+                logger.log_param(f'train_critic/q2_fc{i}', m2, step)

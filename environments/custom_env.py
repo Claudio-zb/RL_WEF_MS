@@ -3,7 +3,6 @@ import torch
 from gymnasium import spaces
 from abc import ABC, abstractmethod
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 from typing import Callable
 
 
@@ -46,15 +45,6 @@ class CustomEnv(ABC, gym.Env):
         :return: the action to be taken
         """
         pass
-
-    @abstractmethod
-    def load_initial_conditions(self, initial_conditions: dict) -> np.ndarray:
-        """
-        Load the initial conditions for the environment
-        :param initial_conditions: dictionary containing the initial conditions
-        :return: initial observation
-        """
-        pass
     
     @abstractmethod
     def get_figure(self):
@@ -71,6 +61,7 @@ class ContinousCustomEnv(CustomEnv):
     def __init__(self, action_low, action_high):
         self.action_low = action_low
         self.action_high = action_high
+        self.transform:np.ndarray = None
     
     def sample_trajectory(self,
                           policy: Callable,

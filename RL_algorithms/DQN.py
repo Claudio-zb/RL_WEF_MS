@@ -11,7 +11,7 @@ from utils_functions.ReplayMemory import Transition, PrioritizedReplayMemory
 from utils_functions.ReplayMemory import ReplayBuffer, PrioritizedReplayBuffer
 from environments.custom_env import CustomEnv
 import numpy as np
-from RL_algorithms.RL_algorithm import RL_algorithm
+from RL_algorithms.RL_algorithm import RL_algorithm, soft_update_params
 from typing import Union, Tuple, Any
 from matplotlib.figure import Figure
 import copy
@@ -35,8 +35,8 @@ class DDQN(RL_algorithm):
         self.action_dim = env.action_space.n
 
         self.memory = PrioritizedReplayBuffer(state_size=self.obs_dim, 
-                                              action_size=1, 
-                                              buffer_size=100_000)
+                                              action_size=1, # 1 becuase it's discrete action algorithm
+                                              buffer_size=1_000_000)
 
         self.policy_net = Q_network(self.obs_dim, self.action_dim, device).to(device)
         self.target_net = copy.deepcopy(self.policy_net).to(device)
@@ -93,7 +93,6 @@ class DDQN(RL_algorithm):
             return 
         batch, weights, tree_idxs = self.memory.sample(self.BATCH_SIZE)
         state, action, reward, next_state, done = batch
-
         state_action_values = self.policy_net(state).gather(1, action.unsqueeze(1))
 
         with torch.no_grad():
@@ -113,9 +112,7 @@ class DDQN(RL_algorithm):
         self.optimizer.step()
 
         with torch.no_grad():
-            # Update the frozen target models
-            for param, target_param in zip(self.policy_net.parameters(), self.target_net.parameters()):
-                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
+            soft_update_params(self.policy_net, self.target_net, self.TAU)
 
         self.memory.update_priorities(tree_idxs, td_error.cpu().squeeze(1).numpy())
         return loss.detach().cpu().numpy().item()
@@ -130,7 +127,6 @@ class DDQN(RL_algorithm):
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 return self.policy_net(state).max(1).indices.view(1, 1)
-
         else:
             self.ep_random_steps += 1
             return torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long)
@@ -237,9 +233,9 @@ class DDQN(RL_algorithm):
         :return: the mean reward, the standard deviation of the rewards, the action randomness, the Q values of the target and policy networks"""
         device = self.device
         state, info = self.env.reset()
+        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         self.ep_random_steps = 0
         self.ep_steps = 0
-        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         ep_rewards = []
         for t in count():  # begin episode
             self.policy_net.eval()
@@ -249,14 +245,16 @@ class DDQN(RL_algorithm):
             ep_rewards.append(reward)
             reward = torch.tensor(reward, device=device)
             done = terminated or truncated
+                
             next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
             # Store the transition in memory
             self.memory.add((state, action, reward, next_state, int(done)))
 
             # Move to the next state
-            self.optimize_model()
             state = next_state
+            self.optimize_model()
+
             self.global_steps += 1
 
             if done:
@@ -280,4 +278,3 @@ class DuelingDDQN(DDQN):
 
         self.optimizer = RAdam(self.policy_net.parameters(), lr=self.lr, decoupled_weight_decay=True)
         
-    

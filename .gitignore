@@ -4,3 +4,6 @@ figures/*
 RL_algoritms/__pycache__/*
 environments/__pycache__/*
 utils_functions/__pycache__/*
+training_results/ems/*
+training_results/quad-sys/*
+proando.ipynb

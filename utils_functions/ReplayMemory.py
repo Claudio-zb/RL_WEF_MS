@@ -12,16 +12,75 @@ class ReplayMemory(object):
     Replay memory class for storing transitions
     """
 
-    def __init__(self, capacity):
-        self.memory = deque([], maxlen=capacity)
+    def __init__(self, capacity, obs_dim, action_dim, device):
+        self.states = torch.zeros(capacity, obs_dim).to(device)
+        self.actions = torch.zeros(capacity, action_dim).to(device)
+        self.next_states = torch.zeros(capacity, obs_dim).to(device)
+        self.rewards = torch.zeros(capacity, 1).to(device)
+        self.dones = torch.zeros(capacity, 1).to(device)
+        self.idx:int = 0
+        self.isFull = False
+        self.capacity = capacity
+        self.action_dim = action_dim
+        self.device = device
+        self.obs_dim = obs_dim
 
     def push(self, *args):
         """Save a transition"""
-        self.memory.append(Transition(*args))
+        self.states[self.idx] = args[0]
+        self.actions[self.idx] = args[1]
+        self.next_states[self.idx] = args[2]
+        self.rewards[self.idx] = args[3]
+        self.dones[self.idx] = args[4]
+        self.idx = (self.idx + 1) % self.capacity
+        if self.idx == 0:
+            self.isFull = True
 
-    def sample(self, batch_size):
+    def sample(self, batch_size, lookback=6):
         """Sample a batch of transitions"""
-        return random.sample(self.memory, batch_size)
+        if self.isFull:
+            indices = np.random.randint(0, len, batch_size)
+        else:
+            indices = np.random.randint(0, self.idx, batch_size)
+
+        states = []
+        next_states = []
+        actions = torch.zeros(batch_size, self.action_dim)
+        rewards = torch.zeros(batch_size, 1)
+        dones = torch.zeros(batch_size, 1)
+
+        lengths = []
+        
+        for j, i in enumerate(indices):
+            if i < self.idx:
+                if i >= lookback:
+                    states.append(self.states[i-lookback:i, :])
+                    next_states.append(self.next_states[i-lookback:i, :])
+                    lengths.append(lookback)
+                else:
+                    states.append(self.states[0:i, :])
+                    next_states.append(self.next_states[0:i, :])
+                    lengths.append(i)
+            elif i - self.idx < lookback:
+                states.append(self.states[self.idx:i, :])
+                next_states.append(self.next_states[self.idx:i, :])
+                lengths.append(i - self.idx)
+            else:
+                states.append(self.states[i-lookback:i, :])
+                next_states.append(self.next_states[i-lookback:i, :])  
+                lengths.append(lookback)  
+
+            actions[j, :] = self.actions[i, :]
+            rewards[j, 0] = self.rewards[i]
+            dones[j, 0] = self.dones[i]        
+
+        packed_states = torch.nn.utils.rnn.pad_sequence(states, batch_first=True)  
+        packed_next_states = torch.nn.utils.rnn.pad_sequence(next_states, batch_first=True)
+        
+        p_s = torch.nn.utils.rnn.pack_padded_sequence(packed_states, lengths, batch_first=True, enforce_sorted=False)
+        p_ns = torch.nn.utils.rnn.pack_padded_sequence(packed_next_states, lengths, batch_first=True, enforce_sorted=False)
+            
+        return p_s, actions, p_ns, rewards, dones
 
     def __len__(self):
         return len(self.memory)
@@ -127,7 +186,7 @@ class SumTree:
 
 
 class PrioritizedReplayBuffer:
-    def __init__(self, state_size, action_size, buffer_size, eps=1e-2, alpha=0.1, beta=0.1, 
+    def __init__(self, state_size, action_size, buffer_size, eps=1e-2, alpha=0.3, beta=0.2, 
                  discrete_action_space=True):
         self.tree = SumTree(size=buffer_size)
 

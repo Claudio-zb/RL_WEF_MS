@@ -101,9 +101,12 @@ class GH_env(DiscreteCustomEnv):
                                       self.T_ext_data[self.steps], 
                                       self.RH_ext_data[self.steps],
                                       self.w_speed_data[self.steps]])
-
+        
         return self.state
     
+    def get_figure(self):
+        return self.fig
+
     def render(self):
         pass
     def sample_trajectory(self, policy = None, scaler = None):
