@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Union
+from typing import Union, Tuple
 from environments.EMS_constants import*
 
 PATH = r'C:\Users\wenap\PycharmProjects\PPO_project\Data\EMS'
@@ -114,7 +114,7 @@ def follow_ref_rew_1(s, a, s_next) -> np.ndarray:
 def manage_batteries(SoE: float,
                     P_fv: float,
                     P_demanded: float,
-                    P_pump: float) -> tuple[float, float, float]:
+                    P_pump: float) -> Tuple[float, float, float]:
         """
         Choose the power to re/discharge the batteries and computes the next SoE
         :param SoE:

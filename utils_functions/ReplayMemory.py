@@ -7,12 +7,98 @@ import os
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'isdone'))
 
+class RReplayMemory():
+    """
+    Replay buffer for agent with LSTM network additionally using previous action, can be used 
+    if the hidden states are not stored (arbitrary initialization of lstm for training).
+    And each sample contains the whole episode instead of a single step.
+    """
+    def __init__(self, capacity, device):
+        self.capacity = capacity
+        self.buffer = []
+        self.position = 0
+        self.device = device
+
+    def add(self, state, action, reward, next_state, done):
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+        self.buffer[self.position] = (state, action, reward, next_state, done)
+        self.position = int((self.position + 1) % self.capacity)  # as a ring buffer
+
+    def sample(self, batch_size):
+        batch = random.sample(self.buffer, batch_size)
+        state, action, reward, next_state, done = map(np.stack,
+                                                  zip(*batch))  # stack for each element
+        ''' 
+        the * serves as unpack: sum(a,b) <=> batch=(a,b), sum(*batch) ;
+        zip: a=[1,2], b=[2,3], zip(a,b) => [(1, 2), (2, 3)] ;
+        the map serves as mapping the function on each list element: map(square, [2,3]) => [4,9] ;
+        np.stack((1,2)) => array([1, 2])
+        '''
+        return torch.tensor(state, dtype=torch.float32, device=self.device), torch.tensor(action, dtype=torch.float32, device=self.device), torch.tensor(reward, dtype=torch.float32, device=self.device), torch.tensor(next_state, dtype=torch.float32, device=self.device), torch.tensor(done, dtype=torch.float32, device=self.device)
+
+    def __len__(
+            self):  # cannot work in multiprocessing case, len(replay_buffer) is not available in proxy of manager!
+        return len(self.buffer)
+
+    def get_length(self):
+        return len(self.buffer)
+
 class ReplayMemory(object):
     """
     Replay memory class for storing transitions
     """
 
-    def __init__(self, capacity, obs_dim, action_dim, device):
+    def __init__(self, obs_dim, action_dim, capacity, device):
+        self.states = torch.zeros(capacity, obs_dim).to(device)
+        self.actions = torch.zeros(capacity, action_dim).to(device)
+        self.next_states = torch.zeros(capacity, obs_dim).to(device)
+        self.rewards = torch.zeros(capacity, 1).to(device)
+        self.dones = torch.zeros(capacity, 1).to(device)
+        self.idx:int = 0
+        self.isFull = False
+        self.capacity = capacity
+        self.action_dim = action_dim
+        self.device = device
+        self.obs_dim = obs_dim
+        
+
+    def add(self, *args):
+        """Save a transition"""
+        self.states[self.idx] = args[0]
+        self.actions[self.idx] = args[1]
+        self.rewards[self.idx] = args[2]
+        self.next_states[self.idx] = args[2]
+        self.dones[self.idx] = args[4]
+        self.idx = (self.idx + 1) % self.capacity
+        if self.idx == 0:
+            self.isFull = True
+
+    def sample(self, batch_size, lookback=6):
+        """Sample a batch of transitions"""
+        if self.isFull:
+            indices = np.random.randint(0, len, batch_size)
+        else:
+            indices = np.random.randint(0, self.idx, batch_size)
+        with torch.no_grad():
+            states = self.states[indices, :]
+            next_states = self.next_states[indices, :]
+            actions = self.actions[indices, :]
+            rewards = self.rewards[indices, :]
+            dones = self.dones[indices, :]
+            
+        return states, actions, rewards, next_states, dones
+
+    def __len__(self):
+        return len(self.memory)
+    
+
+class ReplayMemory2(object):
+    """
+    Replay memory class for storing transitions
+    """
+
+    def __init__(self, obs_dim, action_dim, capacity, device):
         self.states = torch.zeros(capacity, obs_dim).to(device)
         self.actions = torch.zeros(capacity, action_dim).to(device)
         self.next_states = torch.zeros(capacity, obs_dim).to(device)
@@ -25,12 +111,13 @@ class ReplayMemory(object):
         self.device = device
         self.obs_dim = obs_dim
 
-    def push(self, *args):
+
+    def add(self, *args):
         """Save a transition"""
         self.states[self.idx] = args[0]
         self.actions[self.idx] = args[1]
+        self.rewards[self.idx] = args[2]
         self.next_states[self.idx] = args[2]
-        self.rewards[self.idx] = args[3]
         self.dones[self.idx] = args[4]
         self.idx = (self.idx + 1) % self.capacity
         if self.idx == 0:
@@ -80,44 +167,7 @@ class ReplayMemory(object):
         p_s = torch.nn.utils.rnn.pack_padded_sequence(packed_states, lengths, batch_first=True, enforce_sorted=False)
         p_ns = torch.nn.utils.rnn.pack_padded_sequence(packed_next_states, lengths, batch_first=True, enforce_sorted=False)
             
-        return p_s, actions, p_ns, rewards, dones
-
-    def __len__(self):
-        return len(self.memory)
-
-
-class PrioritizedReplayMemory:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
-        self.priorities = []
-        self.position = 0
-
-    def push(self, *args):
-        """Saves a transition."""
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-            self.priorities.append(1)
-        self.memory[self.position] = Transition(*args)
-        # Set max priority
-        self.priorities[self.position] = max(self.priorities, default=1)
-        self.position = (self.position + 1) % self.capacity
-
-    def sample(self, batch_size, beta=0.4):
-        priorities = np.array(self.priorities)
-        if priorities.ndim == 1:
-            priorities = np.expand_dims(priorities, 1)
-        probs = priorities ** beta
-        probs /= probs.sum()
-
-        indices = np.random.choice(len(self.memory), batch_size, p=probs.squeeze(-1))
-        samples = [self.memory[idx] for idx in indices]
-
-        return samples, indices
-
-    def update_priorities(self, batch_indices, batch_priorities):
-        for idx, priority in zip(batch_indices, batch_priorities):
-            self.priorities[idx] = priority[0]
+        return p_s, actions, rewards, p_ns, dones
 
     def __len__(self):
         return len(self.memory)

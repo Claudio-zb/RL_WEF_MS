@@ -12,7 +12,7 @@ class ActorNN(nn.Module):
     """
 
     def __init__(self, input_dim: int, output_dim: int,
-                 upper_bound: torch.Tensor, lower_bound: torch.Tensor, device = 'cuda'):
+                 upper_bound: torch.Tensor, lower_bound: torch.Tensor, device):
         super(ActorNN, self).__init__()
         self.device = device
         self.upper_bound = upper_bound
@@ -26,13 +26,24 @@ class ActorNN(nn.Module):
         )
         self._init_weights()
 
-    def forward(self, obs):
-        if isinstance(obs, np.ndarray):
-            obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
+    def forward(self, obs:torch.Tensor) -> torch.Tensor:
         shared_output = self.shared_fc(obs)
         shared_output = (torch.tanh(shared_output)/2 + .5) * (self.upper_bound - self.lower_bound) + self.lower_bound
         
         return shared_output
+    
+    def get_action(self, obs:np.ndarray) -> np.ndarray:
+        shared_output = self.shared_fc(obs)
+        shared_output = (torch.tanh(shared_output)/2 + .5) * (self.upper_bound - self.lower_bound) + self.lower_bound
+        
+        return shared_output
+
+    
+    def get_action(self, obs:np.ndarray) -> np.ndarray:
+        """Returns the action given the observation. Necessary for use in the environment"""
+        obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
+        obs = obs.unsqueeze(0)
+        return self.forward(obs).detach().cpu().numpy().flatten()
 
     def _init_weights(self):
         for layer in self.shared_fc:
@@ -176,40 +187,75 @@ class Continous_Q_network(nn.Module):
             if isinstance(layer, nn.Linear):
                 init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
 
-class LSTM_Q_Network(nn.Module):
-    """ Q network with LSTM structure. This network is used to learn the Q function. 
+class RecurrentPolicy(nn.Module):
+    """ Actor network with LSTM structure. This network is used to learn the policy function. 
     It uses a LSTM layer to process the sequence of observations and a MLP to process the last observation."""
-    def __init__(self, input_dim, output_dim, device):
-        super(LSTM_Q_Network, self).__init__()
+    def __init__(self, input_dim, output_dim: int,
+                 upper_bound: torch.Tensor, lower_bound: torch.Tensor, device):
+        super(RecurrentPolicy, self).__init__()
+
         self.device = device
         self.input_dim = input_dim
-        self.output_dim = output_dim
-
-        self.lstm_input = nn.LSTMCell(input_dim, 256)
+        self.lstm_input = nn.LSTM(input_dim, 128, batch_first=True)
+        self.upper_bound = upper_bound
+        self.lower_bound = lower_bound
+        
         self.hidden_structure = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(128, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, output_dim)
+            nn.Linear(128, output_dim),
         )
+        self.to(device)
+    def forward(self, obs:torch.Tensor):
+        """Forward pass of the network. It processes the sequence of observations and returns the action"""
+        out, _ = self.lstm_input(obs)
+        if out.dim() > 2:
+            unpacked, _ = torch.nn.utils.rnn.pad_packed_sequence(out, batch_first=True)
+            last_obs = unpacked[:,-1,:]
+        else:
+            last_obs = out[:,-1,:]
+        x = self.hidden_structure(last_obs)
+        return (torch.tanh(x)/2 + .5) * (self.upper_bound - self.lower_bound) + self.lower_bound
     
-    def forward(self, obs):
-        if isinstance(obs, np.ndarray):
-            obs = torch.tensor(obs, dtype=torch.float32)
-            obs = obs.unsqueeze(-1).to(self.device)
-        
-        # compute the features
-        for i in range(obs.size(0)):
-            if i == 0:
-                h, c = self.lstm_input(obs[i])
-            else:
-                h, c = self.lstm_input(obs[i], (h, c))
-        
-        last_obs = obs[-1]
-        mlp_output = self.mlp_input(last_obs)
-        x = torch.cat([h, mlp_output], dim=1)
-        return self.hidden_structure(x)
+    def get_action(self, obs:np.ndarray) -> np.ndarray:
+        """Returns the action given the observation. Necessary for use in the environment"""
+        obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
+        if obs.dim() == 1: 
+            obs = obs.unsqueeze(0).unsqueeze(0)
+        else:
+            obs = obs.unsqueeze(0)
+        out, _ = self.lstm_input(obs)
+        x = self.hidden_structure(out.squeeze(0).squeeze(0))
+        return x.detach().cpu().numpy()
+    
+class RecurrentCritic(nn.Module):
+    """Critic network with LSTM structure. This network is used to learn the Q function. 
+    It uses a LSTM layer to process the sequence of observations and a MLP to process the last observation."""
+    def __init__(self, input_dim, action_space, device):
+        super(RecurrentCritic, self).__init__()
+        self.device = device
+        self.input_dim = input_dim
+
+        self.lstm_input = nn.LSTM(input_dim, 128, batch_first=True)
+        self.hidden_structure = nn.Sequential(
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        )
+    def forward(self, obs:torch.Tensor, action:torch.Tensor):
+        """Forward pass of the network. It processes the sequence of observations and returns the Q values"""
+        out, _ = self.lstm_input(obs)
+        if out.dim() > 2:
+            unpacked, _ = torch.nn.utils.rnn.pad_packed_sequence(out, batch_first=True)
+            last_obs = unpacked[:,-1,:]
+        else:
+            last_obs = out[:,-1,:]
+        return self.hidden_structure(torch.cat([last_obs, action], dim=-1))
+
     
 class DoubleQCritic(nn.Module):
     """Critic network, employes double Q-learning."""

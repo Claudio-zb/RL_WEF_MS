@@ -1,17 +1,32 @@
-from RL_algorithms.DQN import DDQN, DuelingDDQN
-from RL_algorithms.TD3 import TD3, PrioritizedTD3
-from environments.EMS_env import ContinousEMSEnv, DiscreteEMSEnv, NormalizedEnv
-from environments.GH_env import GH_env
-from environments.Quad_env import Quad_env
-from RL_algorithms.Trainer import TrainerUI 
+from environments.basic_env import basic_env, DuWrapper
+from environments.EMS_env import ContinousEMSEnv, normalizationWrapper
 import gymnasium as gym
 import numpy as np
-import torch
-from matplotlib import pyplot as plt
-env = NormalizedEnv(ContinousEMSEnv())
-algorithm = TD3(env)
+from stable_baselines3 import TD3, PPO
+from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
+import matplotlib.pyplot as plt
 
-trainer = TrainerUI(env, algorithm)
-trainer.run()
+env = ContinousEMSEnv()
+env = normalizationWrapper(env)
 
+model = PPO.load("ppo_simple2_env")
+actions1 = []
+actions2 = []
+h = 288
+responses=np.zeros((env.observation_space.low.shape[-1], 288))
+actions = np.zeros((2,288))
+rewards = np.zeros(288)
+s, _ = env.reset()
+for i in range(h):
+    if i == 143:
+        print("a")
+    action = model.predict(s)[0]
+    s, rew, d, w, info = env.step(action)
+    responses[:,i] = s
+    rewards[i] = rew
+    actions[:,i] = action
+    actions1.append(action[0])
+    actions2.append(action[1])
 
+plt.plot(responses[0,:-1], label='')
+plt.plot(responses[1,:-1], label='')

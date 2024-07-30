@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.optim import RAdam
 
 from utils_functions.EMS_networks import *
-from utils_functions.ReplayMemory import PrioritizedReplayBuffer, Transition, ReplayMemory
+from utils_functions.ReplayMemory import PrioritizedReplayBuffer, Transition, ReplayMemory, RReplayMemory
 from environments.custom_env import ContinousCustomEnv
 import numpy as np
 from RL_algorithms.RL_algorithm import RL_algorithm, soft_update_params
@@ -18,19 +18,22 @@ class TD3(RL_algorithm):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
         self.global_steps = 0
-
-        self.memory = ReplayMemory(1_000_000)
         self.env: ContinousCustomEnv = env
-        self.obs_dim = env.observation_dim
+        try:
+            self.obs_dim = env.observation_dim
+        except:
+            self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
-        self.action_high = torch.tensor(env.action_space.high, dtype=torch.float32).to(device)
-        self.action_low = torch.tensor(env.action_space.low, dtype=torch.float32).to(device)
+        self.action_high = torch.tensor(env.action_space.high, dtype=torch.float32, device=device)
+        self.action_low = torch.tensor(env.action_space.low, dtype=torch.float32, device=device)
         self._init_hyperparameters(options)
+
+        self.memory = ReplayMemory(obs_dim=self.obs_dim, action_dim=self.action_dim, capacity=1_000_000, device=device)
 
         self.critic:nn.Module = TD3Critic(self.obs_dim, self.action_dim).to(device)
         self.target_critic:nn.Module = copy.deepcopy(self.critic)
 
-        self.policy_net:nn.Module = ActorNN(self.obs_dim, self.action_dim, self.action_high, self.action_low).to(device)
+        self.policy_net:nn.Module = ActorNN(self.obs_dim, self.action_dim, self.action_high, self.action_low, device).to(device)
         self.target_policy_net:nn.Module = copy.deepcopy(self.policy_net)
 
         self.critic_optimizer = RAdam(self.critic.parameters(), lr=self.lr)
@@ -70,7 +73,7 @@ class TD3(RL_algorithm):
 
             # Store the transition in memory
             next_state = torch.tensor(observation, dtype=torch.float32, device=device)
-            self.memory.push(state, action, next_state, reward, int(done))
+            self.memory.add(state, action, reward, next_state, int(done))
             self.optimize_model()
             state = next_state
             self.global_steps += 1
@@ -80,12 +83,7 @@ class TD3(RL_algorithm):
                 std_ep_rwd = ep_rewards.std()
                 if self.global_steps >= self.BATCH_SIZE:
                     transitions = self.memory.sample(self.BATCH_SIZE)
-                    batch = Transition(*zip(*transitions))
-                    state_batch = torch.stack(batch.state)
-                    action_batch = torch.stack(batch.action)
-                    reward = torch.stack(batch.reward)
-                    next_state = torch.stack(batch.next_state)
-                    done = torch.tensor(batch.isdone, dtype=torch.long, device=device).unsqueeze(1)
+                    state_batch, action_batch, reward, next_state, done = transitions
                     with torch.no_grad():
                         q_values = self.critic.Q1(state_batch, action_batch).mean().item()
                         q_target_values = self.target_critic.Q1(state_batch, action_batch).mean().item()
@@ -103,17 +101,13 @@ class TD3(RL_algorithm):
         if self.global_steps < self.BATCH_SIZE:
             return 
         transitions = self.memory.sample(self.BATCH_SIZE)
-        batch = Transition(*zip(*transitions))
-        state = torch.stack(batch.state)
-        action = torch.stack(batch.action)
-        reward = torch.stack(batch.reward)
-        next_state = torch.stack(batch.next_state)
-        done = torch.tensor(batch.isdone, device=self.device).unsqueeze(1)
+        state, action, reward, next_state, done = transitions
 
         with torch.no_grad():
             noise = (
 				torch.randn_like(action) * self.policy_noise
-			).clamp(-self.noise_clip*self.action_low, self.noise_clip*self.action_high)
+			).clamp(-torch.tensor(self.noise_clip*self.action_low, dtype=torch.float32, device=self.device), 
+           torch.tensor(self.noise_clip*self.action_high, dtype=torch.float32, device=self.device))
 
             next_action = (
 				self.target_policy_net(next_state) + noise
@@ -362,6 +356,91 @@ class PrioritizedTD3(TD3):
         if self.eps < np.random.rand():
             action = torch.rand(self.action_dim)*(self.action_high-self.action_low) + self.action_low
         else:
-            action = self.policy_net(state).detach()
+            action = self.policy_net.get_action(state)
         return action
     
+
+class RecurrentTD3(TD3):
+    """lstm critic policy version of td3 algorithm """
+    
+    def __init__(self, env:ContinousCustomEnv, options = None) -> None:
+        super(RecurrentTD3, self).__init__(env, options)
+        # defining nets again
+        self.critic:nn.Module = RecurrentCritic(self.obs_dim, self.action_dim, self.device)
+        self.target_critic:nn.Module = copy.deepcopy(self.critic)
+        self.policy_net:nn.Module = RecurrentPolicy(self.obs_dim, self.action_dim, self.action_high, self.action_low, self.device)
+        self.target_policy_net:nn.Module = copy.deepcopy(self.policy_net)
+
+        self.memory = RReplayMemory(1_000_000, self.device)
+
+
+    def one_ep_training(self, i_episode: int) -> Tuple[float]:
+        '''Train the agent for one episode'''
+        device = self.device
+        state, info = self.env.reset()
+        self.ep_random_steps = 0
+        self.ep_steps = 0
+        state = torch.tensor(state, dtype=torch.float32, device=device)
+        ep_rewards = []
+        action_randomness = self.eps_exploration
+        states = []
+        actions = []
+        rewards = []
+        next_states = []
+        dones = []
+
+        for t in count():  # begin episode
+            self.critic.eval()
+            self.policy_net.eval()
+            explo_noise = np.random.randn(self.action_dim)*action_randomness*(self.action_high-self.action_low)
+            action = np.clip(self.policy_net.get_action(state) + explo_noise, self.action_low, self.action_high)
+            next_state, reward, terminated, truncated, _ = self.env.step(action)
+            self.ep_steps += 1
+            ep_rewards.append(reward)
+            reward = torch.tensor(reward, device=device)
+            done = terminated or truncated
+
+            # Store the transition in memory
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
+            next_states.append(next_state)
+            dones.append(int(done))
+
+            self.memory.add(state, action, reward, next_state, int(done))
+
+            self.optimize_model()
+            state = next_state
+            self.global_steps += 1
+            if done:
+                ep_rewards = np.array(ep_rewards).flatten()
+                mean_ep_rwd = ep_rewards.mean()
+                std_ep_rwd = ep_rewards.std()
+                if self.global_steps >= self.BATCH_SIZE:
+                    transitions = self.memory.sample(self.BATCH_SIZE)
+                    batch = Transition(*zip(*transitions))
+                    state_batch = torch.stack(batch.state)
+                    action_batch = torch.stack(batch.action)
+                    reward = torch.stack(batch.reward)
+                    next_state = torch.stack(batch.next_state)
+                    done = torch.tensor(batch.isdone, dtype=torch.long, device=device).unsqueeze(1)
+                    with torch.no_grad():
+                        q_values = self.critic.Q1(state_batch, action_batch).mean().item()
+                        q_target_values = self.target_critic.Q1(state_batch, action_batch).mean().item()
+                else:
+                    q_values = 0
+                    q_target_values = 0
+                break
+        return mean_ep_rwd, std_ep_rwd, action_randomness, q_values, q_target_values
+
+    def learn(self, n_iter: int) -> Tuple[dict, nn.Module]:
+        return super().learn(n_iter)
+    
+    def get_policy(self) -> nn.Module:
+        return self.target_policy_net
+    
+    def get_training_fig(self) -> Figure:
+        return self.stats_fig
+    
+    def update_training_plots(self, episode: int) -> None:
+        return super().update_training_plots(episode)

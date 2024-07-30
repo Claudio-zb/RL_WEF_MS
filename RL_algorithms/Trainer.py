@@ -128,7 +128,8 @@ class TrainerUI:
                 ax.legend()
             while True:
                 if self.i_episode % 10 == 0: # Show a sample of the environment every 10 episodes
-                    self.env.show_sample(self.alg.get_policy())
+                    policy = lambda x: self.alg.get_policy().get_action(x)
+                    self.env.show_sample(policy)
                     for ax in self.env_fig.get_axes():
                         ax.relim()
                         ax.autoscale_view()

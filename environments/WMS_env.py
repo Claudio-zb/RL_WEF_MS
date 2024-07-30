@@ -6,7 +6,6 @@ import numpy as np
 from numpy import ndarray
 import matplotlib.pyplot as plt
 import torch
-from sklearn.preprocessing import StandardScaler
 
 from utils_functions.funcionesEMS import *
 from gymnasium import spaces
