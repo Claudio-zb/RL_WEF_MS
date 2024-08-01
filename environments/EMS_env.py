@@ -100,10 +100,11 @@ class ContinousEMSEnv(gym.Env):
                                        shape=(2,),
                                        dtype=np.float32)
 
-    def step(self, action: np.ndarray) -> Tuple[np.ndarray, np.ndarray, bool, bool, dict]:
+    def step(self, action: np.ndarray, mode:str = "train") -> Tuple[np.ndarray, np.ndarray, bool, bool, dict]:
         """
         Execute one step of the environment, given an action.
         :param action: Action to be executed
+        :param mode: mode of the environment. Can be "train" or "eval"
         :return: tuple of (next_observation, reward, terminated, truncated, info)
         """
         # Store the previous values of the variables to compute the reward
@@ -114,7 +115,8 @@ class ContinousEMSEnv(gym.Env):
 
         action_ = self._low_level_control(action)
 
-        self.dQ[self.k + 144] = (action_[0] - self.Q_p) * 1e-3
+        # self.dQ[self.k + 144] = (action_[0] - self.Q_p) * 1e-3
+        self.dQ.append((action_[0] - self.Q_p) * 1e-3)
 
         self.Q_p = action_[0]
         self.Irr = action_[1]
@@ -134,11 +136,18 @@ class ContinousEMSEnv(gym.Env):
         self.Vt = next_state[1]
         self.SoE = next_state[2]
         self.drawdown = drawdown(self.k + 144, self.dQ[0:self.k + 144])
+        # self.drawdown = drawdown(self.k + 144, self.dQ)
 
         if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over
             self.V_Irr = 0.0
             self.V_ref = 4.0 * np.random.rand()
-            self.p_fv, self.demanda = self._pick_metereological_data(None)
+
+            if mode == "eval":
+                self.day_picked = (self.day_picked + 1) % 70
+            else:
+                self.day_picked = np.random.randint(0, 70)
+
+            self.p_fv, self.demanda = self._pick_metereological_data(self.day_picked)
 
         if self.k % 288 == 0:
             self.V_Irr = 0.0
@@ -170,7 +179,7 @@ class ContinousEMSEnv(gym.Env):
         else:
             return policy_output
 
-    def reset(self, seed=None, options=None) -> Tuple[np.ndarray, dict]:
+    def reset(self, seed=None, options: dict = None) -> Tuple[np.ndarray, dict]:
         """
         Reset the environment to the initial state
         :param seed: random seed
@@ -180,19 +189,25 @@ class ContinousEMSEnv(gym.Env):
         if seed is not None:
             np.random.seed(seed)
 
-        self.day_picked = np.random.randint(0, 70)
+        if options is not None:
+            if options["mode"] == "eval":
+                np.random.seed(0)
+                self.day_picked = 0
+        else:
+            self.day_picked = np.random.randint(0, 70)
+
         V_tank = np.minimum((Vt_max - Vt_min) * np.random.random_sample() + Vt_min,
                             (Vt_max - Vt_min) * np.random.random_sample() + Vt_min)
         V_ref = 3.0 * np.random.rand() + 1.0
+        SoE = (SoE_max - SoE_min) * np.random.random_sample() + SoE_min
 
         InitialObservation = self.set_initial_conditions(self.day_picked,
                                                          V_ref=V_ref,
                                                          V_tank=V_tank,
-                                                         Soe=(SoE_max - SoE_min) * np.random.random_sample() + SoE_min,
+                                                         Soe=SoE,
                                                          Irr_prev=0.0,
                                                          instant_k=0,
                                                          V_irr=0.0)
-
         info = {}
 
         return InitialObservation, info
@@ -200,10 +215,7 @@ class ContinousEMSEnv(gym.Env):
     def _pick_metereological_data(self, day_picked: int):
         """returns p_fv, demanda for a given day"""
 
-        if day_picked is None:
-            day_picked = np.random.randint(0, 70)
-
-        n_steps = self.k + self.day_steps
+        n_steps = self.day_steps  # self.k + self.day_steps
         start_index = day_picked * self.day_steps  # self.max_steps
         radiacion = self.radiation_data[start_index:start_index + n_steps + 1] + 1e-4 * np.random.randn(n_steps + 1)
         temperatura = self.temperature_data[start_index:start_index + n_steps + 1] + 1e-2 * np.random.randn(n_steps + 1)
@@ -247,11 +259,11 @@ class ContinousEMSEnv(gym.Env):
                                        self.E_residual])
         return InitialObservation
 
-    def _create_dQ(self, V_req) -> Tuple[np.ndarray, float]:
+    def _create_dQ(self, V_req) -> Tuple[list, float]:
         "Returns the dQ sequence from a previous day and the last value for the pump action Q_p"
         L = self.day_steps + self.max_steps
         prev_Q = np.zeros(self.day_steps)
-        d_Q = np.zeros(L)
+        # d_Q = np.zeros(L)  # []
         sum = 0
         K = Q_p_max * dt / 1000
         for i in range(L):
@@ -269,7 +281,8 @@ class ContinousEMSEnv(gym.Env):
         np.random.shuffle(prev_Q)
         last_Q = prev_Q[-1]
         prev_d_Q = np.diff(prev_Q, prepend=0) / 1000
-        d_Q[0:self.day_steps] = prev_d_Q
+        # d_Q[0:self.day_steps] = prev_d_Q
+        d_Q = [dq for dq in prev_d_Q]
         return d_Q, last_Q
 
     def sample_trajectory(self,
@@ -500,13 +513,15 @@ class normalizationWrapper(gym.Wrapper):
         self.prev_action = np.zeros_like(self.env.action_space.shape[-1])
         state, info = self.env.reset()
         t_state = np.matmul(self.transform, state)
-        return t_state, info
+        info = state
+        return t_state, state
 
     def step(self, action):
         action_ = self.prev_action + action
         action_ = np.clip(action_, self.env.action_low, self.env.action_high)
-        state, reward, terminated, truncated, info = self.env.step(action_)
+        state, reward, terminated, truncated, _ = self.env.step(action_)
         t_state = np.matmul(self.transform, state)
+        info = state
         return t_state, reward, terminated, truncated, info
 
 
@@ -576,7 +591,8 @@ def default_rwd_fun(s, a, s_next):
 
     reward = - norm_next_error if norm_next_error > 0 else norm_next_error
 
-    reward += -a[1] if s[3] <= Vt_min and a[1] > 0 else 0.0  #penalize unfeasible action (irrigation is on and tank is empty)
+    reward += -a[1] if s[3] <= Vt_min and a[
+        1] > 0 else 0.0  #penalize unfeasible action (irrigation is on and tank is empty)
 
     reward += -a[0] if s[3] >= Vt_max and a[0] > 0 else 0.0  #penalize unfeasible action (pump is on and tank is full)
 
@@ -585,10 +601,10 @@ def default_rwd_fun(s, a, s_next):
     reward += e_balance if e_balance < 0 else 0
 
     if a[0] < 0.0 or 1.0 < a[0]:
-        reward -= abs(a[0])*2
+        reward -= abs(a[0]) * 2
 
     if a[1] < 0.0 or 1.0 < a[1]:
-        reward -= abs(a[1])*2
+        reward -= abs(a[1]) * 2
 
     return np.array([reward], dtype=np.float32)
 
@@ -600,38 +616,37 @@ def continous_rwd_fun(s, a, s_next):
     :param s_next: next state"""
     reward = 0.0
     p_reward = 0.0
-    K = s[-2]/143
+    K = s[-2] / 143
     if s_next[-2] != 0:
         norm_next_error = (s[0] - s_next[1]) / s[0]
-        if s_next[0] <= s_next[1] and a[1]>0:
+        if s_next[0] <= s_next[1] and a[1] > 0:
             p_reward = -a[1]
     else:
         norm_next_error = (s[0] - s[1]) / s[0]
 
-    reward = (1 - norm_next_error)**2 if norm_next_error > 0 else (1 + norm_next_error)**2  # ta gucci
+    reward = (1 - norm_next_error) ** 2 if norm_next_error > 0 else (1 + norm_next_error) ** 2  # ta gucci
     if norm_next_error < -1:
         reward = -1.0
-    reward = K*np.maximum(reward, -1.0)  # ta gucci
-    reward = reward #+ p_reward
+    reward = K * np.maximum(reward, -1.0)  # ta gucci
+    reward = reward  #+ p_reward
 
-    reward += -10*a[1] if s[3] <= Vt_min and a[
+    reward += -10 * a[1] if s[3] <= Vt_min and a[
         1] > 0 else 0.0  # penalize unfeasible action (irrigation is on and tank is empty)
 
-    reward += -10*a[0] if s[3] >= Vt_max and a[0] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
+    reward += -10 * a[0] if s[3] >= Vt_max and a[
+        0] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
 
-    reward += -10*a[0] if s[5] > 1 else 0.0  # penalize drawdown
+    reward += -10 * a[0] if s[5] > 1 else 0.0  # penalize drawdown
 
     e_balance = s_next[-1]
 
     reward += e_balance if e_balance < 0 else 0.0
 
     if a[0] < 0.0 or 1.0 < a[0]:
-        reward -= 10*abs(a[0])
+        reward -= 10 * abs(a[0])
 
     if a[1] < 0.0 or 1.0 < a[1]:
-        reward -= 10*abs(a[1])
-
-
+        reward -= 10 * abs(a[1])
 
     return reward
 
@@ -689,6 +704,8 @@ def EMS_ode(x, d, u) -> Tuple[np.ndarray, float, float]:
 
 def drawdown(k: int, dQ: Union[np.ndarray, List]):  # drawdown of the well
     assert k == len(dQ), "The length of dQ should match the number of temporal k points"
+    if type(dQ) == list:
+        dQ = np.array(dQ)
     l = np.arange(1, k + 1)
     arg = (r_pozos ** 2 * S) / (4 * T * (k - l + 1) * 600)
     sum_ = np.dot(dQ, exp1(arg))
