@@ -4,89 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="&quot;soil dynamic included&quot;">
-      <change afterPath="$PROJECT_DIR$/environments/Data/EMS/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/environments/Data/GH/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/environments/Data/__init__.py" afterDir="false" />
+    <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="&quot;cleaning in the project&quot;">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/consumption.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/consumption.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/data_rad.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/data_rad.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/data_rad_inv.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/data_rad_inv.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/data_rad_ver.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/data_rad_ver.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/data_temp.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/data_temp.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/data_temp_inv.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/data_temp_inv.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/data_temp_ver.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/data_temp_ver.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/EMS/v_refs.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/v_refs.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/GH/datosene2020.xls" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/GH/datosene2020.xls" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/catchment_attributes.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/catchment_attributes.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/cons_gw_wr_year.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/cons_gw_wr_year.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/cons_sf_wr_year.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/cons_sf_wr_year.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/pet_hargreaves_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/pet_hargreaves_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/pet_hargreaves_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/pet_hargreaves_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/polygon/polygon.dbf" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/polygon/polygon.dbf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/polygon/polygon.prj" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/polygon/polygon.prj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/polygon/polygon.shp" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/polygon/polygon.shp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/polygon/polygon.shx" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/polygon/polygon.shx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_chirps_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_chirps_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_chirps_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_chirps_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_cr2met_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_cr2met_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_cr2met_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_cr2met_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_mswep_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_mswep_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_mswep_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_mswep_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_tmpa_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_tmpa_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/precip_tmpa_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/precip_tmpa_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/q_m3s_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/q_m3s_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/q_m3s_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/q_m3s_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/q_mm_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/q_mm_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/q_mm_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/q_mm_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/tmax_cr2met_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/tmax_cr2met_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/tmax_cr2met_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/tmax_cr2met_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/tmin_cr2met_day.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/tmin_cr2met_day.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/camels/tmin_cr2met_mon.csv" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/camels/tmin_cr2met_mon.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/datos_caudal_mid.mat" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/datos_caudal_mid.mat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/datos_etp_mid.mat" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/datos_etp_mid.mat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/datos_lluvia_mid.mat" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/datos_lluvia_mid.mat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/datos_solar_mid.mat" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/datos_solar_mid.mat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/datos_temp_mid.mat" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/datos_temp_mid.mat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/WMS/datos_viento_mid.mat" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/datos_viento_mid.mat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/agora_sim.zip" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ems_ppo_du_norm_1.zip" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/EMS_constants.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/EMS/EMS_constants.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/EMS_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/EMS_env.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/EMS_wrapper.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/GH_constants.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/GH/GH_constants.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/GH_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/GH_env.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/Quad_env.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/WMS_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/WMS_env.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/basic_env.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/data.csv" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/gh_readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/environments/docs/gh_readme.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/processed_data.csv" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/reward_function.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/transform.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/SoE.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/SoE_mean.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/V_irr_mean.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/entrenamiento_1.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/entrenamiento_2.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/entrenamiento_3.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/mean_wtank.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/volumen_agua_irrigado.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/figures/wtank.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/learning_curves.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/learning_curves_zoomed.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main2.py" beforeDir="false" afterPath="$PROJECT_DIR$/main2.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/options.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ppo_simple2_env.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ppo_simple2_env.zip" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/prando3.ipynb" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/proando2.ipynb" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/proando_logger.zip" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/simple_env.zip" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/td3_pendulum.zip" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils_functions/funcionesEMS.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils_functions/funcionesEMS.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/weather_data.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.vscode/launch.json" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -235,7 +155,7 @@
       <workItem from="1724634600127" duration="14652000" />
       <workItem from="1724691605887" duration="2669000" />
       <workItem from="1724763517439" duration="167000" />
-      <workItem from="1724797738587" duration="22374000" />
+      <workItem from="1724797738587" duration="23014000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;soil dynamic included&quot;">
       <option name="closed" value="true" />
@@ -245,7 +165,15 @@
       <option name="project" value="LOCAL" />
       <updated>1723470512773</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="&quot;cleaning in the project&quot;">
+      <option name="closed" value="true" />
+      <created>1724936646818</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1724936646818</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -270,7 +198,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="&quot;soil dynamic included&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;soil dynamic included&quot;" />
+    <MESSAGE value="&quot;cleaning in the project&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;cleaning in the project&quot;" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
