@@ -8,6 +8,31 @@ import torch
 from utils_functions.funcionesEMS import *
 from gymnasium import spaces
 from matplotlib import figure
+from typing import Tuple
+
+
+class MicroGridEnv:
+    def __init__(self, n_crops: int = 1):
+        self.v_tanks_min = [Vt_min] * n_crops
+        self.v_tanks_max = [Vt_max] * n_crops
+        self.v_tanks = [(Vt_max + Vt_min) / 2] * n_crops
+        self.v_irrs = [0] * n_crops
+
+        self.soe = SoE_max
+
+        self.v_refs = [0.0 for _ in range(n_crops)]
+
+    def next_step(self, actions: Tuple[float, list], disturbances):
+        p_bat = actions[0]
+        p_fv = disturbances[0]
+        p_load = disturbances[1]
+
+        for idx, vtank in self.v_tanks:
+            self.v_tanks[idx] = vtank + actions[1][idx]
+            self.v_irrs[idx] = self.v_irrs[idx] + actions[1][idx]
+            self.soe = self.soe + p_bat * 600
+
+        return self.v_tanks, self.v_irrs, self.soe
 
 
 class ContinousEMSEnv(gym.Env):

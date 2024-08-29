@@ -15,7 +15,7 @@ def irr_policy(obs: np.ndarray) -> float:
     return irrigation
 
 
-class WMS:
+class CultivateEnv:
     """Water Management System Class"""
 
     def __init__(self):
@@ -32,24 +32,21 @@ class WMS:
         self.geological_parameters = jose_painecura
         self.ET0: float = 0.0
 
-    def start(self, doy: int = 295):
+    def reset(self, doy: int = 295) -> Tuple[dict, dict]:
         self.doy = doy
+        return {}, {}
 
-    def update_climate_data(self, doy: int):
 
-        data = self.weather_data.loc[self.weather_data["doy"] == doy]
-        self.precipitation = data["precipitation"].values[0]
-        try:
-            self.ET0 = data["ET0"].iloc[0]
-        except KeyError:
-            self.ET0 = np.nan
-            self.wind_speed = data["w_speed"].iloc[0]
-            self.max_temperature = data["t_max"].iloc[0]
-            self.min_temperature = data["t_min"].iloc[0]
-            self.RH_max_temperature = data["RH_tmax"].iloc[0]
-            self.RH_min_temperature = data["RH_tmin"].iloc[0]
-            self.solar_radiation = data["rad"].iloc[0]
-            self.ET0 = data["ET0"].iloc[0]
+    def set_climate_data(self, climate_data: dict):
+        self.solar_radiation = climate_data["solar_radiation"]
+        self.max_temperature = climate_data["max_temperature"]
+        self.min_temperature = climate_data["min_temperature"]
+        self.RH_max_temperature = climate_data["RH_max_temperature"]
+        self.RH_min_temperature = climate_data["RH_min_temperature"]
+        self.wind_speed = climate_data["wind_speed"]
+        self.precipitation = climate_data["precipitation"]
+        self.ET0 = self.get_ET0()
+        return
 
     def get_climate_data(self):
         climate_data = {"solar_radiation": self.solar_radiation,
@@ -61,17 +58,18 @@ class WMS:
                         "precipitation": self.precipitation}
         return climate_data
 
-    def step(self):
-        self.update_climate_data(self.doy)
+    def step(self, irrigation: float, climate_data: dict):
+        self.set_climate_data(climate_data)
         for crop in self.crops:
             if crop.is_active():
                 obs = crop.get_obs()
-                irrigation = irr_policy(obs)
-                crop.step(self.ET0, self.precipitation + irrigation)
+                infil_water, runoff_water = self.compute_infiltration(irrigation, self.precipitation)
+                crop.step(self.ET0, infil_water)
             else:
                 if crop.plantation_day == self.doy:
                     crop.start()
         self.doy = max(1, (self.doy + 1) % 365)
+        return self.get_obs()
 
     def get_hist_data(self):
         hist_data = {}
@@ -116,6 +114,15 @@ class WMS:
         num = 0.408 * delta * R_n + psi_const * 900 / (Tmean + 273) * self.wind_speed * (e_s_average - e_a)
         den = delta + psi_const * (1 + 0.34 * self.wind_speed)
         return num / den
+
+    def compute_infiltration(self, irrigation: float, precipitation: float) -> Tuple[float, float]:
+        return irrigation + precipitation, 0.0
+
+    def get_obs(self) -> dict:
+        obs = {}
+        for crop in self.crops:
+            obs[crop.crop_parameters["crop_name"]] = crop.get_obs()
+        return obs
 
 
 class Crop:
@@ -606,38 +613,6 @@ def soil_from_dicts(evp_layer: Dict[str, float], layers: List[Dict[str, float]])
     for layer_info in layers:
         soil.add_layer(layer_from_dict(layer_info))
     return soil
-
-
-layer_specs = {"depth": .5,
-               "theta_fc": .30,
-               "theta_wp": .1,
-               "theta_sat": .45,
-               "theta_res": .067,
-               "alpha": 0.078,  # .02,
-               "K0": 10.8,
-               "n": 1.75,  # 1.41,
-               "theta": 0.3}
-
-layer_specs2 = {"depth": .5,
-                "theta_fc": .30,
-                "theta_wp": .1,
-                "theta_sat": .45,
-                "theta_res": .067,
-                "alpha": 0.078,  # .02,
-                "K0": 10.8,
-                "n": 1.75,  # 1.41,
-                "theta": 0.25}
-
-evp_layer_specs = {"depth": 0.1,
-                   "theta_fc": 0.3,
-                   "theta_wp": 0.1,
-                   "theta_sat": 0.45,
-                   "theta_res": 0.067,
-                   "alpha": 0.078,
-                   "K0": 10.8,
-                   "n": 1.75,
-                   "theta": 0.3,
-                   "rew": 0.2}
 
 
 def harmonic_mean(x1, z1, x2, z2):
