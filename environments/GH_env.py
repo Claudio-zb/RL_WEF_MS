@@ -2,12 +2,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 import pandas as pd
-from gymnasium import spaces
 from torch import Tensor
 #from custom_env import DiscreteCustomEnv
 #from GH_constants import *
 from environments.custom_env import DiscreteCustomEnv
-from environments.GH_constants import *
+from environments.Data.GH.GH_constants import *
 
 
 data_path = "./Data/GH/datosene2020.xls"

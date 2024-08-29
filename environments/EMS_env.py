@@ -1,9 +1,7 @@
-from typing import Any, Union, Tuple, Callable, List, Iterable
-from environments.EMS_constants import *
+from typing import Callable, List, Iterable
 import gymnasium as gym
 
 import copy
-import numpy as np
 from numpy import ndarray
 from scipy.special import exp1
 import torch
@@ -100,7 +98,7 @@ class ContinousEMSEnv(gym.Env):
                                        shape=(2,),
                                        dtype=np.float32)
 
-    def step(self, action: np.ndarray, mode:str = "train") -> Tuple[np.ndarray, np.ndarray, bool, bool, dict]:
+    def step(self, action: np.ndarray, mode: str = "train") -> Tuple[np.ndarray, np.ndarray, bool, bool, dict]:
         """
         Execute one step of the environment, given an action.
         :param action: Action to be executed
@@ -718,5 +716,21 @@ def P_Q_p(q_p: float, h_p: float):
     :param q_p: flow rate [l/s]
     :param h_p: height [m]
     :return: power [kW]"""
-    P_Q_p_ = B_p * (q_p * 1e-3) * (h_p) / 1e3
+    P_Q_p_ = B_p * (q_p * 1e-3) * h_p / 1e3
     return P_Q_p_
+
+
+class EMS_Wrapper(gym.Wrapper):
+    """This class normalize the observations of the EMS environment"""
+
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        self.transform = T_matrix
+
+    def step(self, action):
+        obs, reward, done, truncated, info = self.env.step(action)
+        return obs, reward, done, info
+
+    def reset(self, *, seed=None, options=None):
+        obs, info = self.env.reset()
+        return obs, info

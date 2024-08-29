@@ -1,4 +1,3 @@
-from environments.basic_env import basic_env, DuWrapper
 from environments.EMS_env import ContinousEMSEnv, normalizationWrapper
 import gymnasium as gym
 import numpy as np
