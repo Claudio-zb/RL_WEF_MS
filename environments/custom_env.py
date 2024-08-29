@@ -3,45 +3,30 @@ import torch
 from gymnasium import spaces
 from abc import ABC, abstractmethod
 import numpy as np
+from typing import Callable
 
 
-class Custom_env(ABC, gym.Env):
+class CustomEnv(ABC, gym.Env):
     """
     Abstract class for a custom environment
     """
 
-    def __init__(self, action_low, action_high, continuous: bool = False):
-        self.action_low = action_low
-        self.action_high = action_high
-        self.isContinuous = continuous
-
-    def sample_trajectory(self, policy, max_steps: int = 288):
+    @abstractmethod
+    def sample_trajectory(self,
+                          policy: Callable,
+                          max_steps: int = 288,
+                          rew_fun=None,
+                          initial_conditions: dict = None,
+                          options: dict = None):
         """
-        Sample a trajectory from the environment using the policy.
+        Sample a trajectory from the environment using the given policy.
         :param policy: Policy to be used
         :param max_steps: Maximum number of steps to be taken
+        :param rew_fun: Reward function to be used
+        :param initial_conditions: Initial conditions for the environment
         :return: states and actions of the trajectory
         """
-        policy.eval()
-        states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
-        if self.isContinuous:
-            actions = np.zeros((max_steps, self.action_space.shape[0]))
-        else:
-            actions = np.zeros((max_steps, 1))
-        x0, _ = self.reset()
-        states[0] = x0
-        for i in range(max_steps):
-            if self.isContinuous:
-                action = policy(states[i])
-                action = action.squeeze().detach().cpu().numpy()
-            else:
-                action = policy(states[i]).max(1).indices.view(1, 1)
-
-            actions[i] = self.map_action(action)[0]
-            x_next, _, _, _, _ = self.step(action)
-            states[i + 1] = x_next
-        policy.train()
-        return states, actions
+        pass
 
     @abstractmethod
     def show_sample(self, policy):
@@ -60,4 +45,112 @@ class Custom_env(ABC, gym.Env):
         :return: the action to be taken
         """
         pass
+    
+    @abstractmethod
+    def get_figure(self):
+        """
+        Get the figure for the environment
+        :return: figure
+        """
+        pass
 
+class ContinousCustomEnv(CustomEnv):
+    """
+    Abstract Class for continous action custom environments
+    """
+    def __init__(self, action_low, action_high):
+        self.action_low = action_low
+        self.action_high = action_high
+        self.transform:np.ndarray = None
+    
+    def sample_trajectory(self,
+                          policy: Callable,
+                          max_steps: int = 288,
+                          rew_fun=None,
+                          initial_conditions: dict = None,
+                          options: dict = None):
+
+        policy.eval()
+        states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
+        
+        if initial_conditions is not None:
+            x0 = self.load_initial_conditions(initial_conditions)
+        elif options is not None:
+            x0, _ = self.reset(options={"t_init": 0})
+        else:
+            x0, _ = self.reset()
+        states[0] = x0
+
+        actions = np.zeros((max_steps, self.action_low.shape[0]))
+
+        for i in range(max_steps):
+            action = policy((states[i]))
+            action = action.squeeze().detach().cpu().numpy()
+            actions[i] = action
+
+            x_next, _, terminated, truncated, _ = self.step(action)
+            states[i + 1] = x_next
+            if terminated or truncated:
+                states = states[:i + 2]
+                actions = actions[:i + 1]
+                break
+        policy.train()
+        rewards = np.zeros(len(actions))
+        if rew_fun is not None:
+            for i in range(len(actions)):
+                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
+
+        return states, actions, rewards
+
+
+class DiscreteCustomEnv(CustomEnv):
+    """
+    Abstract Class for continous action custom environments
+    """
+
+    def __init__(self, action_values):
+        self.action_values = action_values
+    
+    def sample_trajectory(self,
+                          policy: Callable,
+                          max_steps: int = 288,
+                          rew_fun=None,
+                          initial_conditions: dict = None,
+                          options: dict = None):
+        policy.eval()
+        states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
+        
+        if initial_conditions is not None:
+            x0 = self.load_initial_conditions(initial_conditions)
+        elif options is not None:
+            x0, _ = self.reset(options={"t_init": 0})
+        else:
+            x0, _ = self.reset()
+        states[0] = x0
+
+        a_shape = self.action_values.shape
+        if len(a_shape) > 1:
+            actions = np.zeros((max_steps, self.action_values.shape[1]))
+        else:
+            actions = np.zeros((max_steps, 1))
+
+        for i in range(max_steps):
+            action = policy(states[i]).max(1).indices.view(1, 1) # the index
+            actions[i] = self.action_values[action]
+
+            x_next, _, terminated, truncated, _ = self.step(action)
+            states[i + 1] = x_next
+            if terminated or truncated:
+                states = states[:i + 2]
+                actions = actions[:i + 1]
+                break
+        policy.train()
+        rewards = np.zeros(max_steps)
+        if rew_fun is not None:
+            for i in range(len(actions)):
+                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
+        else:
+            rew_fun = self.reward_fun
+            for i in range(len(actions)):
+                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
+        return states, actions, rewards

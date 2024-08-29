@@ -1,48 +1,395 @@
 from collections import namedtuple, deque
-import numpy as np
-import matplotlib.pyplot as plt
 import random
+import numpy as np
+import torch    
+import os
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
+                        ('state', 'action', 'next_state', 'reward', 'isdone'))
 
+class RReplayMemory():
+    """
+    Replay buffer for agent with LSTM network additionally using previous action, can be used 
+    if the hidden states are not stored (arbitrary initialization of lstm for training).
+    And each sample contains the whole episode instead of a single step.
+    """
+    def __init__(self, capacity, device):
+        self.capacity = capacity
+        self.buffer = []
+        self.position = 0
+        self.device = device
+
+    def add(self, state, action, reward, next_state, done):
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+        self.buffer[self.position] = (state, action, reward, next_state, done)
+        self.position = int((self.position + 1) % self.capacity)  # as a ring buffer
+
+    def sample(self, batch_size):
+        batch = random.sample(self.buffer, batch_size)
+        state, action, reward, next_state, done = map(np.stack,
+                                                  zip(*batch))  # stack for each element
+        ''' 
+        the * serves as unpack: sum(a,b) <=> batch=(a,b), sum(*batch) ;
+        zip: a=[1,2], b=[2,3], zip(a,b) => [(1, 2), (2, 3)] ;
+        the map serves as mapping the function on each list element: map(square, [2,3]) => [4,9] ;
+        np.stack((1,2)) => array([1, 2])
+        '''
+        return torch.tensor(state, dtype=torch.float32, device=self.device), torch.tensor(action, dtype=torch.float32, device=self.device), torch.tensor(reward, dtype=torch.float32, device=self.device), torch.tensor(next_state, dtype=torch.float32, device=self.device), torch.tensor(done, dtype=torch.float32, device=self.device)
+
+    def __len__(
+            self):  # cannot work in multiprocessing case, len(replay_buffer) is not available in proxy of manager!
+        return len(self.buffer)
+
+    def get_length(self):
+        return len(self.buffer)
 
 class ReplayMemory(object):
     """
     Replay memory class for storing transitions
     """
 
-    def __init__(self, capacity):
-        self.memory = deque([], maxlen=capacity)
+    def __init__(self, obs_dim, action_dim, capacity, device):
+        self.states = torch.zeros(capacity, obs_dim).to(device)
+        self.actions = torch.zeros(capacity, action_dim).to(device)
+        self.next_states = torch.zeros(capacity, obs_dim).to(device)
+        self.rewards = torch.zeros(capacity, 1).to(device)
+        self.dones = torch.zeros(capacity, 1).to(device)
+        self.idx:int = 0
+        self.isFull = False
+        self.capacity = capacity
+        self.action_dim = action_dim
+        self.device = device
+        self.obs_dim = obs_dim
+        
 
-    def push(self, *args):
+    def add(self, *args):
         """Save a transition"""
-        self.memory.append(Transition(*args))
+        self.states[self.idx] = args[0]
+        self.actions[self.idx] = args[1]
+        self.rewards[self.idx] = args[2]
+        self.next_states[self.idx] = args[2]
+        self.dones[self.idx] = args[4]
+        self.idx = (self.idx + 1) % self.capacity
+        if self.idx == 0:
+            self.isFull = True
 
-    def sample(self, batch_size):
+    def sample(self, batch_size, lookback=6):
         """Sample a batch of transitions"""
-        return random.sample(self.memory, batch_size)
+        if self.isFull:
+            indices = np.random.randint(0, len, batch_size)
+        else:
+            indices = np.random.randint(0, self.idx, batch_size)
+        with torch.no_grad():
+            states = self.states[indices, :]
+            next_states = self.next_states[indices, :]
+            actions = self.actions[indices, :]
+            rewards = self.rewards[indices, :]
+            dones = self.dones[indices, :]
+            
+        return states, actions, rewards, next_states, dones
 
     def __len__(self):
         return len(self.memory)
     
-    def plot_memory(self):
-        x = np.zeros(len(self.memory))
-        y = np.zeros(len(self.memory))
-        z = np.zeros(len(self.memory))
-        for idx, item in enumerate(self.memory):
-            if item[2] is not None:
-                x[idx] = item[2][0, 0].cpu().detach().numpy() # actual value
-                y[idx] = item[0][0, 0].cpu().detach().numpy() # prev value
-                z[idx] = item[3][0, 0].cpu().detach().numpy() # reward
 
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-        ax.plot3D(x, y, z, 'gray')
+class ReplayMemory2(object):
+    """
+    Replay memory class for storing transitions
+    """
 
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
+    def __init__(self, obs_dim, action_dim, capacity, device):
+        self.states = torch.zeros(capacity, obs_dim).to(device)
+        self.actions = torch.zeros(capacity, action_dim).to(device)
+        self.next_states = torch.zeros(capacity, obs_dim).to(device)
+        self.rewards = torch.zeros(capacity, 1).to(device)
+        self.dones = torch.zeros(capacity, 1).to(device)
+        self.idx:int = 0
+        self.isFull = False
+        self.capacity = capacity
+        self.action_dim = action_dim
+        self.device = device
+        self.obs_dim = obs_dim
 
-        plt.show()
 
+    def add(self, *args):
+        """Save a transition"""
+        self.states[self.idx] = args[0]
+        self.actions[self.idx] = args[1]
+        self.rewards[self.idx] = args[2]
+        self.next_states[self.idx] = args[2]
+        self.dones[self.idx] = args[4]
+        self.idx = (self.idx + 1) % self.capacity
+        if self.idx == 0:
+            self.isFull = True
+
+    def sample(self, batch_size, lookback=6):
+        """Sample a batch of transitions"""
+        if self.isFull:
+            indices = np.random.randint(0, len, batch_size)
+        else:
+            indices = np.random.randint(0, self.idx, batch_size)
+
+        states = []
+        next_states = []
+        actions = torch.zeros(batch_size, self.action_dim)
+        rewards = torch.zeros(batch_size, 1)
+        dones = torch.zeros(batch_size, 1)
+
+        lengths = []
+        
+        for j, i in enumerate(indices):
+            if i < self.idx:
+                if i >= lookback:
+                    states.append(self.states[i-lookback:i, :])
+                    next_states.append(self.next_states[i-lookback:i, :])
+                    lengths.append(lookback)
+                else:
+                    states.append(self.states[0:i, :])
+                    next_states.append(self.next_states[0:i, :])
+                    lengths.append(i)
+            elif i - self.idx < lookback:
+                states.append(self.states[self.idx:i, :])
+                next_states.append(self.next_states[self.idx:i, :])
+                lengths.append(i - self.idx)
+            else:
+                states.append(self.states[i-lookback:i, :])
+                next_states.append(self.next_states[i-lookback:i, :])  
+                lengths.append(lookback)  
+
+            actions[j, :] = self.actions[i, :]
+            rewards[j, 0] = self.rewards[i]
+            dones[j, 0] = self.dones[i]        
+
+        packed_states = torch.nn.utils.rnn.pad_sequence(states, batch_first=True)  
+        packed_next_states = torch.nn.utils.rnn.pad_sequence(next_states, batch_first=True)
+        
+        p_s = torch.nn.utils.rnn.pack_padded_sequence(packed_states, lengths, batch_first=True, enforce_sorted=False)
+        p_ns = torch.nn.utils.rnn.pack_padded_sequence(packed_next_states, lengths, batch_first=True, enforce_sorted=False)
+            
+        return p_s, actions, rewards, p_ns, dones
+
+    def __len__(self):
+        return len(self.memory)
+    
+
+# The ‘sum-tree’ data structure used here is very similar in spirit to the array representation
+# of a binary heap. However, instead of the usual heap property, the value of a parent node is
+# the sum of its children. Leaf nodes store the transition priorities and the internal nodes are
+# intermediate sums, with the parent node containing the sum over all priorities, p_total. This
+# provides a efficient way of calculating the cumulative sum of priorities, allowing O(log N) updates
+# and sampling. (Appendix B.2.1, Proportional prioritization)
+
+# Additional useful links
+# Good tutorial about SumTree data structure:  https://adventuresinmachinelearning.com/sumtree-introduction-python/
+# How to represent full binary tree as array: https://stackoverflow.com/questions/8256222/binary-tree-represented-using-array
+class SumTree:
+    def __init__(self, size):
+        self.nodes = [0] * (2 * size - 1)
+        self.data = [None] * size
+
+        self.size = size
+        self.count = 0
+        self.real_size = 0
+
+    @property
+    def total(self):
+        return self.nodes[0]
+
+    def update(self, data_idx, value):
+        idx = data_idx + self.size - 1  # child index in tree array
+        change = value - self.nodes[idx]
+
+        self.nodes[idx] = value
+
+        parent = (idx - 1) // 2
+        while parent >= 0:
+            self.nodes[parent] += change
+            parent = (parent - 1) // 2
+
+    def add(self, value, data):
+        self.data[self.count] = data
+        self.update(self.count, value)
+
+        self.count = (self.count + 1) % self.size
+        self.real_size = min(self.size, self.real_size + 1)
+
+    def get(self, cumsum):
+        assert cumsum <= self.total
+
+        idx = 0
+        while 2 * idx + 1 < len(self.nodes):
+            left, right = 2*idx + 1, 2*idx + 2
+
+            if cumsum <= self.nodes[left]:
+                idx = left
+            else:
+                idx = right
+                cumsum = cumsum - self.nodes[left]
+
+        data_idx = idx - self.size + 1
+
+        return data_idx, self.nodes[idx], self.data[data_idx]
+
+    def __repr__(self):
+        return f"SumTree(nodes={self.nodes.__repr__()}, data={self.data.__repr__()})"
+
+
+class PrioritizedReplayBuffer:
+    def __init__(self, state_size, action_size, buffer_size, eps=1e-2, alpha=0.3, beta=0.2, 
+                 discrete_action_space=True):
+        self.tree = SumTree(size=buffer_size)
+
+        # PER params
+        self.eps = eps  # minimal priority, prevents zero probabilities
+        self.alpha = alpha  # determines how much prioritization is used, α = 0 corresponding to the uniform case
+        self.beta = beta  # determines the amount of importance-sampling correction, b = 1 fully compensate for the non-uniform probabilities
+        self.max_priority = eps  # priority for new samples, init as eps
+
+        # transition: state, action, reward, next_state, done
+        self.state = torch.empty(buffer_size, state_size, dtype=torch.float)
+        if discrete_action_space:
+            self.action = torch.empty(buffer_size, dtype=torch.long)
+        else:
+            self.action = torch.empty(buffer_size, action_size, dtype=torch.float)
+        self.reward = torch.empty(buffer_size, dtype=torch.float)
+        self.next_state = torch.empty(buffer_size, state_size, dtype=torch.float)
+        self.done = torch.empty(buffer_size, dtype=torch.int)
+
+        self.count = 0
+        self.real_size = 0
+        self.size = buffer_size
+
+    def add(self, transition):
+        state, action, reward, next_state, done = transition
+
+        # store transition index with maximum priority in sum tree
+        self.tree.add(self.max_priority, self.count)
+
+        # store transition in the buffer
+        self.state[self.count] = torch.as_tensor(state)
+        self.action[self.count] = torch.as_tensor(action)
+        self.reward[self.count] = torch.as_tensor(reward)
+        self.next_state[self.count] = torch.as_tensor(next_state)
+        self.done[self.count] = torch.as_tensor(done)
+
+        # update counters
+        self.count = (self.count + 1) % self.size
+        self.real_size = min(self.size, self.real_size + 1)
+
+    def sample(self, batch_size):
+        assert self.real_size >= batch_size, "buffer contains less samples than batch size"
+
+        sample_idxs, tree_idxs = [], []
+        priorities = torch.empty(batch_size, 1, dtype=torch.float)
+
+        # To sample a minibatch of size k, the range [0, p_total] is divided equally into k ranges.
+        # Next, a value is uniformly sampled from each range. Finally the transitions that correspond
+        # to each of these sampled values are retrieved from the tree. (Appendix B.2.1, Proportional prioritization)
+        segment = self.tree.total / batch_size
+        for i in range(batch_size):
+            a, b = segment * i, segment * (i + 1)
+
+            cumsum = random.uniform(a, b)
+            # sample_idx is a sample index in buffer, needed further to sample actual transitions
+            # tree_idx is a index of a sample in the tree, needed further to update priorities
+            tree_idx, priority, sample_idx = self.tree.get(cumsum)
+
+            priorities[i] = priority
+            tree_idxs.append(tree_idx)
+            sample_idxs.append(sample_idx)
+
+        # Concretely, we define the probability of sampling transition i as P(i) = p_i^α / \sum_{k} p_k^α
+        # where p_i > 0 is the priority of transition i. (Section 3.3)
+        probs = priorities / self.tree.total
+
+        # The estimation of the expected value with stochastic updates relies on those updates corresponding
+        # to the same distribution as its expectation. Prioritized replay introduces bias because it changes this
+        # distribution in an uncontrolled fashion, and therefore changes the solution that the estimates will
+        # converge to (even if the policy and state distribution are fixed). We can correct this bias by using
+        # importance-sampling (IS) weights w_i = (1/N * 1/P(i))^β that fully compensates for the non-uniform
+        # probabilities P(i) if β = 1. These weights can be folded into the Q-learning update by using w_i * δ_i
+        # instead of δ_i (this is thus weighted IS, not ordinary IS, see e.g. Mahmood et al., 2014).
+        # For stability reasons, we always normalize weights by 1/maxi wi so that they only scale the
+        # update downwards (Section 3.4, first paragraph)
+        weights = (self.real_size * probs) ** -self.beta
+
+        # As mentioned in Section 3.4, whenever importance sampling is used, all weights w_i were scaled
+        # so that max_i w_i = 1. We found that this worked better in practice as it kept all weights
+        # within a reasonable range, avoiding the possibility of extremely large updates. (Appendix B.2.1, Proportional prioritization)
+        weights = weights / weights.max()
+
+        batch = (
+            self.state[sample_idxs].to(device()),
+            self.action[sample_idxs].to(device()),
+            self.reward[sample_idxs].to(device()),
+            self.next_state[sample_idxs].to(device()),
+            self.done[sample_idxs].to(device())
+        )
+        return batch, weights, tree_idxs
+
+    def update_priorities(self, data_idxs, priorities):
+        if isinstance(priorities, torch.Tensor):
+            priorities = priorities.detach().cpu().numpy()
+
+        for data_idx, priority in zip(data_idxs, priorities):
+            # The first variant we consider is the direct, proportional prioritization where p_i = |δ_i| + eps,
+            # where eps is a small positive constant that prevents the edge-case of transitions not being
+            # revisited once their error is zero. (Section 3.3)
+            priority = (priority + self.eps) ** self.alpha
+
+            self.tree.update(data_idx, priority)
+            self.max_priority = max(self.max_priority, priority)
+
+
+class ReplayBuffer:
+    def __init__(self, state_size, action_size, buffer_size):
+        # state, action, reward, next_state, done
+        self.state = torch.empty(buffer_size, state_size, dtype=torch.float)
+        self.action = torch.empty(buffer_size, action_size, dtype=torch.float)
+        self.reward = torch.empty(buffer_size, dtype=torch.float)
+        self.next_state = torch.empty(buffer_size, state_size, dtype=torch.float)
+        self.done = torch.empty(buffer_size, dtype=torch.int)
+
+        self.count = 0
+        self.real_size = 0
+        self.size = buffer_size
+
+    def add(self, transition):
+        state, action, reward, next_state, done = transition
+
+        # store transition in the buffer
+        self.state[self.count] = torch.as_tensor(state)
+        self.action[self.count] = torch.as_tensor(action)
+        self.reward[self.count] = torch.as_tensor(reward)
+        self.next_state[self.count] = torch.as_tensor(next_state)
+        self.done[self.count] = torch.as_tensor(done)
+
+        # update counters
+        self.count = (self.count + 1) % self.size
+        self.real_size = min(self.size, self.real_size + 1)
+
+    def sample(self, batch_size):
+        assert self.real_size >= batch_size
+
+        sample_idxs = np.random.choice(self.real_size, batch_size, replace=False)
+
+        batch = (
+            self.state[sample_idxs].to(device()),
+            self.action[sample_idxs].to(device()),
+            self.reward[sample_idxs].to(device()),
+            self.next_state[sample_idxs].to(device()),
+            self.done[sample_idxs].to(device())
+        )
+        return batch
+    
+def set_seed(env, seed=0):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    env.action_space.seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def device(force_cpu=False):
+    return "cuda" if torch.cuda.is_available() and not force_cpu else "cpu"

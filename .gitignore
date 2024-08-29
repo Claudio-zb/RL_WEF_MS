@@ -1,4 +1,9 @@
-training_results/*
-.idea/*
-__pycache__/*
-*.pyc
+__pycache__/
+.vscode/
+figures/*
+RL_algoritms/__pycache__/*
+environments/__pycache__/*
+utils_functions/__pycache__/*
+training_results/ems/*
+training_results/quad-sys/*
+proando.ipynb

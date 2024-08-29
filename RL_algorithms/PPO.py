@@ -1,5 +1,5 @@
 import torch
-from EMS_networks import ValueNN, ActorNN
+from utils_functions.EMS_networks import ValueNN, ActorNN
 from torch.distributions import MultivariateNormal
 from torch.optim import Adam
 from torch import nn
@@ -7,15 +7,20 @@ import numpy as np
 from environments.custom_env import Custom_env
 from utils_functions.train_utils import get_action
 from RL_algorithms.RL_algorithm import RL_algorithm
+from utils_functions.ReplayMemory import PPOReplayMemory, PPOTransition
 
 
 class PPO(RL_algorithm):
     """
-    This class implements the PPO algorithm. It can handle continuous action spaces.
+    This class implements the PPO algorithm.
     """
+
+    def update_training_plots(self, i_episode: int):
+        pass
 
     def __init__(self, env: Custom_env, options=None):
         self._init_hyperparameters(options)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = env
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
@@ -23,6 +28,7 @@ class PPO(RL_algorithm):
         policy_high = env.action_high
         self.policy = ActorNN(self.obs_dim, self.action_dim, policy_low, policy_high).cuda()
         self.value = ValueNN(self.obs_dim).cuda()
+        self.memory = PPOReplayMemory(20000)
 
         # creating covariance matrix to use get_action() method
         self.cov_var = torch.full(size=(self.action_dim,), fill_value=20.0)
@@ -103,10 +109,27 @@ class PPO(RL_algorithm):
                 self.policy_optim.param_groups[0]["lr"] = 0.0001
                 self.scheduled = True
 
+            # we need to sample the data from the replay memory
+
+            transitions = self.memory.sample(self.timesteps_per_batch)
+
+            batch = PPOTransition(*zip(*transitions))
+
+            non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                                    batch.next_state)), device=self.device, dtype=torch.bool)
+            non_final_next_states = torch.cat([s for s in batch.next_state
+                                               if s is not None])
+
+            state_batch = torch.cat(batch.state)
+            action_batch = torch.cat(batch.action).to(self.device)
+            reward_batch = torch.cat(batch.reward)
+            reward_to_go_batch = torch.cat(batch.reward_to_go).to(self.device)
+
+
             # Calculate Advantage
             self.value.eval()
-            V = self.value(batch_results["batch_obs"]).squeeze()
-            A_k = batch_results["batch_rtgs"] - V.detach()  # ALG STEP 5
+            V = self.value(state_batch).squeeze()
+            A_k = reward_to_go_batch - V.detach()  # ALG STEP 5
             A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
 
             # The learning part
@@ -114,7 +137,7 @@ class PPO(RL_algorithm):
             # policy update
             self.policy.train()
             for j in range(self.n_epochs_policy):
-                _, curr_log_probs, entropy = self.evaluate(batch_results["batch_obs"], batch_results["batch_actions"])
+                _, curr_log_probs, entropy = self.evaluate(state_batch, action_batch)
                 ratios = torch.exp(curr_log_probs - batch_results["batch_log_probs"])  # P(a_t|s_t) / P_old(a_t|s_t)
 
                 # calculate surrogate losses
@@ -260,7 +283,6 @@ class PPO(RL_algorithm):
                 ep_values.append(val.flatten())
                 batch_results["batch_actions"].append(action)
                 batch_results["batch_log_probs"].append(log_prob)
-
                 total_timesteps += 1
 
             batch_results["batch_lens"].append(aux_eps + 1)
@@ -280,6 +302,13 @@ class PPO(RL_algorithm):
         batch_results["batch_rtgs"] = batch_rtgs
         batch_results["cumulative_rewards"] = cumulative_rewards
         batch_results["total_rewards"] = total_rews
+
+        # step 4.1 add the values to the replay memory
+
+        for index, _ in enumerate(batch_results["batch_obs"][:-1]):
+            self.memory.push(batch_results["batch_obs"][index], batch_results["batch_actions"][index],
+                             batch_results["batch_obs"][index + 1], batch_results["batch_rews"][index],
+                             batch_results["batch_rtgs"][index])
 
         return batch_results
 
@@ -305,6 +334,7 @@ class PPO(RL_algorithm):
             cumulative_rewards.insert(0, discounted_reward)
         batch_rgts = torch.tensor(np.array(batch_rgts), dtype=torch.float32).cuda()
         cumulative_rewards = torch.tensor(np.array(cumulative_rewards), dtype=torch.float32).cpu()
+
         return batch_rgts.squeeze(1), cumulative_rewards, total_rewards
 
     def _init_hyperparameters(self, options=None):

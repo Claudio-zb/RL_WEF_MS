@@ -1,41 +1,31 @@
-# This is a sample Python script.
+from environments.EMS_env import ContinousEMSEnv, normalizationWrapper
+import gymnasium as gym
+import numpy as np
+from stable_baselines3 import TD3, PPO
+from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
+import matplotlib.pyplot as plt
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-from RL_algorithms.PPO import PPO
-from RL_algorithms.DQN import DQN
-from environments.Quad_env import Quad_env
-from json import load
-import pandas as pd
-import os
-from datetime import datetime
-import torch
+env = ContinousEMSEnv()
+env = normalizationWrapper(env)
 
-alg_name = "PPO"
+model = PPO.load("ppo_simple2_env")
+actions1 = []
+actions2 = []
+h = 288
+responses=np.zeros((env.observation_space.low.shape[-1], 288))
+actions = np.zeros((2,288))
+rewards = np.zeros(288)
+s, _ = env.reset()
+for i in range(h):
+    if i == 143:
+        print("a")
+    action = model.predict(s)[0]
+    s, rew, d, w, info = env.step(action)
+    responses[:,i] = s
+    rewards[i] = rew
+    actions[:,i] = action
+    actions1.append(action[0])
+    actions2.append(action[1])
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    try:
-        with open('./training_options/dqn_quad_opts.json', 'r') as file:
-            options = load(file)
-        print(options)
-        print("Options loaded")
-    except Exception as e:
-        print(e)
-
-    # Get the current date and time
-    current_datetime = datetime.now()
-    date_time_str = current_datetime.strftime("%Y%m%d_%H%M%S")
-    directory_name = f"{alg_name}_{date_time_str}"
-    path = "./training_results/quad_env"  # Change this to your desired path
-    full_path = os.path.join(path, directory_name)
-    os.makedirs(full_path)
-
-    env_id = options["env_id"]
-
-    environment = Quad_env()
-    rl_model = DQN(environment, options=None)
-    results, policy = rl_model.learn(6000)
-    torch.save(policy, full_path + r"\policy.pt")
-    df = pd.DataFrame(results)
-    df.to_csv(full_path + r"\training_results.csv")
+plt.plot(responses[0,:-1], label='')
+plt.plot(responses[1,:-1], label='')
