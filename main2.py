@@ -1,19 +1,18 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from environments.WMS_env import *
 import pandas as pd
-
+from environments.SimuEnv import SimuEnv
 #%%
 
-env = WMS()
+env = SimuEnv(irrigation_policy=lambda x: 0.0, ems_policy=lambda x: 0.0)
 
-env.start()
+env.start(295)
 for i in range(200):
     if i == 54:
         print("here")
-    env.step()
+    env.run()
 
-hist_data = env.get_hist_data()
+hist_data = env.cultivate_env.get_hist_data()
 
 #%%
 crop_df = pd.DataFrame(hist_data["tomato"][0])

@@ -1,43 +1,86 @@
-from typing import Callable, List, Iterable
+from typing import List
 import gymnasium as gym
 
-import copy
-from numpy import ndarray
 from scipy.special import exp1
 import torch
-from utils_functions.funcionesEMS import *
+from environments.utils.funcionesEMS import *
 from gymnasium import spaces
-from matplotlib import figure
 from typing import Tuple
 
 
 class MicroGridEnv:
     def __init__(self, n_crops: int = 1):
-        self.v_tanks_min = [Vt_min] * n_crops
-        self.v_tanks_max = [Vt_max] * n_crops
-        self.v_tanks = [(Vt_max + Vt_min) / 2] * n_crops
-        self.v_irrs = [0] * n_crops
 
-        self.soe = SoE_max
+        # setting up the environment
+        self.n_crops: int = n_crops
+        self.v_tanks_min: List[float] = [Vt_min] * n_crops
+        self.v_tanks_max: List[float] = [Vt_max] * n_crops
 
+        # ss variables
+        self.v_tanks: List[float] = [(Vt_max + Vt_min) / 2] * n_crops
+        self.v_irrs: List[float] = [0] * n_crops
+        self.drawdowns: List[float] = [0] * n_crops
+        self.soe: float = SoE_max
+
+        # drawdown relevant variables
+        self.prev_Qps: List[float] = [0] * n_crops
+        self.dQs: List[np.ndarray] = [np.array([0])] * n_crops
+
+        # daily time counter
+        self.k: int = 0
+        # still don't know why to include it
         self.v_refs = [0.0 for _ in range(n_crops)]
 
-    def next_step(self, actions: Tuple[float, list], disturbances):
+    def next_step(self, actions: Tuple[float, list], disturbances) -> Tuple[list, list, list, float, float]:
+        """The pbat battery is computed from an external policy"""
+
+        assert len(actions[1]) == self.n_crops, "The number of actions should match the number of crops"
+
+        # unpacking the actions
         p_bat = actions[0]
+        q_ps = [a_pair[0] for a_pair in actions]
+        q_irrs = [a_pair[1] for a_pair in actions]
+
+        q_ps = np.clip(np.array(q_ps), 0, Q_p_max)
+        q_irrs = np.clip(np.array(q_irrs), 0, I_max)
+
         p_fv = disturbances[0]
         p_load = disturbances[1]
 
+        # loop over the crops
         for idx, vtank in self.v_tanks:
-            self.v_tanks[idx] = vtank + actions[1][idx]
-            self.v_irrs[idx] = self.v_irrs[idx] + actions[1][idx]
-            self.soe = self.soe + p_bat * 600
+            self.v_tanks[idx] = np.clip(vtank + q_ps[idx], self.v_tanks_min[idx], self.v_tanks_max[idx])
+            self.v_irrs[idx] = np.clip(self.v_irrs[idx] + q_irrs[idx], 0, np.inf)
+            self.soe = np.clip(self.soe + p_bat * 600, SoE_min, SoE_max)
 
-        return self.v_tanks, self.v_irrs, self.soe
+            self.drawdowns[idx] = drawdown(self.k, self.dQs[idx])
+
+            self.dQs[idx].append(q_ps[idx] - self.prev_Qps[idx])
+            self.prev_Qps[idx] = q_ps[idx]
+
+        self.k += 1
+
+        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over|
+            for idx in range(self.n_crops):
+                self.v_irrs[idx] = 0.0
+
+        return self.v_tanks, self.v_irrs, self.drawdowns, self.soe, self.k
+
+    def set_state(self, vtanks: list, virrs: list, dqs: list, soe: float, k: int):
+        """ Set the state of the environment """
+        self.v_tanks = vtanks
+        self.v_irrs = virrs
+        self.dQs = dqs
+        self.soe = soe
+        self.k = 0
+
+    def get_state(self) -> Tuple[list, list, list, float, float]:
+        return self.v_tanks, self.v_irrs, self.drawdowns, self.soe, self.k
 
 
 class ContinousEMSEnv(gym.Env):
     """
-    Environment for the Energy Management System
+    Continous environment for the Energy Management System
     """
 
     def __init__(self, rwd_function=None, render: bool = True):
@@ -46,7 +89,8 @@ class ContinousEMSEnv(gym.Env):
         :param render:
         """
         self.render = render
-        self._init_figure()
+
+        self.micro_grid = MicroGridEnv(2)
 
         # Hyper params
         self.max_steps: int = 288
@@ -76,16 +120,11 @@ class ContinousEMSEnv(gym.Env):
         # State variables en inputs
 
         self.Irr = np.array([0.0])
-        self.V_Irr = np.array([0.0])
         self.Q_p = np.array([0.0])
         self.Pbat = np.array([0.0])
         self.V_ref = np.array([0.0])
         self.Vt = np.array([0.0])
-        self.SoE = np.array([0.0])
-        self.E_residual = 0.0
         self.day_picked = 0
-        self.dQ = []
-        self.drawdown = 0.0
 
         self.reward_fun = continous_rwd_fun
 
@@ -131,38 +170,24 @@ class ContinousEMSEnv(gym.Env):
         :return: tuple of (next_observation, reward, terminated, truncated, info)
         """
         # Store the previous values of the variables to compute the reward
-        observation = self._get_obs()
+        obs = self._get_obs()
 
         action = self.map_action(action)
         action = action.flatten()
 
-        action_ = self._low_level_control(action)
-
-        # self.dQ[self.k + 144] = (action_[0] - self.Q_p) * 1e-3
-        self.dQ.append((action_[0] - self.Q_p) * 1e-3)
-
-        self.Q_p = action_[0]
-        self.Irr = action_[1]
-
-        next_state, P_pump, self.E_residual = EMS_ode(self._get_state(),
-                                                      [self.V_ref, self.p_fv[self.k % 144], self.demanda[self.k % 144]],
-                                                      action_)
+        disturbances = [self.p_fv[self.k % 144], self.demanda[self.k % 144]]
+        next_obs = self.micro_grid.next_step((self.Pbat, [self.Q_p, self.Irr]), disturbances)
 
         truncated = False
         terminated = False
-
         Info = {}
 
         self.k = self.k + 1
 
-        self.V_Irr = next_state[0]
-        self.Vt = next_state[1]
-        self.SoE = next_state[2]
-        self.drawdown = drawdown(self.k + 144, self.dQ[0:self.k + 144])
         # self.drawdown = drawdown(self.k + 144, self.dQ)
 
         if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over
-            self.V_Irr = 0.0
+
             self.V_ref = 4.0 * np.random.rand()
 
             if mode == "eval":
@@ -173,28 +198,14 @@ class ContinousEMSEnv(gym.Env):
             self.p_fv, self.demanda = self._pick_metereological_data(self.day_picked)
 
         if self.k % 288 == 0:
-            self.V_Irr = 0.0
             self.V_ref = 4.0 * np.random.rand()
             terminated = True
 
         observation_next = self._get_obs()
 
-        reward = self.reward_fun(observation, action, observation_next)
+        reward = self.reward_fun(obs, action, next_obs)
 
         return observation_next, reward, terminated, truncated, Info
-
-    def _low_level_control(self, action: np.ndarray) -> np.ndarray:
-        """Low level control for the pump and irrigation"""
-        action_ = np.copy(action)
-        if self.Vt <= Vt_min:
-            action_[1] = 0.0
-        if self.Vt >= Vt_max:
-            action_[0] = 0.0
-        if self.V_ref <= self.V_Irr:
-            action_[1] = 0.0
-        if self.drawdown > 1:
-            action_[0] = 0.0
-        return action_
 
     def map_action(self, policy_output: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
         if torch.is_tensor(policy_output):
@@ -202,7 +213,7 @@ class ContinousEMSEnv(gym.Env):
         else:
             return policy_output
 
-    def reset(self, seed=None, options: dict = None) -> Tuple[np.ndarray, dict]:
+    def reset(self, seed: int = None, options: dict = None) -> Tuple[np.ndarray, dict]:
         """
         Reset the environment to the initial state
         :param seed: random seed
@@ -219,18 +230,17 @@ class ContinousEMSEnv(gym.Env):
         else:
             self.day_picked = np.random.randint(0, 70)
 
-        V_tank = np.minimum((Vt_max - Vt_min) * np.random.random_sample() + Vt_min,
-                            (Vt_max - Vt_min) * np.random.random_sample() + Vt_min)
-        V_ref = 3.0 * np.random.rand() + 1.0
+        V_tank = [np.minimum((Vt_max - Vt_min) * np.random.random_sample() + Vt_min,
+                             (Vt_max - Vt_min) * np.random.random_sample() + Vt_min) for _ in
+                  range(self.micro_grid.n_crops)]
+
+        V_refs = [3.0 * np.random.rand() + 1.0 for _ in range(self.micro_grid.n_crops)]
+
         SoE = (SoE_max - SoE_min) * np.random.random_sample() + SoE_min
 
-        InitialObservation = self.set_initial_conditions(self.day_picked,
-                                                         V_ref=V_ref,
-                                                         V_tank=V_tank,
-                                                         Soe=SoE,
-                                                         Irr_prev=0.0,
-                                                         instant_k=0,
-                                                         V_irr=0.0)
+        self.micro_grid.set_state(V_tank, [0.0 for _ in range(self.micro_grid.n_crops)], SoE)
+
+        InitialObservation = self.set_initial_conditions(self.day_picked, V_refs, 0)
         info = {}
 
         return InitialObservation, info
@@ -247,56 +257,40 @@ class ContinousEMSEnv(gym.Env):
 
         return p_fv, demanda
 
-    def set_initial_conditions(self, day_picked, V_ref, V_tank, Soe, Irr_prev, instant_k, V_irr):
+    def set_initial_conditions(self, day_picked: int, v_refs: List[float], instant_k: int):
         """
         Set the initial conditions of the environment
-        :param V_irr:
         :param instant_k:
         :param day_picked:
-        :param V_tank:
-        :param Soe:
-        :param Irr_prev:
+        :param v_refs:
         :return: Initial observation
         """
         self.k = instant_k
-
-        self.Vt = V_tank
-        self.SoE = Soe
-        self.Irr = Irr_prev
-        self.V_Irr = V_irr
-        self.V_ref = V_ref
+        self.v_refs = v_refs
         self.p_fv, self.demanda = self._pick_metereological_data(day_picked)
-        self.Pbat, _, self.E_residual = manage_batteries(self.SoE, self.p_fv[self.k], self.demanda[self.k], 0)
-        self.dQ, self.Q_p = self._create_dQ(V_req=V_ref)
-        self.drawdown = drawdown(self.k + 144, self.dQ[0:144])
-        InitialObservation = np.array([self.V_ref,
-                                       self.V_Irr,
-                                       self.Irr,
-                                       self.Vt,
-                                       self.Q_p,
-                                       self.drawdown,
-                                       self.SoE,
-                                       self.p_fv[self.k],
-                                       self.demanda[self.k],
-                                       0.0,
-                                       self.E_residual])
-        return InitialObservation
+
+        v_tanks, v_irrs, drawdowns, soe = self.micro_grid.get_state()
+        p_fv, demanda = self.p_fv[self.k], self.demanda[self.k]
+        disturbances = [p_fv, demanda]
+        _, _, e_residual = manage_batteries(soe, p_fv, demanda, 0)
+
+        init_obs = np.array(v_refs + v_tanks + v_irrs + drawdowns + disturbances + [self.k % 144] + [e_residual])
+        return init_obs
 
     def _create_dQ(self, V_req) -> Tuple[list, float]:
-        "Returns the dQ sequence from a previous day and the last value for the pump action Q_p"
+        """Returns the dQ sequence from a previous day and the last value for the pump action Q_p"""
         L = self.day_steps + self.max_steps
         prev_Q = np.zeros(self.day_steps)
-        # d_Q = np.zeros(L)  # []
-        sum = 0
+        sum_ = 0
         K = Q_p_max * dt / 1000
         for i in range(L):
-            if sum < V_req:
+            if sum_ < V_req:
                 x = np.random.rand() * K
-                if sum + x < V_req:
+                if sum_ + x < V_req:
                     prev_Q[i] = x
-                    sum += x
+                    sum_ += x
                 else:
-                    prev_Q[i] = V_req - sum
+                    prev_Q[i] = V_req - sum_
                     break
             else:
                 break
@@ -308,213 +302,13 @@ class ContinousEMSEnv(gym.Env):
         d_Q = [dq for dq in prev_d_Q]
         return d_Q, last_Q
 
-    def sample_trajectory(self,
-                          policy: Callable,
-                          max_steps: int = 288,
-                          rew_fun=None):
-
-        states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
-        x0, _ = self.reset()
-        states[0] = x0
-
-        actions = np.zeros((max_steps, self.action_low.shape[0]))
-
-        for i in range(max_steps):
-            action = policy(states[i])
-            if type(action) == torch.Tensor:
-                action = action.squeeze().detach().cpu().numpy()
-            x_next, _, terminated, truncated, _ = self.step(action)
-            actions[i] = action
-            states[i + 1] = x_next
-            if terminated or truncated:
-                states = states[:i + 2]
-                actions = actions[:i + 1]
-                break
-        rewards = np.zeros(len(actions))
-        if rew_fun is not None:
-            for i in range(len(actions)):
-                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
-
-        return states, actions, rewards
-
-    def show_sample(self, policy):
-        """
-        Render the environment
-        :param policy: policy to be used
-        :return:
-        """
-        states, actions, rewards = self.sample_trajectory(policy, max_steps=288, rew_fun=self.reward_fun)
-        qp = actions[:, 0]
-        P_q = np.array([P_Q_p(q, h_p_const) for q in qp])
-
-        t = np.linspace(0, 48, states.shape[0] - 1)
-
-        # update lines
-
-        self.lines[0].set_data(t, states[:-1, 0])
-        self.lines[1].set_data(t, states[:-1, 1])
-
-        self.lines[2].set_data(t, actions[:, 1] * 100)
-        self.lines[3].set_data(t, actions[:, 0] * 100)
-
-        self.lines[4].set_data(t, states[:-1, 6])
-
-        self.lines[5].set_data(t, states[:-1, 8])
-        self.lines[6].set_data(t, P_q)
-        self.lines[7].set_data(t, states[1:, 7])
-
-        self.lines[8].set_data(t, states[:-1, 3])
-
-        self.lines[9].set_data(t, states[:-1, 5])
-
-        self.lines[10].set_data(t, states[:-1, -1])
-        #self.lines[10].set_data(t, rewards)
-
-        self.lines[11].set_data(t, rewards[0:len(t)])
-
-        for ax in self.axs:
-            ax.relim()
-            ax.autoscale_view()
-
-    def compare_policies(self,
-                         policies: Iterable[
-                             Tuple[Callable[[Union[np.ndarray, torch.Tensor]], Union[ndarray, torch.Tensor]]]],
-                         max_steps: int = 144,
-                         rew_funs: Iterable[
-                             Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]] = None,
-                         options=None) -> list:
-        """
-        Compare the policies in the environment
-        :param policies: list of policies to be compared
-        :param max_steps: maximum number of steps to be taken
-        :param rew_funs: set of reward functions to be used
-        :return:
-        """
-        # initialize environment
-        if options is not None:
-            x0, info = self.reset(options=options)
-        else:
-            x0, info = self.reset()
-        envs = [self]
-        trajectories = []
-
-        # make copies of the environment so they have same initial conditions
-        for i in range(1, len(policies)):
-            envs.append(copy.copy(self))
-            envs[i].load_initial_conditions(info)
-
-        # Run the policies in the environment
-
-        if rew_funs is None:
-            for idx, env in enumerate(envs):
-                policy = policies[idx][0]
-                scaler = policies[idx][1]
-                s, a, r = env.sample_trajectory(policy, scaler,
-                                                max_steps,
-                                                self.reward_fun,
-                                                initial_conditions=info)
-                trajectories.append([s, a, r])
-
-        else:
-            for idx, env in enumerate(envs):
-                policy = policies[idx][0]
-                scaler = policies[idx][1]
-                s, a, r = env.sample_trajectory(policy, scaler,
-                                                max_steps,
-                                                rew_funs[idx],
-                                                initial_conditions=info)
-                trajectories.append([s, a, r])
-
-        return trajectories
-
-    def get_figure(self):
-        return self.fig
-
-    def _init_figure(self):
-        self.fig: figure.Figure = None
-        self.axs = []
-        self.lines = None
-        if self.render:
-            self.fig = figure.Figure()
-            self.axs = [self.fig.add_subplot(4, 2, i + 1) for i in range(4 * 2)]
-            self.fig.suptitle('Energy Management System')
-            self.fig.tight_layout()
-            self.fig.set_size_inches(10, 10)
-            self.lines = []
-
-            # lines for the reference traking
-            self.lines.append(self.axs[0].plot([], [], label="V_req")[0])
-            self.lines.append(self.axs[0].plot([], [], label="V_Irr")[0])
-            self.axs[0].set_title("Requerimiento hídrico y volumen irrigado")
-            self.axs[0].set_xlabel("Tiempo [h]")
-            self.axs[0].set_ylabel("Volumen [m3]")
-            self.axs[0].legend()
-
-            # lines for the irrigation and pump
-            self.lines.append(self.axs[1].plot([], [], label="Irr")[0])
-            self.lines.append(self.axs[1].plot([], [], label="Q_pump")[0])
-            self.axs[1].set_title("Irrigación y bombeo")
-            self.axs[1].set_xlabel("Tiempo [h]")
-            self.axs[1].set_ylabel("Flujo [l/s]")
-            self.axs[1].legend()
-
-            # lines for soe
-            self.lines.append(self.axs[2].plot([], [], label="SoE")[0])
-            self.axs[2].set_title("State of Energy")
-            self.axs[2].set_xlabel("Tiempo [h]")
-            self.axs[2].set_ylabel("SoE [kWh]")
-            self.axs[2].legend()
-
-            # lines for the power consumed by the community
-            self.lines.append(self.axs[3].plot([], [], label="P_d")[0])
-            self.lines.append(self.axs[3].plot([], [], label="P_pump")[0])
-            self.lines.append(self.axs[3].plot([], [], label="P_sun")[0])
-            self.axs[3].set_title("Consumo doméstico, bombeo y solar")
-            self.axs[3].set_xlabel("Tiempo [h]")
-            self.axs[3].set_ylabel("Potencia [kW]")
-            self.axs[3].legend()
-
-            # lines for the tank volume
-            self.lines.append(self.axs[4].plot([], [], label="V_tank")[0])
-            self.axs[4].set_title("Volumen del tanque")
-            self.axs[4].set_xlabel("Tiempo [h]")
-            self.axs[4].set_ylabel("Volumen [m3]")
-
-            #lines for the drawdown
-            self.lines.append(self.axs[5].plot([], [], label="drawdown")[0])
-            self.axs[5].set_title("Descenso del pozo")
-            self.axs[5].set_xlabel("Tiempo [h]")
-            self.axs[5].set_ylabel("Descenso [m]")
-
-            # lines for the power balance
-            self.lines.append(self.axs[6].plot([], [], label="E_residual")[0])
-            self.axs[6].set_title("Balance de energía")
-            self.axs[6].set_xlabel("Tiempo [h]")
-
-            # lines for the rewards
-            self.lines.append(self.axs[7].plot([], [], label="Rewards")[0])
-            self.axs[7].set_title("Recompensas")
-            self.axs[7].set_xlabel("Tiempo [h]")
-            self.axs[7].set_ylabel("Rewards")
-
-    def _get_state(self) -> np.ndarray:
-        """Returns the state of the environment"""
-        state = np.array([self.V_Irr, self.Vt, self.SoE])
-        return state
-
     def _get_obs(self) -> np.ndarray:
         """Return the observation of the environment"""
-        observation = np.array([self.V_ref,
-                                self.V_Irr,
-                                self.Irr,
-                                self.Vt,
-                                self.Q_p,
-                                self.drawdown,
-                                self.SoE,
-                                self.p_fv[self.k % 144],
-                                self.demanda[self.k % 144],
-                                (self.k % 144),
-                                self.E_residual])
+        v_tanks, v_irrs, drawdowns, soe = self.micro_grid.get_state()
+        disturbances = [self.p_fv[self.k % 144], self.demanda[self.k % 144]]
+        observation = np.array([soe] + v_tanks + v_irrs + disturbances)
+
+        observation = np.array([self.V_refs] + v_tanks + v_irrs + disturbances + [self.k % 144] + [soe])
         return observation
 
 
@@ -546,61 +340,6 @@ class normalizationWrapper(gym.Wrapper):
         t_state = np.matmul(self.transform, state)
         info = state
         return t_state, reward, terminated, truncated, info
-
-
-class DiscreteEMSEnv(ContinousEMSEnv):
-    """Discrete action space implementation of the EMS environment"""
-
-    def __init__(self, rwd_function=None, render: bool = True):
-        super().__init__(rwd_function, render)
-        self.action_space = spaces.Discrete(16)
-        self.Irr_levels = np.array([0.0, .05, .1, I_max])
-        self.Q_p_levels = np.array([0.0, .3333, .6666, Q_p_max])
-        self.action_values = np.array(np.meshgrid(self.Q_p_levels, self.Irr_levels), dtype=np.float32).T.reshape(-1, 2)
-
-    def map_action(self, action: torch.Tensor) -> np.ndarray:
-        """
-            Map the action from the policy to the action of the environment
-            :param action:
-            :return:
-            """
-        index = action.item()
-        return np.array([self.action_values[index]])
-
-    def sample_trajectory(self,
-                          policy: Callable,
-                          max_steps: int = 288,
-                          rew_fun=None):
-        states = np.zeros((max_steps + 1, self.observation_space.shape[0]))
-        x0, _ = self.reset()
-        states[0] = x0
-        a_shape = self.action_values.shape
-        if len(a_shape) > 1:
-            actions = np.zeros((max_steps, self.action_values.shape[1]))
-        else:
-            actions = np.zeros((max_steps, 1))
-
-        for i in range(max_steps):
-
-            action = policy(states[i])
-            action = action.max(0).indices.view(1, 1)  # the index
-            actions[i] = self.action_values[action]
-
-            x_next, _, terminated, truncated, _ = self.step(action)
-            states[i + 1] = x_next
-            if terminated or truncated:
-                states = states[:i + 2]
-                actions = actions[:i + 1]
-                break
-        rewards = np.zeros(max_steps)
-        if rew_fun is not None:
-            for i in range(len(actions)):
-                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
-        else:
-            rew_fun = self.reward_fun
-            for i in range(len(actions)):
-                rewards[i] = rew_fun(states[i], actions[i], states[i + 1])
-        return states, actions, rewards
 
 
 def default_rwd_fun(s, a, s_next):
@@ -675,7 +414,7 @@ def continous_rwd_fun(s, a, s_next):
 
 
 def EMS_ode(x, d, u) -> Tuple[np.ndarray, float, float]:
-    """The ODE of the micorgrid system
+    """The ODE of the microgrid system
     :param x: state vector V_irr, V_tank, SoE
     :param d: disturbance vector V_ref, P_sun, P_demand
     :param u: control vector Q_pump, Irrigation, P_bat

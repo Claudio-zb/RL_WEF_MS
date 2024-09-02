@@ -2,7 +2,7 @@ from typing import Any, Tuple, Dict, List
 
 import numpy as np
 import pandas as pd
-
+from environments.Data.WMS.WMS_profile import *
 
 def irr_policy(obs: np.ndarray) -> float:
     """Irrigation policy"""
@@ -20,7 +20,7 @@ class CultivateEnv:
 
     def __init__(self):
         self.crops: List[Crop] = [crop_from_dict(tomato)]
-        self.weather_data: pd.DataFrame = pd.read_csv("environments/weather_data.csv")
+        self.weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/weather_data.csv")
         self.doy: int = 1
         self.wind_speed: float = 0.0
         self.max_temperature: float = 0.0
@@ -252,7 +252,7 @@ class Crop:
         if t < t0:
             return self.root_depth_init
         elif t < t1:
-            return self.root_depth + growth_rate
+            return self.root_depth + growth_rate*self.Ks
         else:
             return self.root_depth
 
