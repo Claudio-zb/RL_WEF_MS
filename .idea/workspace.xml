@@ -5,8 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="&quot;cleaning in the project&quot;">
+      <change afterPath="$PROJECT_DIR$/environments/Data/EMS/raw_data/calan_2004_2016.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/environments/Data/process_data.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.vscode/launch.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/EMS_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/EMS_env.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/SimuEnv.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/SimuEnv.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/WMS_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/WMS_env.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/utils/funcionesEMS.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/utils/funcionesEMS.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main2.py" beforeDir="false" afterPath="$PROJECT_DIR$/main2.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -54,6 +60,7 @@
   </component>
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
+    &quot;Python.EMS_test.executor&quot;: &quot;Debug&quot;,
     &quot;Python.Quad_env.executor&quot;: &quot;Debug&quot;,
     &quot;Python.WMS_env.executor&quot;: &quot;Debug&quot;,
     &quot;Python.main2.executor&quot;: &quot;Debug&quot;,
@@ -82,7 +89,30 @@
       <recent name="$PROJECT_DIR$/environments" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.main2.py">
+    <configuration name="EMS_test" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="RL_EMS" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/environments/EMS_test.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="main2.py" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="RL_EMS" />
       <option name="ENV_FILES" value="" />
@@ -109,14 +139,15 @@
     <recent_temporary>
       <list>
         <item itemvalue="Python.main2.py" />
+        <item itemvalue="Python.EMS_test" />
       </list>
     </recent_temporary>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-1d06a55b98c1-0b3e54e931b4-JavaScript-PY-241.18034.82" />
-        <option value="bundled-python-sdk-975db3bf15a3-2767605e8bc2-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.18034.82" />
+        <option value="bundled-js-predefined-1d06a55b98c1-0b3e54e931b4-JavaScript-PY-241.19072.16" />
+        <option value="bundled-python-sdk-8336bb23522e-2767605e8bc2-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.19072.16" />
       </set>
     </attachedChunks>
   </component>
@@ -156,6 +187,18 @@
       <workItem from="1724691605887" duration="2669000" />
       <workItem from="1724763517439" duration="167000" />
       <workItem from="1724797738587" duration="23014000" />
+      <workItem from="1725310842311" duration="4515000" />
+      <workItem from="1725369082730" duration="8198000" />
+      <workItem from="1725378015113" duration="10981000" />
+      <workItem from="1725406218629" duration="6531000" />
+      <workItem from="1725825333814" duration="110000" />
+      <workItem from="1725825503930" duration="9578000" />
+      <workItem from="1725891791237" duration="3325000" />
+      <workItem from="1725975823303" duration="4320000" />
+      <workItem from="1725989310465" duration="374000" />
+      <workItem from="1727100098646" duration="606000" />
+      <workItem from="1727384147389" duration="2428000" />
+      <workItem from="1727448266685" duration="1644000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;soil dynamic included&quot;">
       <option name="closed" value="true" />
@@ -205,16 +248,17 @@
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/main2.py</url>
-          <line>59</line>
-          <option name="timeStamp" value="28" />
+          <url>file://$PROJECT_DIR$/environments/WMS_env.py</url>
+          <line>655</line>
+          <option name="timeStamp" value="37" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/RL_EMS$WMS_env.coverage" NAME="WMS_env Coverage Results" MODIFIED="1724121906610" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/environments" />
-    <SUITE FILE_PATH="coverage/RL_EMS$main2_py.coverage" NAME="main2.py Coverage Results" MODIFIED="1724878360723" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/" />
+    <SUITE FILE_PATH="coverage/RL_EMS$EMS_test.coverage" NAME="EMS_test Coverage Results" MODIFIED="1725393030746" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$main2_py.coverage" NAME="main2.py Coverage Results" MODIFIED="1725979891646" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/" />
     <SUITE FILE_PATH="coverage/RL_EMS$Quad_env.coverage" NAME="Quad_env Coverage Results" MODIFIED="1723848193879" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/environments" />
     <SUITE FILE_PATH="coverage/RL_EMS$main2.coverage" NAME="main2 Coverage Results" MODIFIED="1724189551275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>

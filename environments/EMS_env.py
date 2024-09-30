@@ -30,16 +30,22 @@ class MicroGridEnv:
         self.k: int = 0
         # still don't know why to include it
         self.v_refs = [0.0 for _ in range(n_crops)]
+        self.doy = 1
 
-    def next_step(self, actions: Tuple[float, list], disturbances) -> Tuple[list, list, list, float, float]:
-        """The pbat battery is computed from an external policy"""
+    def next_step(self, actions: Tuple[float, List[list]], disturbances) -> Tuple[list, list, list, float, float]:
+        """
+        note: the pbat action is computed from an external policy
+        :param actions: Tuple of actions (p_bat, [[q_p, q_irr]])
+        :param disturbances: Tuple of disturbances (p_fv, p_load)
+        :return: Tuple of (v_tanks, v_irrs, drawdowns, soe, k)
+        """
 
         assert len(actions[1]) == self.n_crops, "The number of actions should match the number of crops"
 
         # unpacking the actions
         p_bat = actions[0]
-        q_ps = [a_pair[0] for a_pair in actions]
-        q_irrs = [a_pair[1] for a_pair in actions]
+        q_ps = [a_pair[0] for a_pair in actions[1]]
+        q_irrs = [a_pair[1] for a_pair in actions[1]]
 
         q_ps = np.clip(np.array(q_ps), 0, Q_p_max)
         q_irrs = np.clip(np.array(q_irrs), 0, I_max)
@@ -48,14 +54,14 @@ class MicroGridEnv:
         p_load = disturbances[1]
 
         # loop over the crops
-        for idx, vtank in self.v_tanks:
+        for idx, vtank in enumerate(self.v_tanks):
             self.v_tanks[idx] = np.clip(vtank + q_ps[idx], self.v_tanks_min[idx], self.v_tanks_max[idx])
             self.v_irrs[idx] = np.clip(self.v_irrs[idx] + q_irrs[idx], 0, np.inf)
             self.soe = np.clip(self.soe + p_bat * 600, SoE_min, SoE_max)
 
-            self.drawdowns[idx] = drawdown(self.k, self.dQs[idx])
+            self.drawdowns[idx] = drawdown(self.k + 1, self.dQs[idx] / 1e3)
 
-            self.dQs[idx].append(q_ps[idx] - self.prev_Qps[idx])
+            self.dQs[idx] = np.append(self.dQs[idx], q_ps[idx] - self.prev_Qps[idx])
             self.prev_Qps[idx] = q_ps[idx]
 
         self.k += 1
@@ -73,6 +79,12 @@ class MicroGridEnv:
         self.dQs = dqs
         self.soe = soe
         self.k = 0
+
+    def start(self, doy, v_refs):
+        self.doy = doy
+        for idx, v_ref in enumerate(v_refs):
+            self.v_refs[idx] = v_ref
+        return self.get_state()
 
     def get_state(self) -> Tuple[list, list, list, float, float]:
         return self.v_tanks, self.v_irrs, self.drawdowns, self.soe, self.k
@@ -465,6 +477,12 @@ def EMS_ode(x, d, u) -> Tuple[np.ndarray, float, float]:
 
 
 def drawdown(k: int, dQ: Union[np.ndarray, List]):  # drawdown of the well
+    """
+    Computes the drawdown of the well according the theis equation
+    :param k: time instant
+    :param dQ: delta flow rate [m3/s]
+    :return: drawdown
+    """
     assert k == len(dQ), "The length of dQ should match the number of temporal k points"
     if type(dQ) == list:
         dQ = np.array(dQ)

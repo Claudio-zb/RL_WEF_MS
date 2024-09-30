@@ -2,8 +2,6 @@ import pandas as pd
 from typing import Union, Tuple
 from environments.Data.EMS.EMS_constants import *
 
-PATH = r'C:\Users\wenap\PycharmProjects\PPO_project\Data\EMS'
-
 delay = 6 * 6  # 6 hours in 10 minutes intervals
 
 
@@ -13,7 +11,7 @@ def get_demand() -> np.ndarray:
     :return: Demand data as a numpy array [kWh]
     """
 
-    hourly_demand = np.genfromtxt("./Data/EMS/consumption.csv", delimiter=',')
+    hourly_demand = np.genfromtxt("environments/Data/EMS/consumption.csv", delimiter=',')
     s_hourly_demand = hourly_demand.shape
     demand = np.zeros((s_hourly_demand[0], s_hourly_demand[1] * 6))
     for i in range(s_hourly_demand[0]):
@@ -31,9 +29,9 @@ def get_temperatura(season: str = 'ver') -> np.ndarray:
     :return: Temperature data as a numpy array
     """
     if season == 'ver':
-        file_path = "./Data/EMS/data_temp_ver.csv"
+        file_path = "environments/Data/EMS/data_temp_ver.csv"
     else:
-        file_path = "./Data/EMS/data_temp_inv.csv"
+        file_path = "environments/Data/EMS/data_temp_inv.csv"
     temperatura = pd.read_csv(file_path)
     temperatura = temperatura.interpolate().values.flatten()
     return temperatura[delay:]
@@ -48,9 +46,9 @@ def get_rad(season: str = 'ver') -> np.ndarray:
 
     """
     if season == 'ver':
-        file_path = "./Data/EMS/data_rad_ver.csv"
+        file_path = "environments/Data/EMS/data_rad_ver.csv"
     else:
-        file_path = "./Data/EMS/data_rad_inv.csv"
+        file_path = "environments/Data/EMS/data_rad_inv.csv"
 
     rad = pd.read_csv(file_path)
     rad = rad.values.flatten()
@@ -59,7 +57,7 @@ def get_rad(season: str = 'ver') -> np.ndarray:
 
 def get_ref() -> np.ndarray:
     """Read the references data from the csv file and returns it as a numpy array"""
-    refs = pd.read_csv('./Data/EMS/v_refs.csv')
+    refs = pd.read_csv('environments/Data/EMS/v_refs.csv')
     refs = refs.values.flatten()
     return refs
 

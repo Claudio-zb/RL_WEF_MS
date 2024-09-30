@@ -4,11 +4,12 @@ import numpy as np
 import pandas as pd
 from environments.Data.WMS.WMS_profile import *
 
+
 def irr_policy(obs: np.ndarray) -> float:
     """Irrigation policy"""
     depletion = obs[0]
     raw = obs[1]
-    if depletion > 0.75*raw:
+    if depletion > 0.75 * raw:
         irrigation = 5  # [mm]
     else:
         irrigation = 0.0
@@ -21,7 +22,7 @@ class CultivateEnv:
     def __init__(self):
         self.crops: List[Crop] = [crop_from_dict(tomato)]
         self.weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/weather_data.csv")
-        self.doy: int = 1
+        self.doy: int = 295
         self.wind_speed: float = 0.0
         self.max_temperature: float = 0.0
         self.min_temperature: float = 0.0
@@ -32,10 +33,15 @@ class CultivateEnv:
         self.geological_parameters = jose_painecura
         self.ET0: float = 0.0
 
-    def reset(self, doy: int = 295) -> Tuple[dict, dict]:
-        self.doy = doy
+    def reset(self) -> Tuple[dict, dict]:
+        self.doy = np.random.randint(1, 365)
         return {}, {}
 
+    def start(self, doy: int) -> Tuple[dict, dict]:
+        self.doy = doy
+        for crop in self.crops:
+            crop.hist_data = []
+        return self.get_obs(), {}
 
     def set_climate_data(self, climate_data: dict):
         self.solar_radiation = climate_data["solar_radiation"]
@@ -58,34 +64,44 @@ class CultivateEnv:
                         "precipitation": self.precipitation}
         return climate_data
 
-    def step(self, irrigation: float, climate_data: dict):
+    def step(self, irrigations: List[float], climate_data: dict) -> dict:
+        """Performance a new step in the simulation, given an action-disturbance pair
+        param: irrigation: the amount of water [m3] going in by the evaporation layer
+        param: climate_data: a dictionary with the daily weather data
+        returns: a dictionary with the current state of active crops """
+
         self.set_climate_data(climate_data)
-        for crop in self.crops:
+        for idx, crop in enumerate(self.crops):
+            if crop.plantation_day == self.doy:
+                crop.start()
             if crop.is_active():
-                obs = crop.get_obs()
-                infil_water, runoff_water = self.compute_infiltration(irrigation, self.precipitation)
+                infil_water, runoff_water = self.compute_infiltration(irrigations[idx], self.precipitation)
                 crop.step(self.ET0, infil_water)
-            else:
-                if crop.plantation_day == self.doy:
-                    crop.start()
         self.doy = max(1, (self.doy + 1) % 365)
         return self.get_obs()
 
     def get_hist_data(self):
+        """
+        Collects the historic data from the
+        """
         hist_data = {}
         for crop in self.crops:
             hist_data[crop.crop_parameters["crop_name"]] = crop.get_hist_data()
         return hist_data
 
     def get_ET0(self) -> float:
-        """Returns daily reference evapotranspiration"""
+        """
+        Returns daily reference evapotranspiration
+        """
         if self.ET0 is not np.nan:
             return self.ET0
         else:
             return self.estimate_ET0()
 
     def estimate_ET0(self) -> float:
-        """Computes an estimation for daily evapotranspiration from weather data [mm/day]"""
+        """
+        Computes an estimation for daily evapotranspiration from weather data [mm/day]
+        """
         params = self.geological_parameters
         I_s = self.solar_radiation * 3.6 / 1000  # [kWh] -> [MJ]
 
@@ -115,10 +131,13 @@ class CultivateEnv:
         den = delta + psi_const * (1 + 0.34 * self.wind_speed)
         return num / den
 
-    def compute_infiltration(self, irrigation: float, precipitation: float) -> Tuple[float, float]:
+    @staticmethod
+    def compute_infiltration(irrigation: float, precipitation: float) -> Tuple[float, float]:
+        assert isinstance(irrigation, float)
         return irrigation + precipitation, 0.0
 
     def get_obs(self) -> dict:
+        """ Get the current state of every crop. """
         obs = {}
         for crop in self.crops:
             obs[crop.crop_parameters["crop_name"]] = crop.get_obs()
@@ -127,8 +146,8 @@ class CultivateEnv:
 
 class Crop:
 
-    def __init__(self, crop_name, plantation_day, stages_duration, Kcb, MAD, root_depth_init, root_depth_max, price,
-                 fc):
+    def __init__(self, crop_name, plantation_day, stages_duration, Kcb,
+                 MAD, root_depth_init, root_depth_max, price, fc):
         """First implementation made for only one crop"""
 
         self.crop_name = crop_name
@@ -175,9 +194,14 @@ class Crop:
                                           [layer_specs, layer_specs2, layer_specs2, layer_specs])
         self.crop_parameters = tomato
         self.geological_parameters = jose_painecura
+        self._is_active: bool = False
 
     def start(self) -> Tuple[Any, Dict[str, Any]]:
+        """
+        Starts the simulation of crop
+        """
         self.days_since_plantation = 1
+        self._is_active = True
         self.doy = self.crop_parameters["plantation_day"]  # lets see
         self.update()
         obs = self._get_observation()
@@ -201,9 +225,18 @@ class Crop:
         return self._get_observation()
 
     def update(self, irrigation: float = 0.0):
+        """
+        Updates the root depth, computes the actual evapotranspiration and moves
+        the soil dynamics one step forward
+        """
+
+        assert isinstance(irrigation, float)
+
         self.fw = 1.0 if irrigation > 0.0 else 0.8
 
         self.root_depth = self.update_root_depth()
+
+        # evapotranspiration compute
         self.Kcb, self.Ke = self.get_dual_coeffs(self.days_since_plantation)
         self.potential_crop_evapotranspiration = self.ref_evapotranspiration * (self.Kcb + self.Ke)
 
@@ -216,9 +249,15 @@ class Crop:
         self.soil.step(evaporation, irrigation, self.precipitation, transpiration)
 
     def is_active(self):
-        return True if self.days_since_plantation > 0 else False
+        """
+        Returns true if the crop is already cultivated :)
+        """
+        return self._is_active
 
     def get_hist_data(self) -> Tuple[Dict[str, List[np.ndarray]], Dict[str, List[np.ndarray]]]:
+        """returns a tuple of a dictionary containing the crop historic data and the soil
+        historic data.
+        returns: crop_hist_data, soil_hist_data"""
         hist_data = np.array(self.hist_data)
         crop_hist_data = {"root_depth": hist_data[:, 0],
                           "pcrop_evapotranspiration": hist_data[:, 1],
@@ -229,20 +268,38 @@ class Crop:
         return crop_hist_data, self.soil.get_hist_data()
 
     def _get_observation(self) -> np.ndarray:
-        return np.array([self.root_depth,
-                         self.potential_crop_evapotranspiration,
-                         self.ref_evapotranspiration,
-                         self.Kcb,
-                         self.crop_evapotranspiration,
-                         self.Ks])
+        """
+        Returns the internal state of crop and store it in buffer.
+        returns : root depth, ETP, ET0, Kcb, ETR, Ks
+        """
+        obs = np.array([self.root_depth,
+                        self.potential_crop_evapotranspiration,
+                        self.ref_evapotranspiration,
+                        self.Kcb,
+                        self.crop_evapotranspiration,
+                        self.Ks])
+        self.hist_data.append(obs)
+        return obs
 
     def get_obs(self) -> np.ndarray:
+        """
+        Get crop observation to upper level
+        returns: depletion, readily water vailable and mad
+        """
+        obs = np.array([self.root_depth,
+                        self.potential_crop_evapotranspiration,
+                        self.ref_evapotranspiration,
+                        self.Kcb,
+                        self.crop_evapotranspiration,
+                        self.Ks])
+        self.hist_data.append(obs)
         return np.array([self.depletion,
                          self.raw,
                          self.MAD])
 
     def update_root_depth(self) -> float:
-        """Root depth as a function of time
+        """
+        Root depth as a function of time
         params
         """
         t = self.days_since_plantation
@@ -252,12 +309,13 @@ class Crop:
         if t < t0:
             return self.root_depth_init
         elif t < t1:
-            return self.root_depth + growth_rate*self.Ks
+            return self.root_depth + growth_rate * self.Ks
         else:
             return self.root_depth
 
     def get_dual_coeffs(self, t: int) -> Tuple[float, float]:
-        """Dual Crop coefficient as a function of time
+        """
+        Dual Crop coefficient as a function of time
         params
         t: time since plantation day [days]
         """
@@ -288,7 +346,9 @@ class Crop:
         return Kcb, Ke
 
     def update_Ks(self) -> Tuple[float, np.ndarray]:
-        """Update Ks as a function of the depletion"""
+        """
+        Update Ks as a function of the depletion
+        """
 
         depletion = 0.0
         taw = 0.0
@@ -314,7 +374,10 @@ class Crop:
             lenghts.append(z)
             theta_wps.append(layer.theta_wp)
             theta_ts.append(layer.theta_fc - (layer.theta_fc - layer.theta_wp) * self.MAD)
-            partial_depletions.append(np.clip(theta_fc - theta, 0, theta_fc - theta_wp) * z)
+            partial_depletion = np.clip(theta_fc - theta, 0, theta_fc - theta_wp) * z
+            if isinstance(partial_depletion, np.ndarray):
+                partial_depletion = partial_depletion[0]
+            partial_depletions.append(partial_depletion)
             partial_taws.append((theta_fc - theta_wp) * z)
             if stop:
                 break
@@ -331,7 +394,7 @@ class Crop:
         first_estimate = np.clip(adjustement, 0, 1) * nominal_et_frac
         final_fraction = first_estimate / first_estimate.sum()
         self.depletion = depletion
-        self.raw = taw*self.MAD
+        self.raw = taw * self.MAD
         return Ks, final_fraction
 
 
@@ -393,17 +456,17 @@ class Layer:
                  n: float,
                  theta: float):
         self.depth = depth
-        self.theta_fc = theta_fc
-        self.theta_wp = theta_wp
-        self.theta_sat = theta_sat
-        self.theta_res = theta_res
+        self.theta_fc: float = theta_fc
+        self.theta_wp: float = theta_wp
+        self.theta_sat: float = theta_sat
+        self.theta_res: float = theta_res
         self.n = n
         self.m = 1 - 1 / n
         self.K0 = K0
         self.alpha = alpha
-        self.theta = theta
-        self.awc = theta_fc - theta_wp
-        self.hist_theta = []
+        self.theta: float = theta
+        self.awc: float = theta_fc - theta_wp
+        self.hist_theta: List[float] = []
         self.partial_Ks: float = 0.0
         self.h_c: float = 0.0
 
@@ -415,11 +478,12 @@ class Layer:
         h_c = h_c / 100  # [cm] -> [m]
         K = self.K0 * theta_e ** .5 * (1 - (1 - theta_e ** (1 / self.m)) ** self.m) ** 2
         K = K / 100  # [cm] -> [m]
-        self.h_c = h_c*K
+        self.h_c = h_c * K
         return theta_e, h_c, K
 
-    def set_theta(self, new_theta):
+    def set_theta(self, new_theta: float):
         """set new theta value and stores the old one"""
+        assert isinstance(new_theta, float)
         if np.isnan(new_theta):
             new_theta = self.theta
         self.hist_theta.append(self.get_obs())
@@ -526,6 +590,8 @@ class Soil:
     def step(self, evaporation: float, irrigation: float = 0.0,
              precipitation: float = 0.0, transpiration: float = 0.0):
 
+        assert isinstance(irrigation, float)
+
         layer = self.layers[0]
         z = layer.depth
         theta_e, h_c, Ke = layer.get_params()
@@ -571,24 +637,13 @@ class Soil:
                                          self.evp_layer.theta_sat))
         self.register_water(incoming_w, outgoing_w)
 
-    def get_trajectory(self, n_steps, irr_policy: callable = lambda x: 0.0):
-        trajectory = {}
-        for idx, item in enumerate(self.layers):
-            trajectory[f"layer_{idx}"] = np.zeros(n_steps + 1)
-            trajectory[f"layer_{idx}"][0] = item.theta
-
-        for i in range(n_steps):
-            self.step(irr_policy(i))
-            for idx, item in enumerate(self.layers):
-                trajectory[f"layer_{idx}"][i + 1] = item.get_theta()
-        return trajectory
-
     def register_water(self, incoming_w, outcoming_w):
         self.hist_data.append(np.array([self.incoming_water, self.outcoming_water]))
         self.incoming_water = incoming_w
         self.outcoming_water = outcoming_w
 
     def get_obs(self):
+        self.hist_data.append(np.array([self.incoming_water, self.outcoming_water]))
         return np.array([self.incoming_water, self.outcoming_water])
 
     def get_soil_data(self):
@@ -598,9 +653,9 @@ class Soil:
         w_flux = self.get_soil_data()
         hist_data = {"w_in": w_flux[:, 0],
                      "W_out": w_flux[:, 1]}
-        for idx, item in enumerate(self.layers + [self.evp_layer]):
-            for jdx, jtem in enumerate(item.get_hist_data()[0, :]):
-                hist_data[f"layer_{idx}_{jdx}"] = item.get_hist_data()[:, jdx]  # item.get_hist_data()
+        for idx, layer in enumerate(self.layers + [self.evp_layer]):
+            for jdx, jtem in enumerate(layer.get_hist_data()[0, :]):
+                hist_data[f"layer_{idx}_{jdx}"] = layer.get_hist_data()[:, jdx]  # item.get_hist_data()
         return hist_data
 
     def get_Kr(self):

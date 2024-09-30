@@ -4,15 +4,15 @@ import pandas as pd
 from environments.SimuEnv import SimuEnv
 #%%
 
-env = SimuEnv(irrigation_policy=lambda x: 0.0, ems_policy=lambda x: 0.0)
+env = SimuEnv(irrigation_policy=lambda x: [0.0], ems_policy=lambda x: [[0., 0.]])
 
-env.start(295)
-for i in range(200):
-    if i == 54:
-        print("here")
-    env.run()
+env.run(295, 365)
 
 hist_data = env.cultivate_env.get_hist_data()
+
+#%%
+crop_data, soil_data = hist_data['tomato'][0], hist_data['tomato'][1]
+
 
 #%%
 crop_df = pd.DataFrame(hist_data["tomato"][0])
