@@ -1,14 +1,14 @@
-from environments.EMS_env import ContinousEMSEnv, normalizationWrapper
+from environments.EMS_env import MicrogridEnv, NormalizationWrapper
 import gymnasium as gym
 import numpy as np
 from stable_baselines3 import TD3, PPO
 from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 import matplotlib.pyplot as plt
 
-env = ContinousEMSEnv()
-env = normalizationWrapper(env)
+env = MicrogridEnv()
 
-model = PPO.load("ppo_simple2_env")
+model = PPO("MlpPolicy", env, verbose=1)
+model.learn(10000)
 actions1 = []
 actions2 = []
 h = 288
