@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Union, Tuple, List, Iterable
+from typing import Union, Tuple, Iterable
 from environments.Data.EMS.EMS_constants import *
 
 delay = 6 * 6  # 6 hours in 10 minutes intervals
