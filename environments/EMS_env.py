@@ -398,13 +398,13 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
     :return: reward"""
     reward = 0.0
     for i in range(n_crops):
-        norm_next_error = (s[i] - s_next[i + n_crops]) / s[i] # Normalize the error to be a fraction of the daily demand
+        norm_next_error = (s[i] - s_next[i + 2*n_crops]) / s[i] # Normalize the error to be a fraction of the daily demand
 
         reward = - norm_next_error if norm_next_error > 0 else norm_next_error
 
-        reward += -a[i+n_crops] if s[i+3*n_crops] <= Vt_min and a[i+n_crops] > 0 else 0.0  #penalize unfeasible action (irrigation is on and tank is empty)
+        reward += -a[i+n_crops] if s[i+n_crops] <= Vt_min and a[i+n_crops] > 0 else 0.0  #penalize unfeasible action (irrigation is on and tank is empty)
 
-        reward += -a[i] if s[i+3*n_crops] >= Vt_max and a[i] > 0 else 0.0  #penalize unfeasible action (pump is on and tank is full)
+        reward += -a[i] if s[i+n_crops] >= Vt_max and a[i] > 0 else 0.0  #penalize unfeasible action (pump is on and tank is full)
 
         if a[i] < 0.0 or 1.0 < a[i]:
             reward -= abs(a[0]) * 2

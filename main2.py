@@ -22,7 +22,7 @@ for i in range(50):
 x = np.array(x)
 import matplotlib.pyplot as plt
 plt.plot(x[:, 0], label='v_ref')
-plt.plot(x[:, 1], label='v')
+plt.plot(x[:, 2], label='v')
 plt.legend()
 plt.show()
 
