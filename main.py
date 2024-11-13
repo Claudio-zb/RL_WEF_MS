@@ -1,7 +1,7 @@
 from environments.EMS_env import MicrogridEnv, NormalizationWrapper
 import gymnasium as gym
 import numpy as np
-from stable_baselines3 import TD3, PPO
+from stable_baselines3 import TD3, PPO, SAC
 from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 import matplotlib.pyplot as plt
 
@@ -10,13 +10,12 @@ mg_env = MicrogridEnv()
 #%%
 train = True
 if train:
-    model = PPO("MlpPolicy", mg_env, verbose=1)
-    model.learn(200_000)
+    model = SAC("MlpPolicy", mg_env, verbose=1)
+    model.learn(20_000)
     model.save("ppo.pth")
 
-
 #%%
-model = PPO.load("ppo.pth")
+model = SAC.load("ppo.pth")
 policy = lambda x: model.predict(x, deterministic=True)[0]
 x = []
 a = []
@@ -33,6 +32,7 @@ for i in range(50):
 
 #%%
 import matplotlib.pyplot as plt
+
 x = np.array(x)
 a = np.array(a)
 

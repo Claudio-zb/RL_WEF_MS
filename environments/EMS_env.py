@@ -56,8 +56,10 @@ class EnergyWaterMG:
 
         # loop over the crops
         for idx, v_tank in enumerate(self.v_tanks):
-            self.v_tanks[idx] = np.clip(v_tank + q_ps[idx], self.v_tanks_min[idx], self.v_tanks_max[idx])
-            self.v_irrs[idx] = np.clip(self.v_irrs[idx] + q_irrs[idx], 0, np.inf)
+            self.v_tanks[idx] = np.clip(v_tank + (q_ps[idx] - q_irrs[idx])*600/1000, self.v_tanks_min[idx], self.v_tanks_max[idx])
+            if self.v_tanks[idx] <= Vt_min:  # If the tank is empty, there is no irrigation
+                q_irrs[idx] = 0.0
+            self.v_irrs[idx] = np.clip(self.v_irrs[idx] + q_irrs[idx]*600/1000, 0, np.inf)
             self.soe = np.clip(self.soe + p_bat * 600, SoE_min, SoE_max)
 
             self.drawdowns[idx] = drawdown(self.k + 1, self.dQs[idx] / 1e3)
@@ -222,10 +224,11 @@ class MicrogridEnv(gym.Env):
         action = map_action(action)
         action = action.flatten()
         Q_pumps = action[0:self.n_crops]
+        Q_irrs = action[self.n_crops:]
         P_pumps = get_p_q_p(Q_pumps, h_p_const)
         disturbances = np.array([self.p_fv[self.k % 144], self.p_demanded[self.k % 144]])
         self.Pbat, _, self.res_energy = manage_batteries(float(obs[-1]), float(disturbances[0]), float(disturbances[1]), P_pumps)
-        pumps = [[Q_pumps[i], self.Q_irr[i]] for i in range(self.n_crops)]
+        pumps = [[Q_pumps[i], Q_irrs[i]] for i in range(self.n_crops)]
         next_obs = self.micro_grid.next_step((self.Pbat, pumps))
 
         truncated = False
@@ -406,15 +409,9 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
 
         reward += -a[i] if s[i+n_crops] >= Vt_max and a[i] > 0 else 0.0  #penalize unfeasible action (pump is on and tank is full)
 
-        if a[i] < 0.0 or 1.0 < a[i]:
-            reward -= abs(a[0]) * 2
-
-        if a[i+n_crops] < 0.0 or 1.0 < a[i+n_crops]:
-            reward -= abs(a[i+n_crops]) * 2
-
     e_balance = s_next[-2]
 
-    reward += e_balance if e_balance < 0 else 0
+    #reward += e_balance if e_balance < 0 else 0
 
     return reward
 
