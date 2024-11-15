@@ -1,4 +1,5 @@
-from environments.EMS_env import MicrogridEnv, NormalizationWrapper
+from environments.EMS_env import MicrogridEnv, NormalizationWrapper, RuleBasedEMS
+
 import gymnasium as gym
 import numpy as np
 from stable_baselines3 import TD3, PPO, SAC
@@ -9,15 +10,14 @@ from environments.EMS_env import default_rwd_fun
 mg_env = MicrogridEnv()
 
 #%%
-train = False
+train = True
 if train:
-    model = PPO("MlpPolicy", mg_env, verbose=1)
-    model.learn(200_000)
-    model.save("ppo.pth")
+    model = TD3("MlpPolicy", mg_env, verbose=1, gradient_steps=2)
+    model.learn(1_000_000)
+    model.save("td3.pth")
 
 #%%
-model = PPO.load("ppo.pth")
-
+model = SAC.load("td3.pth")
 
 def policy(observation):
     return model.predict(observation, deterministic=True)[0]
@@ -38,6 +38,9 @@ for i in range(2 * 144):
     if done:
         break
 
+#%%
+ems = RuleBasedEMS(1, policy)
+ems.get_action([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 #%%
 
 x = np.array(x)
