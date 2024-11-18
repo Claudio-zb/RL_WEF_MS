@@ -155,3 +155,25 @@ def manage_batteries(SoE: float,
     E_residual = E_surplus + E_deficit
 
     return Pbat, next_SoE, E_residual
+
+def generate_t_matrix(n_crops:int, v_ref_max:float=5) -> np.ndarray:
+    """
+    Generates the transformation matrix for the observation vector
+    returns: t_matrix, the transformation matrix
+    """
+    t_matrix = np.zeros((4*n_crops+4, 4*n_crops+5), dtype=np.float32)
+    for i in range(n_crops):
+        t_matrix[i, i] = 1/v_ref_max
+        t_matrix[i+n_crops, i+n_crops] = 1/Vt_max
+        t_matrix[i+2*n_crops, i+2*n_crops] = 1/v_ref_max
+        t_matrix[i + 3 * n_crops, i + 3 * n_crops] = 1.0
+        # drawdowns
+    t_matrix[4*n_crops, 4*n_crops] = 1/(max_power_sun-max_power_d)
+    # demanded power is combined with the power from the pvs array
+    t_matrix[4*n_crops, 4*n_crops+1] = - 1/(max_power_sun - max_power_d)
+    t_matrix[4*n_crops+1, 4*n_crops+2] = 1/SoE_max
+    #residual energy
+    t_matrix[4*n_crops+2, 4*n_crops+3] = 1
+    t_matrix[4*n_crops+3, 4*n_crops+4] = 1/144
+
+    return t_matrix

@@ -2,7 +2,6 @@
 # and the gymnasium extension of the environment
 
 import gymnasium as gym
-import numpy as np
 import numpy.typing as npt
 
 from scipy.special import exp1
@@ -173,8 +172,6 @@ class MicrogridEnv(gym.Env):
         self.demand_data: np.ndarray = get_demand()
         self.L = len(self.temperature_data)  # length(temperatura)
         self.N_dias: int = 70
-        self.transform = gen_t_matrix(n_crops)
-        self.transform_dim = self.transform.shape[1]
 
         # Data variables 
 
@@ -198,11 +195,11 @@ class MicrogridEnv(gym.Env):
         self.reward_fun = lambda s, a, s_next: default_rwd_fun(s, a, s_next, n_crops=n_crops)
 
         # Bounds for observations
-        obs_low = np.array(n_crops * [0.0] + n_crops * [Vt_min] + 2 * n_crops * [0.0] + [0.0, 0.0, SoE_min, -np.inf, 0],
+        obs_low = np.array(n_crops * [0.0] + n_crops * [Vt_min] + 2 * n_crops * [0.0] + [0.0, 0.0, SoE_min, -10., 0],
                            dtype=np.float32)
 
         obs_high = np.array(
-            n_crops * [4.0] + n_crops * [Vt_max] + 2 * n_crops * [0.0] + [max_power_sun, max_power_d, SoE_max, np.inf,
+            n_crops * [4.0] + n_crops * [Vt_max] + 2 * n_crops * [0.0] + [max_power_sun, max_power_d, SoE_max, 50.,
                                                                           143],
             dtype=np.float32)
 
@@ -381,28 +378,28 @@ class NormalizationWrapper(gym.Wrapper):
     def __init__(self, env: MicrogridEnv):
         super().__init__(env)
         self.env = env
-        self.transform = T_matrix
+        self.transform = generate_t_matrix(env.n_crops)
         self.prev_action: np.ndarray = np.zeros(self.env.action_space.shape[-1])
         low = np.matmul(self.transform, env.observation_space.low)
         high = np.matmul(self.transform, env.observation_space.high)
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
-        self.action_space = spaces.Box(low=-self.action_high,
-                                       high=self.action_high,
-                                       shape=(2,),
-                                       dtype=np.float32)
+        #self.action_space = spaces.Box(low=-self.action_high,
+        #                               high=self.action_high,
+        #                               shape=(2,),
+        #                               dtype=np.float32)
 
     def reset(self, seed=None, options=None):
         self.prev_action = np.zeros_like(self.env.action_space.shape[-1])
         state, info = self.env.reset()
         t_state = np.matmul(self.transform, state)
-        return t_state, state
+        return t_state, {"state": state}
 
     def step(self, action):
-        action_ = self.prev_action + action
+        action_ = action # self.prev_action + action
         action_ = np.clip(action_, self.env.action_low, self.env.action_high)
         state, reward, terminated, truncated, _ = self.env.step(action_)
         t_state = np.matmul(self.transform, state)
-        info = state
+        info = {"state": state}
         return t_state, reward, terminated, truncated, info
 
 
@@ -422,9 +419,11 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
 
         reward += -4*a[i] if s[i+n_crops] >= Vt_max and a[i] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
 
-    # e_balance = s_next[-2]
+        reward += -10 * a[i] if s[i+n_crops] > 1 else 0.0  # penalize drawdown
 
-    # reward += e_balance if e_balance < 0 else 0
+    e_balance = s_next[-2]
+
+    reward += e_balance if e_balance < 0 else 0
 
     return reward
 
@@ -467,7 +466,7 @@ def continuous_rwd_fun(s, a, s_next):
     return reward
 
 
-def EMS_ode(x, d, u) -> Tuple[np.ndarray, float, float]:
+def ems_ode(x, d, u) -> Tuple[np.ndarray, float, float]:
     """The ODE of the microgrid system
     :param x: state vector V_irr, V_tank, SoE
     :param d: disturbance vector V_ref, P_sun, P_demand
@@ -538,19 +537,3 @@ def get_p_q_p(q_p: Union[float, np.ndarray], h_p: float) -> np.ndarray:
         q_p = np.array([q_p])
     P_Q_p_ = B_p * (q_p * 1e-3) * h_p / 1e3
     return P_Q_p_
-
-
-class EmsWrapper(gym.Wrapper):
-    """This class normalize the observations of the EMS environment"""
-
-    def __init__(self, env: gym.Env):
-        super().__init__(env)
-        self.transform = T_matrix
-
-    def step(self, action):
-        obs, reward, done, truncated, info = self.env.step(action)
-        return obs, reward, done, info
-
-    def reset(self, *, seed=None, options=None):
-        obs, info = self.env.reset()
-        return obs, info
