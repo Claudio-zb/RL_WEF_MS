@@ -1,21 +1,54 @@
+import pandas as pd
+from stable_baselines3.common.monitor import Monitor
+
 from environments.EMS_env import MicrogridEnv, NormalizationWrapper, RuleBasedEMS
 
 import numpy as np
+from stable_baselines3.common.callbacks import EvalCallback
+
 from stable_baselines3 import TD3, PPO, SAC
+from stable_baselines3.common.env_util import make_vec_env
 import matplotlib.pyplot as plt
 
-mg_env = MicrogridEnv()
-mg_env = NormalizationWrapper(mg_env)
+def create_wrapped_env():
+    env = MicrogridEnv()
+    env = NormalizationWrapper(env)
+    env = Monitor(env, "./logs/")
+    return env
+
+# Create the vectorized environment
+mg_vec_env = make_vec_env(create_wrapped_env, n_envs=4, seed=0)
+mg_env = create_wrapped_env()
+
+eval_callback = EvalCallback(mg_env, best_model_save_path='./logs/',
+                             log_path='./logs/', eval_freq=5000,
+                             deterministic=True, render=False)
 
 #%%
 train = True
 if train:
-    model = SAC("MlpPolicy", mg_env, verbose=1, gradient_steps=2)
-    model.learn(500_000)
-    model.save("td3.pth")
+    model = SAC("MlpPolicy", mg_vec_env, verbose=1, gradient_steps=-1)
+    model.learn(total_timesteps=10_000, callback=eval_callback)
+    model.save("sac_microgrid")
 
 #%%
-model = SAC.load("td3.pth")
+
+# Load the best model
+best_model = SAC.load("./logs/best_model")
+
+# Plotting the training curves
+results_dir = './logs/'
+df = pd.read_csv(results_dir + 'monitor.csv', skiprows=1)
+df.plot(y='r', title='Training Curve')
+plt.show()
+#%%
+from stable_baselines3.common import results_plotter
+
+# Helper from the library
+results_plotter.plot_results(
+    [results_dir], 10_000, results_plotter.X_TIMESTEPS, "TD3 LunarLander"
+)
+#%%
 
 def policy(observation):
     return model.predict(observation, deterministic=True)[0]
