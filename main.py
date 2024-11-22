@@ -2,6 +2,7 @@ import pandas as pd
 from stable_baselines3.common.monitor import Monitor
 
 from environments.EMS_env import MicrogridEnv, NormalizationWrapper, RuleBasedEMS
+from stable_baselines3.common.noise import OrnsteinUhlenbeckActionNoise
 
 import numpy as np
 from stable_baselines3.common.callbacks import EvalCallback
@@ -10,69 +11,83 @@ from stable_baselines3 import TD3, PPO, SAC
 from stable_baselines3.common.env_util import make_vec_env
 import matplotlib.pyplot as plt
 
-def create_wrapped_env():
+action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(2), sigma=0.1 * np.ones(2))
+
+def create_wrapped_env(log_file):
     env = MicrogridEnv()
     env = NormalizationWrapper(env)
-    env = Monitor(env, "./logs/")
+    env = Monitor(env, log_file)
     return env
 
 # Create the vectorized environment
-mg_vec_env = make_vec_env(create_wrapped_env, n_envs=4, seed=0)
-mg_env = create_wrapped_env()
 
-eval_callback = EvalCallback(mg_env, best_model_save_path='./logs/',
-                             log_path='./logs/', eval_freq=5000,
-                             deterministic=True, render=False)
+
+def create_callback(alg_name, environment):
+    return EvalCallback(environment, best_model_save_path=f'./logs/{alg_name}',
+                 log_path=f'./logs/{alg_name}', eval_freq=5000,
+                 deterministic=True, render=False)
 
 #%%
-train = True
+train = False
 if train:
-    model = SAC("MlpPolicy", mg_vec_env, verbose=1, gradient_steps=-1)
-    model.learn(total_timesteps=10_000, callback=eval_callback)
-    model.save("sac_microgrid")
+    sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/sac_monitor.csv"), n_envs=4, seed=0)
+    td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/td3_monitor.csv"), n_envs=4, seed=0)
+    ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/ppo_monitor.csv"), n_envs=4, seed=0)
 
-#%%
+    sac_env = create_wrapped_env("./logs/sac_monitor.csv")
+    td3_env = create_wrapped_env("./logs/td3_monitor.csv")
+    ppo_env = create_wrapped_env("./logs/ppo_monitor.csv")
 
-# Load the best model
-best_model = SAC.load("./logs/best_model")
+    sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1)
+    td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1)
+    ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=128)
 
-# Plotting the training curves
-results_dir = './logs/'
-df = pd.read_csv(results_dir + 'monitor.csv', skiprows=1)
-df.plot(y='r', title='Training Curve')
+    models = [sac_model, td3_model, ppo_model]
+    envs = [sac_env, td3_env, ppo_env]
+    models_name = ["sac", "td3", "ppo"]
+    for model, name, env in zip(models, models_name, envs):
+        model.learn(total_timesteps=1_000_000, callback=create_callback(name, env))
+
+#%% Plotting the training curves
+fig, ax = plt.subplots()
+for name in ["sac", "td3", "ppo"]:
+    df = pd.read_csv(f"./logs/{name}_monitor.csv", skiprows=1)
+    ax.plot(df.index, df["r"], label=name)
+plt.legend()
 plt.show()
+
+
 #%%
-from stable_baselines3.common import results_plotter
-
-# Helper from the library
-results_plotter.plot_results(
-    [results_dir], 10_000, results_plotter.X_TIMESTEPS, "TD3 LunarLander"
-)
+# Load the best models
+sac_best_model = SAC.load("./logs/sac/best_model")
+td3_best_model = TD3.load("./logs/td3/best_model")
+ppo_best_model = PPO.load("./logs/ppo/best_model")
+best_models = [sac_best_model, td3_best_model, ppo_best_model]
 #%%
 
-def policy(observation):
-    return model.predict(observation, deterministic=True)[0]
+def eval_policy(observation, rl_model):
+    return rl_model.predict(observation, deterministic=True)[0]
 
-x = []
-a = []
-rews = []
-t_obs, obs = mg_env.reset()
-x.append(obs["state"])
-for i in range(2 * 144):
-    action = policy(t_obs)
-    a.append(action)
-    t_obs, rew, done, _, obs = mg_env.step(action)
+mg_env = create_wrapped_env("./logs/eval_monitor.csv")
+for alg in best_models:
+    policy = lambda observation: eval_policy(observation, alg)
+    x = []
+    a = []
+    rews = []
+    t_obs, obs = mg_env.reset()
     x.append(obs["state"])
-    rews.append(rew)
-    print(obs)
-    if done:
-        break
+    for i in range(2 * 144):
+        action = policy(t_obs)
+        a.append(action)
+        t_obs, rew, done, _, obs = mg_env.step(action)
+        x.append(obs["state"])
+        rews.append(rew)
+        print(obs)
+        if done:
+            break
+    break
 
 #%%
-ems = RuleBasedEMS(1, policy)
-ems.get_action([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-#%%
-
 x = np.array(x)
 a = np.array(a)
 rews = np.array(rews)
