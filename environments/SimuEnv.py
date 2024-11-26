@@ -31,7 +31,7 @@ class SimuEnv:
 
         self.start(init_doy)
 
-        cultivate_obs, cultivate_info = self.cultivate_env.start(self.doy)
+        cultivate_obs, cultivate_info = self.cultivate_env.start()
         mg_obs, mg_info = None, None
         done = False
         while not done:

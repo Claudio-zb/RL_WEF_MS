@@ -26,7 +26,7 @@ class CultivateEnv(gym.Env):
         self.reward_function: Callable = lambda s, a, s_next: reward_function(s, a, s_next, self.n_crops)
 
     def reset(self, seed: int = None, options: dict = None) -> Tuple[np.ndarray, dict]:
-        dict_obs, _ = self.cultivates.start(self.cultivates.doy)
+        dict_obs, _ = self.cultivates.start()
         array_obs = obs_dict_2_obs_array(dict_obs)
         return array_obs, {}
 
@@ -85,8 +85,8 @@ class Cultivates:
         self.doy = np.random.randint(1, 365)
         return {}, {}
 
-    def start(self, doy: int) -> Tuple[dict, dict]:
-        self.doy = doy
+    def start(self) -> Tuple[dict, dict]:
+        self.doy = min([crop.plantation_day for crop in self.crops])
         for crop in self.crops:
             crop.hist_data = []
         return self.get_obs(), {}

@@ -27,18 +27,48 @@ def create_wrapped_env(log_file):
 # Create the vectorized environment
 def create_callback(alg_name, environment):
     return EvalCallback(environment, best_model_save_path=f'./logs/wms/{alg_name}',
-                 log_path=f'./logs/wms/{alg_name}', eval_freq=50,
+                 log_path=f'./logs/wms/{alg_name}', eval_freq=100,
                  deterministic=True, render=False)
 #%%
 
 cultivate_env = create_wrapped_env("./logs/wms/sac_monitor.csv")
 model = SAC("MlpPolicy", cultivate_env, verbose=1, gradient_steps=-1)
-model.learn(total_timesteps=1_000, callback=create_callback("sac", cultivate_env))
+model.learn(total_timesteps=10_000, callback=create_callback("sac", cultivate_env))
 
 #%% plot the training curves
 
 df = pd.read_csv(f"./logs/wms/sac_monitor.csv", skiprows=1)
 
+#%% perform the evaluation
+x = []
+a = []
+rews = []
+obs, _ = cultivate_env.reset()
+x.append(obs)
+done = False
+while not done:
+    action, _states = model.predict(obs, deterministic=True)
+    a.append(action)
+    obs, rewards, terminated, truncated, info = cultivate_env.step(action)
+    rews.append(rewards)
+    x.append(obs)
+    done = terminated or truncated
+#%%
+x = np.array(x)
+a = np.array(a)
+rews = np.array(rews)
+
+#%%
+plt.plot(rews)
+plt.show()
+
+#%%
+plt.plot(a)
+plt.show()
+
+#%%
+plt.plot(x)
+plt.show()
 
 
 
