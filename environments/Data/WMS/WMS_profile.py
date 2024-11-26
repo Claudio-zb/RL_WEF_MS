@@ -30,9 +30,10 @@ evp_layer_specs = {"depth": 0.1,
                    "rew": 0.2}
 
 #%%
-fc = lambda silt, clay: .75 - 0.003*clay + 0.014*silt
-pwp = lambda silt, clay: 0.03 + 0.013*clay + 0.006*silt
+def get_fc(silt:float, clay:float) -> float:
+    """Computes an estimation of the soil field capacity based on the soil textural composition"""
+    return .75 - 0.003*clay + 0.014*silt
 
-#%%
-
-print(pwp(24,37))
+def get_pwp(silt:float, clay:float) -> float:
+    """Computes an estimation of the soil permanent wilting point based on the soil textural composition"""
+    return 0.03 + 0.013*clay + 0.006*silt

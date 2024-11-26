@@ -1,4 +1,4 @@
-from environments.WMS_env import CultivateEnv
+from environments.WMS_env import Cultivates
 from environments.EMS_env import EnergyWaterMG
 from typing import Callable
 import pandas as pd
@@ -10,7 +10,7 @@ class SimuEnv:
     def __init__(self, irrigation_policy: Callable, ems_policy: Callable):
 
         self.microgrid_env: EnergyWaterMG = EnergyWaterMG()
-        self.cultivate_env: CultivateEnv = CultivateEnv()
+        self.cultivate_env: Cultivates = Cultivates()
 
         self.irrigation_policy: Callable = irrigation_policy
         self.ems_policy: Callable = ems_policy

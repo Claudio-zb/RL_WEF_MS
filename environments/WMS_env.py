@@ -1,8 +1,10 @@
-from typing import Any, Tuple, Dict, List
+from typing import Any, Tuple, Dict, List, Union, Callable
 
 import numpy as np
 import pandas as pd
+
 from environments.Data.WMS.WMS_profile import *
+import gymnasium as gym
 
 
 def irr_policy(obs: np.ndarray) -> float:
@@ -15,14 +17,60 @@ def irr_policy(obs: np.ndarray) -> float:
         irrigation = 0.0
     return irrigation
 
+class CultivateEnv(gym.Env):
+    def __init__(self):
+        self.cultivates: Cultivates = Cultivates()
+        self.n_crops: int = len(self.cultivates.crops)
+        self.observation_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=1.0, shape=(3*self.n_crops,), dtype=np.float32)
+        self.action_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=10.0, shape=(self.n_crops,), dtype=np.float32)
+        self.reward_function: Callable = lambda s, a, s_next: reward_function(s, a, s_next, self.n_crops)
 
-class CultivateEnv:
+    def reset(self, seed: int = None, options: dict = None) -> Tuple[np.ndarray, dict]:
+        dict_obs, _ = self.cultivates.start(self.cultivates.doy)
+        array_obs = obs_dict_2_obs_array(dict_obs)
+        return array_obs, {}
+
+    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
+        terminated, truncated = False, False
+        climate_data = self.cultivates.get_climate_data()
+
+        prev_obs = obs_dict_2_obs_array(self.cultivates.get_obs())
+        dict_obs = self.cultivates.step(action, climate_data)
+        array_obs = obs_dict_2_obs_array(dict_obs)
+
+        all_inactive = False
+        for crop in self.cultivates.crops:
+            if crop.is_active():
+                break
+            all_inactive = True
+
+        if all_inactive:
+            terminated = True
+
+        rew = self.reward_function(prev_obs, action, array_obs)
+
+        return array_obs, rew, terminated, truncated, {}
+
+    def render(self, mode='human'):
+        pass
+
+def obs_dict_2_obs_array(obs: Dict[str, np.ndarray]) -> np.ndarray:
+    """Turns an observation dictionary into a flattened array"""
+    return np.array([obs[crop_name] for crop_name in obs.keys()]).flatten()
+
+def reward_function(s: np.ndarray, a: np.ndarray, s_next: np.ndarray, n_crops) -> float:
+    depletion = sum([s_next[i] for i in range(n_crops)])
+    return -depletion - sum(a)
+
+class Cultivates:
     """Water Management System Class"""
 
     def __init__(self):
         self.crops: List[Crop] = [crop_from_dict(tomato)]
         self.weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/weather_data.csv")
-        self.doy: int = 295
+        # the simulation will start in the first plantation day
+        self.doy: int = min([crop.plantation_day for crop in self.crops])
+
         self.wind_speed: float = 0.0
         self.max_temperature: float = 0.0
         self.min_temperature: float = 0.0
@@ -64,9 +112,9 @@ class CultivateEnv:
                         "precipitation": self.precipitation}
         return climate_data
 
-    def step(self, irrigations: List[float], climate_data: dict) -> dict:
+    def step(self, irrigations: Union[List, np.ndarray], climate_data: dict) -> dict:
         """Performance a new step in the simulation, given an action-disturbance pair
-        param: irrigation: the amount of water [m3] going in by the evaporation layer
+        param: irrigations: the amount of water [m3] going in by the evaporation layer
         param: climate_data: a dictionary with the daily weather data
         returns: a dictionary with the current state of active crops """
 
@@ -75,8 +123,8 @@ class CultivateEnv:
             if crop.plantation_day == self.doy:
                 crop.start()
             if crop.is_active():
-                infil_water, runoff_water = self.compute_infiltration(irrigations[idx], self.precipitation)
-                crop.step(self.ET0, infil_water)
+                infiltrated_water, runoff_water = self.compute_infiltration(irrigations[idx], self.precipitation)
+                crop.step(self.ET0, infiltrated_water)
         self.doy = max(1, (self.doy + 1) % 365)
         return self.get_obs()
 
@@ -133,11 +181,11 @@ class CultivateEnv:
 
     @staticmethod
     def compute_infiltration(irrigation: float, precipitation: float) -> Tuple[float, float]:
-        assert isinstance(irrigation, float)
+        assert isinstance(irrigation, float) or isinstance(irrigation, np.floating)
         return irrigation + precipitation, 0.0
 
     def get_obs(self) -> dict:
-        """ Get the current state of every crop. """
+        """Get the current state of every crop."""
         obs = {}
         for crop in self.crops:
             obs[crop.crop_parameters["crop_name"]] = crop.get_obs()
@@ -147,7 +195,7 @@ class CultivateEnv:
 class Crop:
 
     def __init__(self, crop_name, plantation_day, stages_duration, Kcb,
-                 MAD, root_depth_init, root_depth_max, price, fc):
+                 MAD, root_depth_init, root_depth_max, price, f_c):
         """First implementation made for only one crop"""
 
         self.crop_name = crop_name
@@ -161,7 +209,7 @@ class Crop:
         self.root_depth_init: float = root_depth_init
         self.root_depth_max: float = root_depth_max
         self.price: float = price
-        self.fc_list: List[float] = fc
+        self.f_c_list: List[float] = f_c
         # observations
         # state
 
@@ -222,6 +270,9 @@ class Crop:
         obs = self._get_observation()
         self.hist_data.append(obs)
 
+        if self.days_since_plantation == sum(self.stages_duration):
+            self._is_active = False
+
         return self._get_observation()
 
     def update(self, irrigation: float = 0.0):
@@ -237,7 +288,7 @@ class Crop:
         self.root_depth = self.update_root_depth()
 
         # evapotranspiration compute
-        self.Kcb, self.Ke = self.get_dual_coeffs(self.days_since_plantation)
+        self.Kcb, self.Ke = self.get_dual_coefficients(self.days_since_plantation)
         self.potential_crop_evapotranspiration = self.ref_evapotranspiration * (self.Kcb + self.Ke)
 
         self.Ks, partial_Ks = self.update_Ks()
@@ -254,7 +305,7 @@ class Crop:
         """
         return self._is_active
 
-    def get_hist_data(self) -> Tuple[Dict[str, List[np.ndarray]], Dict[str, List[np.ndarray]]]:
+    def get_hist_data(self) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
         """returns a tuple of a dictionary containing the crop historic data and the soil
         historic data.
         returns: crop_hist_data, soil_hist_data"""
@@ -284,18 +335,9 @@ class Crop:
     def get_obs(self) -> np.ndarray:
         """
         Get crop observation to upper level
-        returns: depletion, readily water vailable and mad
+        returns: depletion, readily water available and mad
         """
-        obs = np.array([self.root_depth,
-                        self.potential_crop_evapotranspiration,
-                        self.ref_evapotranspiration,
-                        self.Kcb,
-                        self.crop_evapotranspiration,
-                        self.Ks])
-        self.hist_data.append(obs)
-        return np.array([self.depletion,
-                         self.raw,
-                         self.MAD])
+        return np.array([self.depletion, self.raw, self.MAD])
 
     def update_root_depth(self) -> float:
         """
@@ -313,7 +355,7 @@ class Crop:
         else:
             return self.root_depth
 
-    def get_dual_coeffs(self, t: int) -> Tuple[float, float]:
+    def get_dual_coefficients(self, t: int) -> Tuple[float, float]:
         """
         Dual Crop coefficient as a function of time
         params
@@ -326,22 +368,22 @@ class Crop:
         t3 = stages[0] + stages[1] + stages[2] + stages[3]
 
         if t < t0:  # initial stage
-            Kcb, fc = self.Kcb_list[0], self.fc_list[0]
+            Kcb, f_c = self.Kcb_list[0], self.f_c_list[0]
         elif t < t1:  # crop development
             Kcb = (self.Kcb_list[1] - self.Kcb_list[0]) / (t1 - t0) * (t - t0) + self.Kcb_list[0]
-            fc = (self.fc_list[1] - self.fc_list[0]) / (t1 - t0) * (t - t0) + self.fc_list[0]
+            f_c = (self.f_c_list[1] - self.f_c_list[0]) / (t1 - t0) * (t - t0) + self.f_c_list[0]
         elif t < t2:  # mid-season
-            Kcb, fc = self.Kcb_list[1], self.fc_list[1]
+            Kcb, f_c = self.Kcb_list[1], self.f_c_list[1]
         elif t < t3:  # late season
             Kcb = (self.Kcb_list[2] - self.Kcb_list[1]) / (t3 - t2) * (t - t2) + self.Kcb_list[1]
-            fc = (self.fc_list[2] - self.fc_list[1]) / (t3 - t2) * (t - t2) + self.fc_list[1]
+            f_c = (self.f_c_list[2] - self.f_c_list[1]) / (t3 - t2) * (t - t2) + self.f_c_list[1]
         else:  # goodbye
-            Kcb, fc = 0.0, 0.0
+            Kcb, f_c = 0.0, 0.0
 
-        Kcmax = max(1.2, Kcb + .05)
+        Kc_max = max(1.2, Kcb + .05)
         Kr = self.soil.get_Kr()
-        few = min(1 - fc, (1 - 0.67 * fc) * self.fw)
-        Ke = min(Kr * (Kcmax - Kcb), few * Kcmax)
+        few = min(1 - f_c, (1 - 0.67 * f_c) * self.fw)
+        Ke = min(Kr * (Kc_max - Kcb), few * Kc_max)
 
         return Kcb, Ke
 
@@ -350,8 +392,6 @@ class Crop:
         Update Ks as a function of the depletion
         """
 
-        depletion = 0.0
-        taw = 0.0
 
         stop = False
         theta_wps = []
@@ -409,7 +449,7 @@ tomato = {"crop_name": "tomato",
           "height_max": 0.6,  # [m]
           "production_max": 86910,  # [kg/ha]
           "price": 220,  # [$/kg]
-          "fc": [.1, .8, .2]
+          "f_c": [.1, .8, .2]
           }
 
 
@@ -422,7 +462,7 @@ def crop_from_dict(crop_dict: Dict[str, Any]) -> Crop:
                 crop_dict["root_depth_init"],
                 crop_dict["root_depth_max"],
                 crop_dict["price"],
-                crop_dict["fc"])
+                crop_dict["f_c"])
 
 
 # geographical parameters
@@ -466,7 +506,7 @@ class Layer:
         self.alpha = alpha
         self.theta: float = theta
         self.awc: float = theta_fc - theta_wp
-        self.hist_theta: List[float] = []
+        self.hist_theta: List[np.ndarray] = []
         self.partial_Ks: float = 0.0
         self.h_c: float = 0.0
 
