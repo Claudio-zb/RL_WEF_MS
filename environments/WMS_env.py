@@ -38,14 +38,10 @@ class CultivateEnv(gym.Env):
         dict_obs = self.cultivates.step(action, climate_data)
         array_obs = obs_dict_2_obs_array(dict_obs)
 
-        all_inactive = False
         for crop in self.cultivates.crops:
-            if crop.is_active():
+            if crop.is_active():  # if any crop is active, the episode is not terminated
                 break
-            all_inactive = True
-
-        if all_inactive:
-            terminated = True
+            terminated = True  # all crops are inactive, so the episode is terminated
 
         rew = self.reward_function(prev_obs, action, array_obs)
 

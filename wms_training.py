@@ -32,8 +32,13 @@ def create_callback(alg_name, environment):
 #%%
 
 cultivate_env = create_wrapped_env("./logs/wms/sac_monitor.csv")
-model = SAC("MlpPolicy", cultivate_env, verbose=1, gradient_steps=-1)
-model.learn(total_timesteps=10_000, callback=create_callback("sac", cultivate_env))
+train = False
+if train:
+    model = SAC("MlpPolicy", cultivate_env, verbose=1, gradient_steps=-1)
+    model.learn(total_timesteps=10_000, callback=create_callback("sac", cultivate_env))
+
+else:
+    model = SAC.load("./logs/wms/sac/best_model.zip")
 
 #%% plot the training curves
 
@@ -46,8 +51,10 @@ rews = []
 obs, _ = cultivate_env.reset()
 x.append(obs)
 done = False
+
 while not done:
-    action, _states = model.predict(obs, deterministic=True)
+    #action, _states = model.predict(obs, deterministic=True)
+    action = cultivate_env.action_space.sample()
     a.append(action)
     obs, rewards, terminated, truncated, info = cultivate_env.step(action)
     rews.append(rewards)
@@ -60,15 +67,32 @@ rews = np.array(rews)
 
 #%%
 plt.plot(rews)
+plt.title("Episode Reward")
+plt.xlabel("Days since plantation")
+plt.ylabel("Reward")
 plt.show()
 
 #%%
 plt.plot(a)
+plt.title("Actions")
+plt.xlabel("Days since plantation")
+plt.ylabel("Irrigation depth [mm]")
 plt.show()
 
 #%%
-plt.plot(x)
+fig, ax = plt.subplots(2,1)
+ax[0].plot(x[:,0])
+ax[0].set_title("Depletion")
+ax[0].set_xlabel("Days since plantation")
+ax[0].set_ylabel(r"Depletion [\%]")
+
+ax[1].plot(x[:,1], label = f"mad = {x[:,2]}")
+ax[1].set_title("RAW")
+plt.tight_layout()
 plt.show()
+
+
+
 
 
 

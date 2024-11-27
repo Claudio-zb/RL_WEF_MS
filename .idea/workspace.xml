@@ -4,12 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="&quot;setting up wms environment&quot;">
+    <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="&quot;setting up wms environment 2&quot;">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/SimuEnv.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/SimuEnv.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/environments/WMS_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/WMS_env.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/wms/sac/best_model.zip" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/sac/best_model.zip" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/wms/sac/evaluations.npz" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/sac/evaluations.npz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/logs/wms/sac_monitor.csv" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/sac_monitor.csv" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/wms_training.py" beforeDir="false" afterPath="$PROJECT_DIR$/wms_training.py" afterDir="false" />
     </list>
@@ -214,7 +211,8 @@
       <workItem from="1732044414090" duration="1774000" />
       <workItem from="1732193032948" duration="33005000" />
       <workItem from="1732623048104" duration="6471000" />
-      <workItem from="1732648533958" duration="6987000" />
+      <workItem from="1732648533958" duration="7213000" />
+      <workItem from="1732718926855" duration="6229000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;soil dynamic included&quot;">
       <option name="closed" value="true" />
@@ -288,7 +286,15 @@
       <option name="project" value="LOCAL" />
       <updated>1732653891009</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="&quot;setting up wms environment 2&quot;">
+      <option name="closed" value="true" />
+      <created>1732656234423</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1732656234423</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -321,13 +327,30 @@
     <MESSAGE value="&quot;trying to use the monitor&quot;" />
     <MESSAGE value="&quot;results of training&quot;" />
     <MESSAGE value="&quot;setting up wms environment&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;setting up wms environment&quot;" />
+    <MESSAGE value="&quot;setting up wms environment 2&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;setting up wms environment 2&quot;" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/wms_training.py</url>
+          <line>58</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/environments/WMS_env.py</url>
+          <line>34</line>
+          <option name="timeStamp" value="2" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/RL_EMS$main2.coverage" NAME="main2 Coverage Results" MODIFIED="1724189551275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/RL_EMS$main2_py.coverage" NAME="main2.py Coverage Results" MODIFIED="1731338505588" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/" />
     <SUITE FILE_PATH="coverage/RL_EMS$Quad_env.coverage" NAME="Quad_env Coverage Results" MODIFIED="1723848193879" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/environments" />
-    <SUITE FILE_PATH="coverage/RL_EMS$wms_training.coverage" NAME="wms_training Coverage Results" MODIFIED="1732651814213" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$wms_training.coverage" NAME="wms_training Coverage Results" MODIFIED="1732722844599" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/RL_EMS$WMS_env.coverage" NAME="WMS_env Coverage Results" MODIFIED="1724121906610" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/environments" />
     <SUITE FILE_PATH="coverage/RL_EMS$main.coverage" NAME="main Coverage Results" MODIFIED="1732214332805" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
