@@ -2,6 +2,7 @@
 # and the gymnasium extension of the environment
 
 import gymnasium as gym
+import numpy as np
 import numpy.typing as npt
 
 from scipy.special import exp1
@@ -121,7 +122,8 @@ class RuleBasedEMS(AbstractEMS):
         p_load = disturbances[1]
 
         flattened_state, n_crops = obs_to_array(state)
-        actions = self.policy(state)
+        flattened_state = np.array([])
+        actions = self.policy.predict(state, deterministic=True)
         Q_p = actions[0:n_crops]
         Q_irr = actions[n_crops:]
         pumps = [[Q_p[i], Q_irr[i]] for i in range(n_crops)]
@@ -220,7 +222,7 @@ class MicrogridEnv(gym.Env):
                                                    shape=(2 * n_crops,),
                                                    dtype=np.float32)
 
-    def step(self, action: np.ndarray, mode: str = "train") -> Tuple[np.ndarray, np.ndarray, bool, bool, dict]:
+    def step(self, action: np.ndarray, mode: str = "train") -> Tuple[np.ndarray, float, bool, bool, dict]:
         """
         Execute one step of the environment, given an action.
         :param action: Action to be executed
@@ -395,7 +397,7 @@ class NormalizationWrapper(gym.Wrapper):
         return t_state, {"state": state}
 
     def step(self, action):
-        action_ = action # self.prev_action + action
+        action_ = action  # self.prev_action + action
         action_ = np.clip(action_, self.env.action_low, self.env.action_high)
         state, reward, terminated, truncated, _ = self.env.step(action_)
         t_state = np.matmul(self.transform, state)
@@ -415,11 +417,13 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
         norm_next_error = (s[i] - s_next[i + 2 * n_crops]) / s[i]  # Normalize the error
         reward = np.clip(1 - abs(norm_next_error), -1.0, 1.0)
 
-        reward += -4*a[i+n_crops] if s[i+n_crops] <= Vt_min and a[i+n_crops] > 0 else 0.0  # penalize unfeasible action (irrigation is on and tank is empty)
+        reward += -4 * a[i + n_crops] if s[i + n_crops] <= Vt_min and a[
+            i + n_crops] > 0 else 0.0  # penalize unfeasible action (irrigation is on and tank is empty)
 
-        reward += -4*a[i] if s[i+n_crops] >= Vt_max and a[i] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
+        reward += -4 * a[i] if s[i + n_crops] >= Vt_max and a[
+            i] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
 
-        reward += -10 * a[i] if s[i+n_crops] > 1 else 0.0  # penalize drawdown
+        reward += -10 * a[i] if s[i + n_crops] > 1 else 0.0  # penalize drawdown
 
     e_balance = s_next[-2]
 

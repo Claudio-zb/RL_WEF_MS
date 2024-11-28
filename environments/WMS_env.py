@@ -17,11 +17,13 @@ def irr_policy(obs: np.ndarray) -> float:
         irrigation = 0.0
     return irrigation
 
+
 class CultivateEnv(gym.Env):
     def __init__(self):
         self.cultivates: Cultivates = Cultivates()
         self.n_crops: int = len(self.cultivates.crops)
-        self.observation_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=1.0, shape=(3*self.n_crops,), dtype=np.float32)
+        self.observation_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=1.0, shape=(3 * self.n_crops,),
+                                                                dtype=np.float32)
         self.action_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=10.0, shape=(self.n_crops,), dtype=np.float32)
         self.reward_function: Callable = lambda s, a, s_next: reward_function(s, a, s_next, self.n_crops)
 
@@ -50,15 +52,30 @@ class CultivateEnv(gym.Env):
     def render(self, mode='human'):
         pass
 
+
 def obs_dict_2_obs_array(obs: Dict[str, np.ndarray]) -> np.ndarray:
     """Turns an observation dictionary into a flattened array"""
     return np.array([obs[crop_name] for crop_name in obs.keys()]).flatten()
+
 
 def reward_function(s: np.ndarray, a: np.ndarray, s_next: np.ndarray, n_crops) -> float:
     depletion = sum([s_next[i] for i in range(n_crops)])
     return -depletion - sum(a)
 
+
+class IrrigationPolicy:
+    def __init__(self, n_crops: int, rl_policy):
+        self.n_crops = n_crops
+        self.rl_policy = rl_policy
+
+    def __call__(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+        obs_array = obs_dict_2_obs_array(obs)
+        action = self.rl_policy.predict(obs_array, deterministic=True)
+        return action
+
+
 class Cultivates:
+
     """Water Management System Class"""
 
     def __init__(self):
@@ -387,7 +404,6 @@ class Crop:
         """
         Update Ks as a function of the depletion
         """
-
 
         stop = False
         theta_wps = []

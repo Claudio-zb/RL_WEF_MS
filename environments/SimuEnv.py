@@ -1,5 +1,5 @@
 from environments.WMS_env import Cultivates
-from environments.EMS_env import EnergyWaterMG
+from environments.EMS_env import EnergyWaterMG, RuleBasedEMS
 from typing import Callable
 import pandas as pd
 import numpy as np
@@ -7,13 +7,13 @@ from environments.utils.funcionesEMS import *
 
 
 class SimuEnv:
-    def __init__(self, irrigation_policy: Callable, ems_policy: Callable):
+    def __init__(self, irrigation_policy: Callable, ems_policy: RuleBasedEMS):
 
         self.microgrid_env: EnergyWaterMG = EnergyWaterMG()
         self.cultivate_env: Cultivates = Cultivates()
 
         self.irrigation_policy: Callable = irrigation_policy
-        self.ems_policy: Callable = ems_policy
+        self.ems_policy: RuleBasedEMS = ems_policy
 
         self.daily_weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/weather_data.csv")
         self.ten_min_weather_data: pd.DataFrame = pd.read_csv("environments/Data/EMS/calan_2006.csv")
@@ -41,11 +41,11 @@ class SimuEnv:
             v_reqs = self.irrigation_policy(cultivate_obs)
 
             if mg_info is None:
-                mg_obs = self.microgrid_env.start(self.doy, v_reqs)
+                mg_obs = self.microgrid_env.start(self.doy)
             for i in range(144):
-                action = self.ems_policy(mg_obs)
                 disturbances = self.get_disturbances(0, i)
-                mg_obs = self.microgrid_env.next_step((1, action), disturbances)
+                action = self.ems_policy.get_action(mg_obs, disturbances)
+                mg_obs = self.microgrid_env.next_step((1, action))
 
             v_irrs = mg_obs[1]
             cultivate_obs = self.cultivate_env.step(v_irrs, weather_data)
