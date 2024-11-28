@@ -69,7 +69,9 @@ fig.set_size_inches(h*1.618, h)
 plt.legend()
 plt.grid()
 plt.tight_layout()
+plt.savefig("logs/ems/training_curves.png", dpi=300)
 plt.show()
+
 
 
 #%%
@@ -77,7 +79,7 @@ plt.show()
 sac_best_model = SAC.load("./logs/ems/sac/best_model")
 td3_best_model = TD3.load("./logs/ems/td3/best_model")
 ppo_best_model = PPO.load("./logs/ems/ppo/best_model")
-best_models = [ppo_best_model, sac_best_model, td3_best_model]
+best_models = [sac_best_model, ppo_best_model, td3_best_model]
 #%%
 
 def eval_policy(observation, rl_model):
@@ -113,15 +115,22 @@ plt.plot(a[:, 1], label='Q_irr')
 plt.legend()
 plt.show()
 #%%
-
-plt.plot(x[:, 0], label='v_ref')
-plt.plot(x[:, 2], label='v')
+t = np.linspace(0, 48, len(x)-1)
+plt.plot(t, x[:-1, 0], label='Required volume')
+plt.plot(t, x[:-1, 2], label='Irrigated volume')
+plt.xlabel("Time [hr]")
+plt.ylabel("Volume [m3]")
+plt.title("Irrigated water over two days")
+fig = plt.gcf()
+fig.set_size_inches(h*1.618, h)
+plt.tight_layout()
 plt.legend()
+plt.savefig("logs/ems/irrigated_water.png", dpi=300)
 plt.show()
 
 #%%
-
-plt.plot(x[:, 1], label='v_tanks')
+plt.plot(t, x[:, 1], label='v_tanks')
+plt.xlabel("Time [hr]")
 plt.legend()
 plt.show()
 

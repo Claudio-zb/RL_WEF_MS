@@ -70,7 +70,7 @@ class IrrigationPolicy:
 
     def __call__(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         obs_array = obs_dict_2_obs_array(obs)
-        action = self.rl_policy.predict(obs_array, deterministic=True)
+        action = self.rl_policy.predict(obs_array, deterministic=True)[0]
         return action
 
 

@@ -73,7 +73,7 @@ class EnergyWaterMG:
 
         self.k += 1
 
-        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over|
+        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the day is over|
             for idx in range(self.n_crops):
                 self.v_irrs[idx] = 0.0
 
@@ -105,31 +105,39 @@ class AbstractEMS(ABC):
     @abstractmethod
     def get_action(self,
                    state: Tuple[List[float], List[float], List[float], float, int],
+                   v_reqs: Union[List[float], np.ndarray],
                    disturbances) -> Tuple[float, List[list]]:
         pass
 
 
 class RuleBasedEMS(AbstractEMS):
-    def __init__(self, n_crops: int, rl_policy: torch.nn.Module):
+    def __init__(self, n_crops: int, rl_policy: torch.nn.Module, isNormalized: bool = False):
         super().__init__(n_crops)
         self.policy = rl_policy
+        self.residual:float = 0.0
+        if isNormalized:
+            self.transform = generate_t_matrix(n_crops)
+        else:
+            self.transform = np.eye(4 * n_crops + 5)
 
     def get_action(self,
                    state: Tuple[List[float], List[float], List[float], float, int],
+                   v_reqs: Union[List[float], np.ndarray],
                    disturbances) -> Tuple[float, List[list]]:
         """Computes the action since the current observation"""
         p_fv = disturbances[0]
         p_load = disturbances[1]
-
-        flattened_state, n_crops = obs_to_array(state)
-        flattened_state = np.array([])
-        actions = self.policy.predict(state, deterministic=True)
+        n_crops = self.n_crops
+        flattened_state = np.concatenate((v_reqs,state[0],state[1],state[2],np.array([p_fv, p_load, state[3], self.residual, state[4]])))
+        transformed_state = np.matmul(self.transform, flattened_state)
+        actions = self.policy.predict(transformed_state, deterministic=True)[0]
         Q_p = actions[0:n_crops]
+        P_q_ps = get_p_q_p(Q_p, h_p_const)
         Q_irr = actions[n_crops:]
         pumps = [[Q_p[i], Q_irr[i]] for i in range(n_crops)]
 
         SoE = state[3]
-        Pbat, Next_SoE, residual = manage_batteries(SoE, p_fv, p_load, Q_p)
+        Pbat, _, self.residual = manage_batteries(SoE, p_fv, p_load, P_q_ps)
         return Pbat, pumps
 
 
