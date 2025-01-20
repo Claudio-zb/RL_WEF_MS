@@ -11,6 +11,7 @@ from environments.utils.funcionesEMS import *
 from gymnasium import spaces
 from typing import Tuple, List, SupportsFloat
 from abc import ABC, abstractmethod
+from stable_baselines3.common.base_class import BaseAlgorithm
 
 
 class EnergyWaterMG:
@@ -58,10 +59,11 @@ class EnergyWaterMG:
 
         # loop over the crops
         for idx, v_tank in enumerate(self.v_tanks):
-            self.v_tanks[idx] = np.clip(v_tank + (q_ps[idx] - q_irrs[idx]) * 600 / 1000, self.v_tanks_min[idx],
-                                        self.v_tanks_max[idx])
+
             if self.v_tanks[idx] <= Vt_min:  # If the tank is empty, there is no irrigation
                 q_irrs[idx] = 0.0
+            self.v_tanks[idx] = np.clip(v_tank + (q_ps[idx] - q_irrs[idx]) * 600 / 1000, self.v_tanks_min[idx],
+                                        self.v_tanks_max[idx])
             self.v_irrs[idx] = np.clip(self.v_irrs[idx] + q_irrs[idx] * 600 / 1000, 0, np.inf)
             delta_SoE = np.max([p_bat, 0]) * n_c * (dt / 3600) + np.min([p_bat, 0]) / n_d * (dt / 3600)  # [kWh]
             self.soe = np.clip(self.soe + delta_SoE, SoE_min, SoE_max)
@@ -111,10 +113,10 @@ class AbstractEMS(ABC):
 
 
 class RuleBasedEMS(AbstractEMS):
-    def __init__(self, n_crops: int, rl_policy: torch.nn.Module, isNormalized: bool = False):
+    def __init__(self, n_crops: int, rl_policy: BaseAlgorithm, isNormalized: bool = False):
         super().__init__(n_crops)
         self.policy = rl_policy
-        self.residual:float = 0.0
+        self.residual: float = 0.0
         if isNormalized:
             self.transform = generate_t_matrix(n_crops)
         else:
@@ -128,7 +130,8 @@ class RuleBasedEMS(AbstractEMS):
         p_fv = disturbances[0]
         p_load = disturbances[1]
         n_crops = self.n_crops
-        flattened_state = np.concatenate((v_reqs,state[0],state[1],state[2],np.array([p_fv, p_load, state[3], self.residual, state[4]])))
+        flattened_state = np.concatenate((v_reqs, state[0], state[1], state[2],
+                                          np.array([p_fv, p_load, state[3], self.residual, state[4]])))
         transformed_state = np.matmul(self.transform, flattened_state)
         actions = self.policy.predict(transformed_state, deterministic=True)[0]
         Q_p = actions[0:n_crops]

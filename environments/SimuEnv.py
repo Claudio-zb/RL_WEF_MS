@@ -6,6 +6,7 @@ import numpy as np
 from environments.utils.funcionesEMS import *
 import copy
 
+
 class SimuEnv:
     def __init__(self, irrigation_policy: Callable, ems_policy: RuleBasedEMS):
 
@@ -21,10 +22,12 @@ class SimuEnv:
         self.days_since_started: int = 0
         self.doy: int = 0
         self.last_simulation_data: dict = {}
+        self.soil_data: list = []
 
     def start(self, doy: int):
         self.doy = doy
         self.days_since_started = 1
+        self.last_simulation_data = {}
         return self.days_since_started
 
     def run(self, init_doy: int, total_days: int):
@@ -58,14 +61,15 @@ class SimuEnv:
             v_irrs_hist.append(v_irrs)
             mg_obs_hist.append(prev_mg_obs)
             cultivate_obs = self.cultivate_env.step(v_irrs, weather_data)
-            cultivate_obs_hist.append(cultivate_obs)
+            cultivate_obs_hist.append(copy.deepcopy(cultivate_obs))
 
             self.doy = np.clip((self.doy + 1) % 365, 1, 365)
             self.days_since_started += 1
 
             if self.days_since_started >= total_days:
                 done = True
-
+        self.soil_data = [crop.soil.get_hist_data() for crop in self.cultivate_env.crops]
+        # self.crop_data = [crop.ge for crop in self.cultivate_env.crops]
         self.last_simulation_data = {"cultivate_obs": cultivate_obs_hist,
                                      "mg_obs": mg_obs_hist,
                                      "wms_actions": v_reqs_hist,
@@ -103,19 +107,21 @@ class SimuEnv:
 
         return weather
 
-    def get_disturbances(self, doy, d_instant) -> np.ndarray:
+    def get_disturbances(self, doy: int, day_instant: int) -> np.ndarray:
         """
         vo sai
         """
-        temp_and_rad = self.ten_min_weather_data.iloc[doy + d_instant][['temp', 'dir']].values
+        temp_and_rad = self.ten_min_weather_data.iloc[doy + day_instant][['temp', 'dir']].values
         p_pv = solar_power(temp_and_rad[1], temp_and_rad[0])
-        p_d = self.ten_min_demand[(144 * doy + d_instant) % len(self.ten_min_demand)]
+        p_d = self.ten_min_demand[(144 * doy + day_instant) % len(self.ten_min_demand)]
         disturbances = np.array([p_pv, p_d])
         return disturbances
 
     def get_simu_data(self):
         return self.last_simulation_data
 
+    def get_soil_data(self):
+        return self.soil_data
 
 def isDone(mg_obs, cultivate_obs) -> bool:
     return False
