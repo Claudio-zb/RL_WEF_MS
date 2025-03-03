@@ -1,4 +1,4 @@
-layer_specs = {"depth": .15,
+layer_specs = {"depth": .17,
                "theta_fc": .30,
                "theta_wp": .13,
                "theta_sat": .429,
@@ -8,7 +8,7 @@ layer_specs = {"depth": .15,
                "n": 1.75,  # 1.41,
                "theta": 0.25}
 
-layer_specs2 = {"depth": .15,
+layer_specs2 = {"depth": .17,
                 "theta_fc": .30,
                 "theta_wp": .13,
                 "theta_sat": .429,
@@ -18,7 +18,7 @@ layer_specs2 = {"depth": .15,
                 "n": 1.75,  # 1.41,
                 "theta": 0.15}
 
-evp_layer_specs = {"depth": 0.15,
+evp_layer_specs = {"depth": 0.17,
                    "theta_fc": 0.3,
                    "theta_wp": 0.13,
                    "theta_sat": 0.429,
@@ -34,6 +34,7 @@ tomato = {"crop_name": "tomato",
           "plantation_day": 295,  # [doy]
           "stages_duration": [30, 40, 40, 25],  # [days]
           "Kcb": [0.6, 1.15, 0.6],
+          "Ky": [0.4, 1.1, 0.8, 0.4],
           "MAD": 0.5,
           "root_depth_init": 0.2 * 0.8,  # [m]
           "root_depth_max": 1.1 * 0.8,  # [m]

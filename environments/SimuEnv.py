@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from environments.utils.funcionesEMS import *
 import copy
+from matplotlib import pyplot as plt
 
 
 class SimuEnv:
@@ -37,7 +38,7 @@ class SimuEnv:
         cultivate_obs_hist, mg_obs_hist = [], []
 
         cultivate_obs, cultivate_info = self.cultivate_env.start()
-        mg_obs, mg_info = None, None
+        mg_obs = None
         prev_mg_obs = None
         done = False
         v_reqs, v_irrs = None, None
@@ -46,20 +47,23 @@ class SimuEnv:
 
             # Get the action from the policies
             weather_data = self.update_daily_weather(self.doy)
-            v_reqs = self.irrigation_policy(cultivate_obs)
+            v_reqs = self.irrigation_policy(cultivate_obs)*1000
             v_reqs_hist.append(v_reqs)
 
-            if mg_info is None:
+            if mg_obs is None:
                 mg_obs = self.microgrid_env.start(self.doy)
+            observations = []
             for i in range(144):
                 prev_mg_obs = copy.deepcopy(mg_obs)
                 disturbances = self.get_disturbances(0, i)
                 action = self.ems_policy.get_action(mg_obs, v_reqs, disturbances)
                 mg_obs = self.microgrid_env.next_step(action)
-
+                observations.append([mg_obs[0][0], mg_obs[1][0], mg_obs[2][0], mg_obs[3], mg_obs[4]])
+            observations = np.array(observations)
             v_irrs = prev_mg_obs[1]
             v_irrs_hist.append(v_irrs)
             mg_obs_hist.append(prev_mg_obs)
+
             cultivate_obs = self.cultivate_env.step(v_irrs, weather_data)
             cultivate_obs_hist.append(copy.deepcopy(cultivate_obs))
 

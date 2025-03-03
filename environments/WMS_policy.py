@@ -76,7 +76,7 @@ class TriggeredIrrigationPolicy(IrrigationPolicy):
     def __call__(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         irrigation = np.zeros(self.n_crops)
         if self.days_count >= self.frequency:
-            irrigation = np.ones(self.n_crops)*self.irr_amount*.001 # [mm] -> [m]
+            irrigation = np.ones(self.n_crops)*self.irr_amount*.001 # [mm] -> [m3]
             self.days_count = 0
         self.days_count += 1
         return irrigation

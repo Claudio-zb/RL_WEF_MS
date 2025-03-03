@@ -10,6 +10,7 @@ from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3 import TD3, PPO, SAC
 from stable_baselines3.common.env_util import make_vec_env
 import matplotlib.pyplot as plt
+import time
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['font.family'] = 'serif'
@@ -30,20 +31,19 @@ def create_wrapped_env(log_file):
 
 def create_callback(alg_name, environment):
     return EvalCallback(environment, best_model_save_path=f'./logs/{alg_name}',
-                        log_path=f'./logs/ems/{alg_name}', eval_freq=5000,
+                        log_path=f'./logs2/ems/{alg_name}', eval_freq=5000,
                         deterministic=True, render=False)
 
 
-#%%
 train = False
 if train:
-    sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/ems/sac_monitor.csv"), n_envs=4, seed=0)
-    td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/ems/td3_monitor.csv"), n_envs=4, seed=0)
-    ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/ems/ppo_monitor.csv"), n_envs=4, seed=0)
+    sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/sac_monitor.csv"), n_envs=4, seed=0)
+    td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/td3_monitor.csv"), n_envs=4, seed=0)
+    ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/ppo_monitor.csv"), n_envs=4, seed=0)
 
-    sac_env = create_wrapped_env("./logs/ems/sac_monitor.csv")
-    td3_env = create_wrapped_env("./logs/ems/td3_monitor.csv")
-    ppo_env = create_wrapped_env("./logs/ems/ppo_monitor.csv")
+    sac_env = create_wrapped_env("./logs2/ems/sac_monitor.csv")
+    td3_env = create_wrapped_env("./logs2/ems/td3_monitor.csv")
+    ppo_env = create_wrapped_env("./logs2/ems/ppo_monitor.csv")
 
     sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1)
     td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1)
@@ -53,7 +53,11 @@ if train:
     envs = [sac_env, td3_env, ppo_env]
     models_name = ["sac", "td3", "ppo"]
     for model, name, env in zip(models, models_name, envs):
-        model.learn(total_timesteps=1_000_000, callback=create_callback(name, env))
+        start_time = time.time()
+        model.learn(total_timesteps=10_000, callback=create_callback(name, env))
+        end_time = time.time()
+
+        print(f"Training {name} took {100*(end_time - start_time)} seconds")
 
 #%% Plotting the training curves
 h = 4
@@ -61,22 +65,35 @@ h = 4
 def moving_average(data, window_size):
     return data.rolling(window=window_size).mean()
 
+def moving_std(data, window_size):
+    return data.rolling(window=window_size).std()
+
+window = 25
+
 fig, ax = plt.subplots()
 for name in ["sac", "td3", "ppo"]:
     df = pd.read_csv(f"./logs/ems/{name}_monitor.csv", skiprows=1)
-    df['moving_avg'] = moving_average(df['r'], 20)
-    ax.plot(df.index, df['moving_avg'], label=name.upper(), alpha=0.85)
+    df['moving_avg'] = moving_average(df['r'], window)
+    df['moving_std'] = moving_std(df['r'], window)
+    ax.plot(df.index, df['moving_avg'], label=name.upper())
+    ax.fill_between(df.index, df['moving_avg'] - df['moving_std'], df['moving_avg'] + df['moving_std'], alpha=0.3)
 
-ax.set_ylim(-200, 150)
-ax.set_xlabel(r"Episode")
-ax.set_ylabel(r"Mean reward per episode")
-ax.set_title(r"\textbf{RL algorithms training curves}")
-fig.set_size_inches(1.3*h * 1.618, h*0.75)
-plt.legend()
+ax.set_ylim(-50, 250)
+ax.set_xlabel(r"Episode", fontsize=14)
+ax.set_ylabel(r"Mean reward per episode", fontsize=14)
+#ax.set_title(r"\textbf{RL algorithms training curves}")
+fig.set_size_inches(h * 2, h)
+plt.legend(loc = "lower right")
 plt.grid()
 plt.tight_layout()
-plt.savefig("logs/ems/training_curves.png", dpi=300)
+plt.savefig("logs/ems/ems_plot.png", dpi=300)
 plt.show()
+
+#%% compute mean and std from training curves from episode 200
+
+for name in ["sac", "td3", "ppo"]:
+    df = pd.read_csv(f"./logs/ems/{name}_monitor.csv", skiprows=1)
+    print(f"{name}: mean = {df['r'].mean()}, std = {df['r'].std()}")
 
 #%%
 # Load the best models
@@ -84,6 +101,8 @@ sac_best_model = SAC.load("./logs/ems/sac/best_model")
 td3_best_model = TD3.load("./logs/ems/td3/best_model")
 ppo_best_model = PPO.load("./logs/ems/ppo/best_model")
 best_models = [sac_best_model, ppo_best_model, td3_best_model]
+models_name = ["sac", "ppo", "td3"]
+
 
 
 #%%
@@ -93,7 +112,7 @@ def eval_policy(observation, rl_model):
 
 
 mg_env = create_wrapped_env("./logs/ems/eval_monitor.csv")
-for alg in best_models:
+for alg, name in zip(best_models, models_name):
     policy = lambda observation: eval_policy(observation, alg)
     x = []
     a = []
@@ -109,163 +128,225 @@ for alg in best_models:
         print(obs)
         if done:
             break
-    break
+
+    #%%
+    x = np.array(x)
+    a = np.array(a)
+    rews = np.array(rews)
+    t = np.linspace(0, 48, len(x) - 1)
+
+    #%%
+    h = 4
+    t = np.linspace(0, 48, len(x) - 1)
+    plt.step(t, x[:-1, 0], label=r'$V_{req}^{day}$')
+    plt.step(t, x[:-1, 2], label=r'$V_{irr}$')
+    plt.xlabel("Time [hr]", fontsize = 14)
+    plt.ylabel("Water Volume [m3]", fontsize = 14)
+    #plt.title("Irrigated water over two days")
+    fig = plt.gcf()
+    fig.set_size_inches(h * 1.618, h*.75)
+    plt.tight_layout()
+    plt.legend()
+    plt.grid()
+    plt.savefig(f"logs/ems/{name}_irrigated_water.png", dpi=300)
+    plt.show()
+    #%%
+    plt.step(t, a[:, 0], label='Tank recharge')
+    plt.step(t, a[:, 1], label='Irrigation')
+    plt.xlabel("Time [hr]")
+    plt.ylabel("Flow rate [l/s]")
+    plt.ylim(0, 1.0)
+    plt.title("Valves flow rate over two days")
+    fig = plt.gcf()
+    fig.set_size_inches(h * 1.618, h * .75)
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(f"logs/ems/{name}_aperture.png", dpi=300)
+    plt.show()
+
+    #%%
+    print((x[143, 0] - x[143, 2])/x[143, 0])
+    print((x[287, 0] - x[287, 2])/x[287, 0])
+
+    print((0.03966951699351884+0.03457275545314583)/2)
+
+    #%%
+    plt.step(t, x[1:, 3])
+    plt.hlines(0.0, 0, 48, color='black', linestyles="--")
+    plt.hlines(1.0, 0, 48, color='black', linestyles="--")
+    plt.title("Aquifer drawdown")
+    plt.xlabel("Time [hr]")
+    plt.ylabel("Drawdown [m]")
+    #plt.legend()
+    fig = plt.gcf()
+    fig.set_size_inches(h * 1.618, h * .75)
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(f"logs/ems/{name}_drawdown.png", dpi=300)
+    plt.show()
+
+    #%%
+    plt.step(t, x[:-1, -3], label="SOC")
+    plt.hlines(20, 0, 48, color='black', linestyles="--")
+    plt.hlines(100, 0, 48, color='black', linestyles="--")
+    plt.ylabel("State of charge [kWh]")
+    plt.xlabel("Time [hr]")
+    plt.legend()
+    plt.title("State of charge over two days")
+    fig = plt.gcf()
+    fig.set_size_inches(h * 1.618, h * .75)
+    plt.tight_layout()
+    plt.grid()
+    plt.savefig(f"logs/ems/{name}_soc.png", dpi=300)
+    plt.show()
+
+    #%%
+
+    plt.step(t, x[:-1, -2])
+    plt.ylabel("Energy [kWh]")
+    plt.xlabel("Time [hr]")
+    plt.title("Grid Energy")
+    fig = plt.gcf()
+    fig.set_size_inches(h * 1.618, h * .75)
+    plt.tight_layout()
+    plt.grid()
+    plt.savefig(f"logs/ems/{name}_res_e.png", dpi=300)
+    #plt.legend()
+
+    plt.show()
+
+    #%% Mulit axis figures
+
+    fig, axs = plt.subplots(2, 1)
+    axs[0].plot(t, x[:-1, 0], label='Required water')
+    axs[0].plot(t, x[:-1, 2], label='Irrigated water')
+    axs[0].set_xlabel("Time [hr]")
+    axs[0].set_ylabel("Water Volume [m3]")
+    axs[0].set_title("Irrigated water over two days")
+
+    axs[1].plot(t, x[:-1, 3], label="s")
+    axs[1].hlines(0.0, 0, 48, color='black', linestyles="--")
+    axs[1].hlines(1.0, 0, 48, color='black', linestyles="--")
+    axs[1].set_title("Aquifer drawdown")
+    axs[1].set_xlabel("Time [hr]")
+    axs[1].set_ylabel("Drawdown [m]")
+
+    plt.tight_layout()
+    plt.savefig(f"logs/ems/{name}_irrigated_water_drawdown.png", dpi=300)
+    plt.show()
+
+    #%%
+    fig, axs = plt.subplots(2, 1)
+    axs[1].plot(t, x[:-1, -3], label="SOC")
+    axs[1].hlines(20, 0, 48, color='black', linestyles="--")
+    axs[1].hlines(100, 0, 48, color='black', linestyles="--")
+    axs[1].set_ylabel("State of charge [kWh]")
+    axs[1].set_xlabel("Time [hr]")
+    axs[1].legend()
+    axs[1].set_title("State of charge over two days")
+
+    axs[0].plot(t, a[:, 0], label='Tank recharge')
+    axs[0].plot(t, a[:, 1], label='Irrigation')
+    axs[0].set_xlabel("Time [hr]")
+    axs[0].set_ylabel("Flow rate [l/s]")
+    axs[0].set_ylim(0, 1)
+    axs[0].set_title("Valves flow rate over two days")
+    plt.tight_layout()
+    plt.savefig(f"logs/ems/{name}_soc_aperture.png", dpi=300)
+    plt.show()
+
+    #%%
+
+    fig, axs = plt.subplots(2, 2)
+
+    axs[0, 0].plot(t, x[:-1, 0], label='Required water')
+    axs[0, 0].plot(t, x[:-1, 2], label='Irrigated water')
+    axs[0, 0].set_xlabel("Time [hr]")
+    axs[0, 0].set_ylabel("Water Volume [m3]")
+    axs[0, 0].legend()
+    axs[0, 0].set_title(r"\textbf{Required and irrigated water}")
+
+    axs[1, 0].plot(t, x[:-1, 3], label="s")
+    axs[1, 0].hlines(0.0, 0, 48, color='black', linestyles="--")
+    axs[1, 0].hlines(1.0, 0, 48, color='black', linestyles="--")
+    axs[1, 0].set_title(r"\textbf{Aquifer drawdown}")
+    axs[1, 0].set_xlabel("Time [hr]")
+    axs[1, 0].set_ylabel("Drawdown [m]")
+
+    axs[1, 1].plot(t, x[:-1, -3], label="SOC")
+    axs[1, 1].hlines(20, 0, 48, color='black', linestyles="--")
+    axs[1, 1].hlines(100, 0, 48, color='black', linestyles="--")
+    axs[1, 1].set_ylabel("State of energy [kWh]")
+    axs[1, 1].set_xlabel("Time [hr]")
+    axs[1, 1].set_title(r"\textbf{Batteries state of energy}")
+
+    axs[0, 1].plot(t, a[:, 0], label='Tank recharge')
+    axs[0, 1].plot(t, a[:, 1], label='Irrigation', alpha=.8)
+    axs[0, 1].set_xlabel("Time [hr]")
+    axs[0, 1].set_ylabel("Flow rate [l/s]")
+    axs[0, 1].set_ylim(0, 1)
+    axs[0, 1].set_title(r"\textbf{Valves flow rate}")
+    axs[0, 1].legend()
+
+    fig.set_size_inches(12, 5.5)
+    fig.suptitle(r"\textbf{EMS two days operation}", fontsize=14)
+
+    plt.tight_layout()
+    plt.savefig(f"logs/ems/{name}_soc_aperture.png", dpi=300)
+    plt.show()
+
+    #%%
+    plt.plot(t, x[:-1, 1], label='v_tanks')
+    plt.xlabel("Time [hr]")
+    plt.legend()
+    plt.show()
+
+    #%%
+    plt.plot(rews)
+    plt.show()
+
+    #%%
+    plt.plot(t, x[:-1, -3], label="SOC")
+    plt.hlines(20, 0, 48, color='black', linestyles="--")
+    plt.hlines(100, 0, 48, color='black', linestyles="--")
+    plt.ylabel("State of charge [kWh]")
+    plt.xlabel("Time [hr]")
+    plt.title("State of charge over two days")
+    fig = plt.gcf()
+    fig.set_size_inches(h * 1.618, h * .75)
+    plt.tight_layout()
+    plt.savefig(f"logs/ems/{name}_soc.png", dpi=300)
+    plt.legend()
+
+    plt.show()
 
 #%%
-x = np.array(x)
-a = np.array(a)
-rews = np.array(rews)
-t = np.linspace(0, 48, len(x) - 1)
+h = 4
+for alg_name in ["sac", "td3", "ppo"]:
 
-#%%
-t = np.linspace(0, 48, len(x) - 1)
-plt.plot(t, x[:-1, 0], label='Required water')
-plt.plot(t, x[:-1, 2], label='Irrigated water')
-plt.xlabel("Time [hr]")
-plt.ylabel("Water Volume [m3]")
-plt.title("Irrigated water over two days")
+    data = np.load(f'logs/ems/{alg_name}/evaluations.npz')
+
+    # Extract the arrays
+    timesteps = data['timesteps']
+    results = data['results']
+    ep_lengths = data['ep_lengths']
+
+    argmax = np.argmax(data['results'].mean(axis=1))
+    print(f"Best evaluation for {alg_name} at timestep {data['timesteps'][argmax]} with mean return {data['results'].mean(axis=1)[argmax]} and std {data['results'].std(axis=1)[argmax]}")
+
+    # Plot the results
+    plt.plot(timesteps, results.mean(axis=1), label=f'{alg_name.upper()}')
+    plt.fill_between(timesteps, results.mean(axis=1) - results.std(axis=1), results.mean(axis=1) + results.std(axis=1), alpha=0.25)
+
 fig = plt.gcf()
-fig.set_size_inches(h * 1.618, h * .75)
+fig.set_size_inches(h * 2, h)
+plt.xlabel('Timesteps', fontsize = 17)
+plt.ylabel('Mean Return', fontsize = 17)
+plt.ylim(-150, 200)
+#plt.title('Evaluation Results Over Time')
+plt.legend(loc = "lower right")
+plt.grid()
 plt.tight_layout()
-plt.legend()
-plt.savefig("logs/ems/irrigated_water.png", dpi=300)
+plt.savefig("logs/ems/ems_eval_curve.png", dpi=300)
 plt.show()
-#%%
-plt.plot(t, a[:, 0], label='Tank recharge')
-plt.plot(t, a[:, 1], label='Irrigation')
-plt.xlabel("Time [hr]")
-plt.ylabel("Flow rate [l/s]")
-plt.ylim(0, 1.0)
-plt.title("Valves flow rate over two days")
-fig = plt.gcf()
-fig.set_size_inches(h * 1.618, h * .75)
-plt.legend()
-plt.tight_layout()
-plt.savefig("logs/ems/aperture.png", dpi=300)
-plt.show()
-
-#%%
-print((x[143, 0] - x[143, 2])/x[143, 0])
-print((x[287, 0] - x[287, 2])/x[287, 0])
-
-print((0.03966951699351884+0.03457275545314583)/2)
-
-#%%
-plt.plot(t, x[:-1, 3], label="s")
-plt.hlines(0.0, 0, 48, color='black', linestyles="--")
-plt.hlines(1.0, 0, 48, color='black', linestyles="--")
-plt.title("Aquifer drawdown")
-plt.xlabel("Time [hr]")
-plt.ylabel("Drawdown [m]")
-plt.legend()
-fig = plt.gcf()
-fig.set_size_inches(h * 1.618, h * .75)
-plt.tight_layout()
-plt.show()
-
-#%%
-
-fig, axs = plt.subplots(2, 1)
-axs[0].plot(t, x[:-1, 0], label='Required water')
-axs[0].plot(t, x[:-1, 2], label='Irrigated water')
-axs[0].set_xlabel("Time [hr]")
-axs[0].set_ylabel("Water Volume [m3]")
-axs[0].set_title("Irrigated water over two days")
-
-axs[1].plot(t, x[:-1, 3], label="s")
-axs[1].hlines(0.0, 0, 48, color='black', linestyles="--")
-axs[1].hlines(1.0, 0, 48, color='black', linestyles="--")
-axs[1].set_title("Aquifer drawdown")
-axs[1].set_xlabel("Time [hr]")
-axs[1].set_ylabel("Drawdown [m]")
-
-plt.tight_layout()
-plt.savefig("logs/ems/irrigated_water_drawdown.png", dpi=300)
-plt.show()
-
-#%%
-fig, axs = plt.subplots(2, 1)
-axs[1].plot(t, x[:-1, -3], label="SOC")
-axs[1].hlines(20, 0, 48, color='black', linestyles="--")
-axs[1].hlines(100, 0, 48, color='black', linestyles="--")
-axs[1].set_ylabel("State of charge [kWh]")
-axs[1].set_xlabel("Time [hr]")
-axs[1].legend()
-axs[1].set_title("State of charge over two days")
-
-axs[0].plot(t, a[:, 0], label='Tank recharge')
-axs[0].plot(t, a[:, 1], label='Irrigation')
-axs[0].set_xlabel("Time [hr]")
-axs[0].set_ylabel("Flow rate [l/s]")
-axs[0].set_ylim(0, 1)
-axs[0].set_title("Valves flow rate over two days")
-plt.tight_layout()
-plt.savefig("logs/ems/soc_aperture.png", dpi=300)
-plt.show()
-
-#%%
-
-fig, axs = plt.subplots(2, 2)
-
-axs[0, 0].plot(t, x[:-1, 0], label='Required water')
-axs[0, 0].plot(t, x[:-1, 2], label='Irrigated water')
-axs[0, 0].set_xlabel("Time [hr]")
-axs[0, 0].set_ylabel("Water Volume [m3]")
-axs[0, 0].legend()
-axs[0, 0].set_title(r"\textbf{Required and irrigated water}")
-
-axs[1, 0].plot(t, x[:-1, 3], label="s")
-axs[1, 0].hlines(0.0, 0, 48, color='black', linestyles="--")
-axs[1, 0].hlines(1.0, 0, 48, color='black', linestyles="--")
-axs[1, 0].set_title(r"\textbf{Aquifer drawdown}")
-axs[1, 0].set_xlabel("Time [hr]")
-axs[1, 0].set_ylabel("Drawdown [m]")
-
-axs[1, 1].plot(t, x[:-1, -3], label="SOC")
-axs[1, 1].hlines(20, 0, 48, color='black', linestyles="--")
-axs[1, 1].hlines(100, 0, 48, color='black', linestyles="--")
-axs[1, 1].set_ylabel("State of energy [kWh]")
-axs[1, 1].set_xlabel("Time [hr]")
-axs[1, 1].set_title(r"\textbf{Batteries state of energy}")
-
-axs[0, 1].plot(t, a[:, 0], label='Tank recharge')
-axs[0, 1].plot(t, a[:, 1], label='Irrigation', alpha=.8)
-axs[0, 1].set_xlabel("Time [hr]")
-axs[0, 1].set_ylabel("Flow rate [l/s]")
-axs[0, 1].set_ylim(0, 1)
-axs[0, 1].set_title(r"\textbf{Valves flow rate}")
-axs[0, 1].legend()
-
-fig.set_size_inches(12, 5.5)
-fig.suptitle(r"\textbf{EMS two days operation}", fontsize=14)
-
-plt.tight_layout()
-plt.savefig("logs/ems/soc_aperture.png", dpi=300)
-plt.show()
-
-#%%
-plt.plot(t, x[:-1, 1], label='v_tanks')
-plt.xlabel("Time [hr]")
-plt.legend()
-plt.show()
-
-#%%
-plt.plot(rews)
-plt.show()
-
-#%%
-plt.plot(t, x[:-1, -3], label="SOC")
-plt.hlines(20, 0, 48, color='black', linestyles="--")
-plt.hlines(100, 0, 48, color='black', linestyles="--")
-plt.ylabel("State of charge [kWh]")
-plt.xlabel("Time [hr]")
-plt.title("State of charge over two days")
-fig = plt.gcf()
-fig.set_size_inches(h * 1.618, h * .75)
-plt.tight_layout()
-plt.savefig("logs/ems/soc.png", dpi=300)
-plt.legend()
-
-plt.show()
-
-#%%
