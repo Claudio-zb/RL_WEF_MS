@@ -1,3 +1,4 @@
+#%%
 import pandas as pd
 from stable_baselines3.common.monitor import Monitor
 
@@ -11,6 +12,7 @@ from stable_baselines3 import TD3, PPO, SAC
 from stable_baselines3.common.env_util import make_vec_env
 import matplotlib.pyplot as plt
 import time
+
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['font.family'] = 'serif'
@@ -59,7 +61,7 @@ if train:
 
         print(f"Training {name} took {100*(end_time - start_time)} seconds")
 
-#%% Plotting the training curves
+# #%% Plotting the training curves
 h = 4
 
 def moving_average(data, window_size):

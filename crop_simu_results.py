@@ -4,25 +4,19 @@ import torch
 from predictive_models.utils import NN_soil_mdl
 from environments.WMS_env import *
 from matplotlib import pyplot as plt
+
+plt.rcParams['text.usetex'] = True
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
+
+
 weather_data = pd.read_csv("environments/Data/WMS/weather_data.csv")
 cultivate_env = Cultivates()
 from environments.WMS_policy import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
 
 
-irr_policy = TriggeredIrrigationPolicy(1, 4, 2)
+irr_policy = TriggeredIrrigationPolicy(1, 4, 5)
 
-def create_rb_policy() -> ModelBasedIrrigationPolicy:
-    """
-    Creates a rule-based irrigation policy
-    """
-    theta_models = [torch.load(f"predictive_models/soil_moisture/theta_{5-j}.pth") for j in range(1, 5)]
-    theta_models = [torch.load("predictive_models/soil_moisture/theta_evp.pth")] + theta_models
-    root_length_model = torch.load("predictive_models/soil_moisture/root_depth.pth")
-    theta_a_mdl = NN_soil_mdl(theta_models, root_length_model)
-
-    return ModelBasedIrrigationPolicy(n_crops=1, neural_model=theta_a_mdl, root_length_model=root_length_model)
-
-rb_policy = create_rb_policy()
 
 print("a")
 #%%
@@ -33,17 +27,23 @@ prev_action = 0
 actions = []
 for i in range(simu_days):
     daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-    action = rb_policy.get_action(obs["tomato"], prev_action, 0, 0)# irr_policy(obs)
+    action = irr_policy(obs)[0]
     actions.append(action)
     obs = cultivate_env.step([action], daily_weather_data)
 
 crop_data = cultivate_env.crops[0].hist_data
 crop_data = np.array(crop_data)
 soil_data = pd.DataFrame(cultivate_env.get_soil_data()[0])
+actions = np.array(actions)
 
 #%%
 
-plt.plot(actions)
+plt.plot(actions*1000)
+fig = plt.gcf() 
+fig.set_size_inches(6,3)
+plt.ylabel("Irrigated water [mm]")
+plt.xlabel("Day since plantation")
+plt.tight_layout()
 plt.show()
 
 #%% let's check after a period of simulation
@@ -59,21 +59,31 @@ plt.savefig("root_depth.png", dpi=300)
 plt.show()
 
 #%%
-plt.plot(crop_data[:,-1], label="Ke_bound")
-plt.plot(crop_data[:,-2], label="K_r")
-plt.plot(crop_data[:,-3], label="K_e")
-plt.plot(crop_data[:,-4], label="K_s")
+plt.plot(crop_data[:,-1], label=r"$K_{\text{e bound}}$")
+plt.plot(crop_data[:,-2], label=r"$K_r$")
+plt.plot(crop_data[:,-3], label=r"$K_e$")
+plt.plot(crop_data[:,-4], label=r"$K_s$")
+fig = plt.gcf() 
+fig.set_size_inches(6,3)
+plt.xlabel("Days since plantation")
 plt.legend()
 plt.title("Kr")
+plt.tight_layout()
 plt.show()
 
 #%%
 
-plt.plot(crop_data[:,1], label="potential crop et")
-plt.plot(crop_data[:,2], label="ref et")
-plt.plot(crop_data[:,4], label="actual et evap")
+plt.plot(crop_data[:,1], label= r"$ET_p$")
+plt.plot(crop_data[:,2], label= r"$ET_0$")
+plt.plot(crop_data[:,4], label= r"$ET_a$")
+fig = plt.gcf() 
+fig.set_size_inches(6,3)
+plt.legend()
+plt.xlabel("Days since plantation")
+plt.ylabel("Water depth [mm]")
 plt.legend()
 plt.title("Evapotranspiration")
+plt.grid()
 plt.show()
 
 

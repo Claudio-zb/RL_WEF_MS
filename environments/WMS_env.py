@@ -5,7 +5,6 @@ import pandas as pd
 from environments.Data.WMS.WMS_profile import *
 import gymnasium as gym
 
-
 def obs_dict_2_obs_array(obs: Dict[str, np.ndarray]) -> np.ndarray:
     """Turns an observation dictionary into a flattened array"""
     return np.array([obs[crop_name] for crop_name in obs.keys()]).flatten()

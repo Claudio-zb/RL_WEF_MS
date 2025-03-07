@@ -80,3 +80,7 @@ class TriggeredIrrigationPolicy(IrrigationPolicy):
             self.days_count = 0
         self.days_count += 1
         return irrigation
+    
+    def get_action(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+        irrigation = self.__call__(obs)  
+        return irrigation
