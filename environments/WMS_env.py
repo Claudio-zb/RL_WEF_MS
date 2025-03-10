@@ -296,7 +296,7 @@ class Crop:
         """
         Steps the crop model one day forward
         :param ET0: reference evapotranspiration [mm/day]
-        :param infiltrated_water: incoming water [m3/day]
+        :param infiltrated_water: incoming water [m/day]
         """
 
         self.days_since_plantation += 1
@@ -332,7 +332,7 @@ class Crop:
         """
         Updates the root depth, computes the actual evapotranspiration and moves
         the soil dynamics one step forward
-        :param irrigation: incoming water [m3/day]
+        :param irrigation: incoming water [m/day]
         """
 
         assert isinstance(irrigation, float)
@@ -409,13 +409,33 @@ class Crop:
         t = self.days_since_plantation
         t0 = self.stages_duration[0]
         t1 = self.stages_duration[0] + self.stages_duration[1]
-        growth_rate = (self.root_depth_max - self.root_depth_init) / (t1 - t0)
+        growth_rate = (self.root_depth_max - self.root_depth_init) / (t1 - t0) 
         if t < t0:
-            return self.root_depth_init
+            root_depth = self.root_depth_init
         elif t < t1:
-            return self.root_depth + growth_rate * self.Ks
+            root_depth = self.root_depth + growth_rate * self.Ks
         else:
-            return self.root_depth
+            root_depth = self.root_depth
+        
+        layers = self.soil.all_layers[::-1]
+        cum_depths = np.cumsum(np.array([0] + [layer.depth for layer in layers]))
+        
+        percentages = [.4, .3, .2, .1]
+        i = 0
+        j = 0
+        layer_percentage = 0
+        quarter = root_depth/4
+        while i < 4:
+            if quarter - cum_depths[j] < layers[j].depth: # the quarter is inside the layer
+                layer_percentage += percentages[i]
+                i += 1  # lets iterate over quarters
+            else: # the quarter is larger than the current layer
+                layer_percentage += percentages[i]*quarter/layers[j].depth
+                layers[j] = layer_percentage
+                j += 1 # lets iterate in layers
+
+
+        return root_depth
 
     def get_dual_coefficients(self, t: int) -> Tuple[float, float, float]:
         """
@@ -515,6 +535,7 @@ class Crop:
         # pad the array with zeros to reach the number of layers
         final_fraction = np.pad(final_fraction, (0, len(self.soil.layers) + 1 - len(final_fraction)), 'constant')
         return Ks, final_fraction
+    
 
 
 
@@ -577,6 +598,7 @@ class Layer:
         self.taw: float = self.awc * depth
         self.hist_theta: List[np.ndarray] = []
         self.partial_Ks: float = 0.0
+        self.uptake_percentage: float = 0.0
         self.h_c: float = 0.0
 
 
@@ -615,6 +637,10 @@ class Layer:
 
     def set_partial_Ks(self, partial_Ks):
         self.partial_Ks = partial_Ks
+        return
+    
+    def set_uptake_percentage(self, uptake_percentage):
+        self.uptake_percentage = uptake_percentage
         return
 
     def get_obs(self):
@@ -688,6 +714,13 @@ class Soil:
         self.incoming_water = 0.0
         self.outcoming_water = 0.0
         self.hist_data = []
+        self.n_layers = len(self.layers)
+        self.all_layers = self.layers + [self.evp_layer]
+
+    def __get_item__(self, idx):
+        if idx < 0 or idx > self.n_layers:
+            raise IndexError("Index out of range")
+        return self.all_layers[idx]
 
     def add_layer(self, layer: Layer):
         self.layers.append(layer)
@@ -760,6 +793,7 @@ class Soil:
         ## Seepage
         d_initial = self.evp_layer.get_theta()*self.evp_layer.depth
         d_sum = d_initial + irrigation + precipitation - evaporation - self.evp_layer.partial_Ks * transpiration
+        
         if d_sum > self.evp_layer.theta_fc*self.evp_layer.depth:
             d_seepage = d_sum - self.evp_layer.theta_fc*self.evp_layer.depth
         else:

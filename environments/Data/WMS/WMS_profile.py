@@ -4,7 +4,7 @@ layer_specs = {"depth": .17,
                "theta_sat": .429,
                "theta_res": .06,
                "alpha": 0.02,  # .02,
-               "K0": 12.8,
+               "K0": 15,
                "n": 1.75,  # 1.41,
                "theta": 0.25}
 
@@ -14,7 +14,7 @@ layer_specs2 = {"depth": .17,
                 "theta_sat": .429,
                 "theta_res": .06,
                 "alpha": 0.02,  # .02,
-                "K0": 12.8,
+                "K0": 15,
                 "n": 1.75,  # 1.41,
                 "theta": 0.15}
 
@@ -24,10 +24,10 @@ evp_layer_specs = {"depth": 0.17,
                    "theta_sat": 0.429,
                    "theta_res": 0.06,
                    "alpha": 0.02,
-                   "K0": 12.8,
+                   "K0": 15,
                    "n": 1.75,
                    "theta": 0.15,
-                   "rew": 0.005} # readily water available [m]
+                   "rew": 0.005} # readily evaporable water [m]
 
 # parameters of cultives
 tomato = {"crop_name": "tomato",

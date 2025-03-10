@@ -15,7 +15,7 @@ cultivate_env = Cultivates()
 from environments.WMS_policy import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
 
 
-irr_policy = TriggeredIrrigationPolicy(1, 4, 5)
+irr_policy = TriggeredIrrigationPolicy(1, 5, 30)
 
 
 print("a")
@@ -51,7 +51,7 @@ plt.show()
 plt.plot(-crop_data[:, 0], label="root depth")
 for i in range(1, 5):
     plt.hlines(-0.15*i, 0, simu_days, color='gray', linestyles="--")
-plt.ylim(-5*.15, 0)
+plt.ylim(-5*.17, 0)
 plt.ylabel("Depth [m]")
 plt.xlabel("Days since plantation")
 plt.title("Root depth")
@@ -96,7 +96,7 @@ plt.plot(soil_moisture["layer_3_0"], label="layer_4")
 plt.plot(soil_moisture["layer_2_0"], label="layer_3")
 plt.plot(soil_moisture["layer_1_0"], label="layer_2")
 plt.plot(soil_moisture["layer_0_0"], label="layer_1")
-
+ 
 theta_wp = cultivate_env.crops[0].soil.evp_layer.theta_wp
 theta_fc = cultivate_env.crops[0].soil.evp_layer.theta_fc
 theta_sat = cultivate_env.crops[0].soil.evp_layer.theta_sat

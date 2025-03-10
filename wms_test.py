@@ -9,7 +9,7 @@ cultivate_env = Cultivates()
 from environments.WMS_policy import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
 
 
-irr_policy = TriggeredIrrigationPolicy(1, 4, 2)
+irr_policy = TriggeredIrrigationPolicy(1, 5, 8)
 
 def create_rb_policy() -> ModelBasedIrrigationPolicy:
     """
