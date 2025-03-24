@@ -834,6 +834,7 @@ def soil_from_dicts(evp_layer: Dict[str, float], layers: List[Dict[str, float]])
     soil = Soil(evp_layer_from_dict(evp_layer))
     for layer_info in layers:
         soil.add_layer(layer_from_dict(layer_info))
+    soil.all_layers = soil.layers + [soil.evp_layer]
     return soil
 
 
