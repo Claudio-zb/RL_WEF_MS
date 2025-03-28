@@ -18,6 +18,10 @@ class IrrigationPolicy(ABC):
     def __call__(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         pass
 
+    @abstractmethod
+    def get_action(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+        pass
+
 
 class LearnedIrrigationPolicy(IrrigationPolicy):
     def __init__(self, n_crops: int, rl_policy):
@@ -28,6 +32,10 @@ class LearnedIrrigationPolicy(IrrigationPolicy):
     def __call__(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         obs_array = obs_dict_2_obs_array(obs)
         action = self.rl_policy.predict(obs_array, deterministic=True)[0]
+        return action
+    
+    def get_action(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+        action = self.__call__(obs)  
         return action
 
 

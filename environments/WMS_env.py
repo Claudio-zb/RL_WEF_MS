@@ -111,8 +111,10 @@ class Cultivates:
             self.wind_speed = climate_data["wind_speed"]
             self.ET0 = self.get_ET0()
         except KeyError:
-            self.ET0 = climate_data["ET_0"]
+            self.ET0 = climate_data["ET_0"].values.item()
 
+        assert isinstance(self.ET0, float) or isinstance(self.ET0, np.floating)
+        
         self.precipitation = climate_data["precipitation"]/1000  # [mm] -> [m]
 
         return
@@ -283,6 +285,8 @@ class Crop:
 
 
     def reset(self, et0: float = 0.0):
+        assert(isinstance(et0, float) or isinstance(et0, np.floating))
+
         self.ref_evapotranspiration = et0
         self.update(0.0)
         self.hist_data = []
@@ -296,6 +300,9 @@ class Crop:
         """
         Starts the simulation of crop
         """
+
+        assert(isinstance(et0, float) or isinstance(et0, np.floating))
+
         self.ref_evapotranspiration = et0
         self.days_since_plantation = 1
         self._is_active = True

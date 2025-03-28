@@ -1,3 +1,4 @@
+from environments.WMS_policy import IrrigationPolicy 
 from environments.WMS_env import Cultivates
 from environments.EMS_env import EnergyWaterMG, RuleBasedEMS
 from typing import Callable
@@ -14,18 +15,24 @@ class SimuEnv:
         self.microgrid_env: EnergyWaterMG = EnergyWaterMG()
         self.cultivate_env: Cultivates = Cultivates()
 
-        self.irrigation_policy: Callable = irrigation_policy
+        self.irrigation_policy: IrrigationPolicy = irrigation_policy
         self.ems_policy: RuleBasedEMS = ems_policy
 
-        self.daily_weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/weather_data.csv")
+        self.global_weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/extracted_data.csv")
+        self.daily_weather_data: pd.DataFrame = None
         self.ten_min_weather_data: pd.DataFrame = pd.read_csv("environments/Data/EMS/calan_2006.csv")
         self.ten_min_demand: np.ndarray = get_demand()
         self.days_since_started: int = 0
         self.doy: int = 0
+        self.year: int = None
         self.last_simulation_data: dict = {}
         self.soil_data: list = []
 
+        self.surface_area: float = 1000  # [m2]
+
     def start(self, doy: int):
+        self.year = 2010
+        self.daily_weather_data = self.global_weather_data[self.global_weather_data["year"] == self.year].copy()
         self.doy = doy
         self.days_since_started = 1
         self.last_simulation_data = {}
@@ -36,10 +43,9 @@ class SimuEnv:
         self.start(init_doy)
 
         cultivate_obs_hist, mg_obs_hist = [], []
-
-        cultivate_obs, cultivate_info = self.cultivate_env.start()
-        mg_obs = None
-        prev_mg_obs = None
+        daily_weather_data = self.daily_weather_data[self.daily_weather_data["doy"] == self.doy]
+        cultivate_obs, cultivate_info = self.cultivate_env.start(daily_weather_data)
+        mg_obs, prev_mg_obs = None, None
         done = False
         v_reqs, v_irrs = None, None
         v_reqs_hist, v_irrs_hist = [], []
@@ -47,7 +53,9 @@ class SimuEnv:
 
             # Get the action from the policies
             weather_data = self.update_daily_weather(self.doy)
-            v_reqs = self.irrigation_policy(cultivate_obs)*1000
+            mm_reqs = self.irrigation_policy.get_action(cultivate_obs)  # water requirement [mm]
+            
+            v_reqs = mm_reqs*self.surface_area/1000  # water requirement [m3]
             v_reqs_hist.append(v_reqs)
 
             if mg_obs is None:
@@ -55,7 +63,7 @@ class SimuEnv:
             observations = []
             for i in range(144):
                 prev_mg_obs = copy.deepcopy(mg_obs)
-                disturbances = self.get_disturbances(0, i)
+                disturbances = self.get_disturbances(self.doy, i)
                 action = self.ems_policy.get_action(mg_obs, v_reqs, disturbances)
                 mg_obs = self.microgrid_env.next_step(action)
                 observations.append([mg_obs[0][0], mg_obs[1][0], mg_obs[2][0], mg_obs[3], mg_obs[4]])
@@ -80,12 +88,12 @@ class SimuEnv:
                                      "ems_actions": v_irrs_hist}
         return
 
-    def update_daily_weather(self, doy: int):
+    def update_daily_weather(self, doy: int) -> dict:
 
         data = self.daily_weather_data.loc[self.daily_weather_data["doy"] == doy]
         precipitation = data["precipitation"].values[0]
         try:
-            ET0 = data["ET0"].iloc[0]
+            ET0 = data["ET_0"].iloc[0]
         except KeyError:
             ET0 = np.nan
         if np.isnan(ET0):
