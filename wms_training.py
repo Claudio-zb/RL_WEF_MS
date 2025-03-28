@@ -1,4 +1,4 @@
-# This script is going to be used for testing of the different environments
+#%% This script is going to be used for testing of the different environments
 import pandas as pd
 import time
 from stable_baselines3.common.monitor import Monitor
@@ -35,22 +35,22 @@ def create_callback(alg_name, environment):
 train = False
 if train:
     sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/sac_monitor.csv"), n_envs=4, seed=0)
-    td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/td3_monitor.csv"), n_envs=4, seed=0)
-    ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/ppo_monitor.csv"), n_envs=4, seed=0, vec_env_cls=SubprocVecEnv)
+    #td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/td3_monitor.csv"), n_envs=4, seed=0)
+    #ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/ppo_monitor.csv"), n_envs=4, seed=0, vec_env_cls=SubprocVecEnv)
 
     sac_env = create_wrapped_env("./logs/wms/sac_monitor.csv")
-    td3_env = create_wrapped_env("./logs/wms/td3_monitor.csv")
-    ppo_env = create_wrapped_env("./logs/wms/ppo_monitor.csv")
+    #td3_env = create_wrapped_env("./logs/wms/td3_monitor.csv")
+    #ppo_env = create_wrapped_env("./logs/wms/ppo_monitor.csv")
 
-    td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1, batch_size=256,
-                    policy_delay=3)
-    ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=256, normalize_advantage=True,
-                    use_sde=True, device="cpu", clip_range=0.18)
+    #td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1, batch_size=256,
+    #                policy_delay=3)
+    #ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=256, normalize_advantage=True,
+    #                use_sde=True, device="cpu", clip_range=0.18)
     sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1, batch_size=256, ent_coef=0.05)
 
-    models = [ppo_model, sac_model, td3_model]
-    envs = [ppo_env, sac_env, td3_env]
-    models_name = ["ppo", "sac", "td3"]
+    models = [sac_model] #[ppo_model, sac_model, td3_model]
+    envs = [sac_env] #[ppo_env, sac_env, td3_env]
+    models_name = ["sac"] #["ppo", "sac", "td3"]
     training_times = []
     for model, name, env in zip(models, models_name, envs):
         start_time = time.time()
@@ -91,7 +91,7 @@ plt.show()
 
 #%% compute the mean and std of the rewards
 
-for name in ["sac", "td3", "ppo"]:
+for name in ["sac"]: # , "td3", "ppo"]:
     df = pd.read_csv(f"./logs/wms/{name}_monitor.csv", skiprows=1)
     print(f"{name}: mean = {df['r'].mean()}, std = {df['r'].std()}")
 
@@ -99,10 +99,10 @@ for name in ["sac", "td3", "ppo"]:
 #%%
 # Load the best models
 sac_best_model = SAC.load("./logs/wms/sac/best_model")
-td3_best_model = TD3.load("./logs/wms/td3/best_model")
-ppo_best_model = PPO.load("./logs/wms/ppo/best_model")
-best_models = [sac_best_model, ppo_best_model, td3_best_model]
-models_name = ["sac", "ppo", "td3"]
+#td3_best_model = TD3.load("./logs/wms/td3/best_model")
+#ppo_best_model = PPO.load("./logs/wms/ppo/best_model")
+best_models = [sac_best_model]#[sac_best_model, ppo_best_model, td3_best_model]
+models_name = ["sac"] #["sac", "ppo", "td3"]
 
 #%% perform the evaluation of SAC model
 cultivate_env = CultivateEnv()
@@ -134,7 +134,7 @@ for model, name in zip(best_models, models_name):
     plt.title("Episode Reward")
     plt.xlabel("Days since plantation")
     plt.ylabel("Reward")
-    plt.savefig(f"training_results/wms/{name}_episode_reward.png", dpi=300)
+    plt.savefig(f"logs/wms/sac/{name}_episode_reward.png", dpi=300)
     plt.show()
 
     #%%
@@ -146,7 +146,7 @@ for model, name in zip(best_models, models_name):
     plt.ylabel("Irrigation depth [mm]")
     plt.grid()
     plt.tight_layout()
-    plt.savefig(f"training_results/wms/{name}_irrigation_depth.png", dpi=300)
+    plt.savefig(f"logs/wms/sac/{name}_irrigation_depth.png", dpi=300)
     plt.show()
 
     #%%
@@ -197,20 +197,20 @@ for model, name in zip(best_models, models_name):
     fig.suptitle("Soil Moisture Evolution", fontsize=14)
     fig.set_size_inches(h * 2, h * .3 * num_layers)
     plt.tight_layout(rect=[0.05, 0, 1, 0.96])
-    plt.savefig("training_results/wms/soil_moisture_evolution.png", dpi=300)
+    plt.savefig(f"logs/wms/sac/soil_moisture_evolution.png", dpi=300)
     plt.show()
 
 
     #%%
     fig, ax = plt.subplots(2,1)
-    ax[0].step(t[:-1], x[1:,6])
+    ax[0].step(t[:-1], x[1:,7])
     #ax[0].set_title("Water stress coeffient evolution")
     #ax[0].set_xlabel("Days since plantation")
     ax[0].set_ylabel(r"$K_s$")
     ax[0].grid()
     #fig.set_size_inches(h * 1.618, h)
 
-    ax[1].step(t[:-1], x[1:,5])
+    ax[1].step(t[:-1], x[1:,6])
     ax[1].invert_yaxis()
     ax[1].set_title("Root length evolution")
     ax[1].set_xlabel("Days since plantation")
@@ -218,12 +218,12 @@ for model, name in zip(best_models, models_name):
     ax[1].grid()
 
     plt.tight_layout()
-    plt.savefig(f"training_results/wms/{name}_Ks_and_root_length.png", dpi=300)
+    plt.savefig(f"logs/wms/sac/{name}_Ks_and_root_length.png", dpi=300)
     plt.show()
 
     #%%
     fig, ax = plt.subplots(1,1)
-    ax.step(t[:-1], x[1:,6])
+    ax.step(t[:-1], x[1:,7])
     #ax.set_title("Water stress coeffient evolution")
     #ax[0].set_xlabel("Days since plantation")
     ax.set_ylabel(r"$K_s$")

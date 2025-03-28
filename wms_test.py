@@ -4,7 +4,7 @@ import torch
 from predictive_models.utils import NN_soil_mdl
 from environments.WMS_env import *
 from matplotlib import pyplot as plt
-weather_data = pd.read_csv("environments/Data/WMS/weather_data.csv")
+weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
 cultivate_env = Cultivates()
 from environments.WMS_policy import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
 
@@ -15,9 +15,9 @@ def create_rb_policy() -> ModelBasedIrrigationPolicy:
     """
     Creates a rule-based irrigation policy
     """
-    theta_models = [torch.load(f"predictive_models/soil_moisture/theta_{5-j}.pth") for j in range(1, 5)]
-    theta_models = [torch.load("predictive_models/soil_moisture/theta_evp.pth")] + theta_models
-    root_length_model = torch.load("predictive_models/soil_moisture/root_depth.pth")
+    theta_models = [torch.load(f"predictive_models/soil_moisture/theta_{5-j}.pth", weights_only=False) for j in range(1, 5)]
+    theta_models = [torch.load("predictive_models/soil_moisture/theta_evp.pth", weights_only=False)] + theta_models
+    root_length_model = torch.load("predictive_models/soil_moisture/root_depth.pth", weights_only=False)
     theta_a_mdl = NN_soil_mdl(theta_models, root_length_model)
 
     return ModelBasedIrrigationPolicy(n_crops=1, neural_model=theta_a_mdl, root_length_model=root_length_model)
@@ -26,14 +26,14 @@ rb_policy = create_rb_policy()
 
 print("a")
 #%%
-
-obs, info = cultivate_env.start()
+daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
+obs, info = cultivate_env.start(daily_weather_data)
 simu_days = 135
 prev_action = 0
 actions = []
 for i in range(simu_days):
     daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-    action = rb_policy.get_action(obs["tomato"], prev_action, 0, 0)# irr_policy(obs)
+    action = rb_policy.get_action(obs["potato"], prev_action, 0, 0)# irr_policy(obs)
     actions.append(action)
     obs = cultivate_env.step([action], daily_weather_data)
 
@@ -41,7 +41,7 @@ crop_data = cultivate_env.crops[0].hist_data
 crop_data = np.array(crop_data)
 soil_data = pd.DataFrame(cultivate_env.get_soil_data()[0])
 
-#%%
+  #%%
 
 plt.plot(actions)
 plt.show()
