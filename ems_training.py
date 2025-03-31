@@ -33,35 +33,35 @@ def create_wrapped_env(log_file):
 
 def create_callback(alg_name, environment):
     return EvalCallback(environment, best_model_save_path=f'./logs/{alg_name}',
-                        log_path=f'./logs2/ems/{alg_name}', eval_freq=5000,
+                        log_path=f'./logs/ems/{alg_name}', eval_freq=2000,
                         deterministic=True, render=False)
 
 
-train = False
+train = True
 if train:
-    sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/sac_monitor.csv"), n_envs=4, seed=0)
-    td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/td3_monitor.csv"), n_envs=4, seed=0)
-    ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/ppo_monitor.csv"), n_envs=4, seed=0)
+    sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/ems/sac_monitor.csv"), n_envs=4, seed=0)
+    #td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/td3_monitor.csv"), n_envs=4, seed=0)
+    #ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/ppo_monitor.csv"), n_envs=4, seed=0)
 
-    sac_env = create_wrapped_env("./logs2/ems/sac_monitor.csv")
-    td3_env = create_wrapped_env("./logs2/ems/td3_monitor.csv")
-    ppo_env = create_wrapped_env("./logs2/ems/ppo_monitor.csv")
+    sac_env = create_wrapped_env("./logs/ems/sac_monitor.csv")
+    #td3_env = create_wrapped_env("./logs2/ems/td3_monitor.csv")
+    #ppo_env = create_wrapped_env("./logs2/ems/ppo_monitor.csv")
 
     sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1)
-    td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1)
-    ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=128)
+    #td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1)
+    #ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=128)
 
-    models = [sac_model, td3_model, ppo_model]
-    envs = [sac_env, td3_env, ppo_env]
-    models_name = ["sac", "td3", "ppo"]
+    models = [sac_model]  #[sac_model, td3_model, ppo_model]
+    envs = [sac_env]  # [sac_env, td3_env, ppo_env]
+    models_name = ["sac"]  #["sac", "td3", "ppo"]
     for model, name, env in zip(models, models_name, envs):
         start_time = time.time()
-        model.learn(total_timesteps=10_000, callback=create_callback(name, env))
+        model.learn(total_timesteps=400_000, callback=create_callback(name, env))
         end_time = time.time()
 
         print(f"Training {name} took {100*(end_time - start_time)} seconds")
 
-# #%% Plotting the training curves
+#%% Plotting the training curves
 h = 4
 
 def moving_average(data, window_size):

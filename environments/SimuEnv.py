@@ -49,28 +49,32 @@ class SimuEnv:
         done = False
         v_reqs, v_irrs = None, None
         v_reqs_hist, v_irrs_hist = [], []
+        observations = []
+        q_ps, q_is = [], []
+        mg_obs = self.microgrid_env.start(self.doy)
         while not done:
 
             # Get the action from the policies
             weather_data = self.update_daily_weather(self.doy)
-            mm_reqs = self.irrigation_policy.get_action(cultivate_obs)  # water requirement [mm]
+            mm_reqs = self.irrigation_policy.get_action(cultivate_obs)  # water requirement [m]
             
-            v_reqs = mm_reqs*self.surface_area/1000  # water requirement [m3]
+            v_reqs = mm_reqs*self.surface_area  # water requirement [m3]
             v_reqs_hist.append(v_reqs)
-
-            if mg_obs is None:
-                mg_obs = self.microgrid_env.start(self.doy)
-            observations = []
+            
             for i in range(144):
                 prev_mg_obs = copy.deepcopy(mg_obs)
                 disturbances = self.get_disturbances(self.doy, i)
                 action = self.ems_policy.get_action(mg_obs, v_reqs, disturbances)
+                pbat, pumps = action
                 mg_obs = self.microgrid_env.next_step(action)
-                observations.append([mg_obs[0][0], mg_obs[1][0], mg_obs[2][0], mg_obs[3], mg_obs[4]])
-            observations = np.array(observations)
+                observations.append(np.array([mg_obs[0][0], mg_obs[1][0], mg_obs[2][0], mg_obs[3], mg_obs[4]]))
+                q_ps.append(pumps[0][0])
+                q_is.append(pumps[0][1])
+            _prev_mg_obs = np.array([prev_mg_obs[0][0], prev_mg_obs[1][0], prev_mg_obs[2][0], prev_mg_obs[3], prev_mg_obs[4]])
+
             v_irrs = prev_mg_obs[1]
             v_irrs_hist.append(v_irrs)
-            mg_obs_hist.append(prev_mg_obs)
+            mg_obs_hist.append(_prev_mg_obs)
 
             cultivate_obs = self.cultivate_env.step(v_irrs, weather_data)
             cultivate_obs_hist.append(copy.deepcopy(cultivate_obs))
@@ -80,12 +84,18 @@ class SimuEnv:
 
             if self.days_since_started >= total_days:
                 done = True
+        observations = np.array(observations)
+        mg_obs_hist = np.array(mg_obs_hist)
+        q_ps = np.array(q_ps)
+        q_is = np.array(q_is)
         self.soil_data = [crop.soil.get_hist_data() for crop in self.cultivate_env.crops]
         # self.crop_data = [crop.ge for crop in self.cultivate_env.crops]
         self.last_simulation_data = {"cultivate_obs": cultivate_obs_hist,
-                                     "mg_obs": mg_obs_hist,
+                                     "mg_obs": observations, #mg_obs_hist,
                                      "wms_actions": v_reqs_hist,
-                                     "ems_actions": v_irrs_hist}
+                                     "wms_actions_2": mg_obs_hist,
+                                     "qp_actions": q_ps,
+                                     "qi_actions": q_is}
         return
 
     def update_daily_weather(self, doy: int) -> dict:

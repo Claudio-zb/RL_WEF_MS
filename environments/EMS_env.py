@@ -43,13 +43,16 @@ class EnergyWaterMG:
         :param actions: Tuple of actions (p_bat, [[q_p, q_irr]])
         :return: Tuple of (v_tanks, v_irrs, drawdowns, soe, k)
         """
+        if (self.k % 144) == 0:  # The time at s is 00:00 i.e. a new day is starting
+            for idx in range(self.n_crops):
+                self.v_irrs[idx] = 0.0
 
-        assert len(actions[1]) == self.n_crops, "The number of actions should match the number of crops"
+        p_bat, pumps = actions
+        assert len(pumps) == self.n_crops, "The number of actions should match the number of crops"
 
         # unpacking the actions
-        p_bat = actions[0]
-        q_ps = [a_pair[0] for a_pair in actions[1]]
-        q_irrs = [a_pair[1] for a_pair in actions[1]]
+        q_ps = [pair[0] for pair in pumps]
+        q_irrs = [pair[1] for pair in pumps]
 
         q_ps = np.clip(np.array(q_ps), 0, Q_p_max)
         q_irrs = np.clip(np.array(q_irrs), 0, I_max)
@@ -62,9 +65,18 @@ class EnergyWaterMG:
 
             if self.v_tanks[idx] <= Vt_min:  # If the tank is empty, there is no irrigation
                 q_irrs[idx] = 0.0
+
             self.v_tanks[idx] = np.clip(v_tank + (q_ps[idx] - q_irrs[idx]) * 600 / 1000, self.v_tanks_min[idx],
                                         self.v_tanks_max[idx])
+            
+            volume_to_extract = q_irrs[idx]*600/1000
+            volume_available = np.max([self.v_tanks[idx] - self.v_tanks_min[idx], 0])
+
+            if volume_to_extract > volume_available:
+                q_irrs[idx] = volume_available*1000/600
+            
             self.v_irrs[idx] = np.clip(self.v_irrs[idx] + q_irrs[idx] * 600 / 1000, 0, np.inf)
+
             delta_SoE = np.max([p_bat, 0]) * n_c * (dt / 3600) + np.min([p_bat, 0]) / n_d * (dt / 3600)  # [kWh]
             self.soe = np.clip(self.soe + delta_SoE, SoE_min, SoE_max)
 
@@ -75,11 +87,7 @@ class EnergyWaterMG:
 
         self.k += 1
 
-        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the day is over|
-            for idx in range(self.n_crops):
-                self.v_irrs[idx] = 0.0
-
-        return self.v_tanks, self.v_irrs, self.drawdowns, self.soe, self.k
+        return self.v_tanks, self.v_irrs, self.drawdowns, self.soe, self.k % 144
 
     def set_state(self, v_tanks: list, v_irrs: list, dqs: list, soe: float, k: int):
         """ Set the state of the environment """
@@ -91,12 +99,20 @@ class EnergyWaterMG:
 
     def start(self, doy: int) -> Tuple[
         npt.NDArray[np.float32], npt.NDArray[np.float32], npt.NDArray[np.float32], float, float]:
-        """ Start the model in a certain day of year"""
+        """ Start the model in a certain day of year
+        Returns: Tuple of (v_tanks, v_irrs, drawdowns, soe, k)"""
         self.doy = doy
+        self.k = 0
+        self.v_irrs = [0.0]*self.n_crops
+        self.prev_Qps = np.zeros(self.n_crops)
+        self.dQs = [np.array([0])] * self.n_crops
         return self.get_state()
 
     def get_state(self) -> Tuple[
         npt.NDArray[np.float32], npt.NDArray[np.float32], npt.NDArray[np.float32], float, float]:
+        """ Get the state of the environment 
+        Returns: Tuple of (v_tanks, v_irrs, drawdowns, soe, k)"""
+
         return self.v_tanks, self.v_irrs, self.drawdowns, self.soe, self.k
 
 
@@ -113,6 +129,7 @@ class AbstractEMS(ABC):
 
 
 class RuleBasedEMS(AbstractEMS):
+    """Class for the Q_p, Q_irr action space agent"""
     def __init__(self, n_crops: int, rl_policy: BaseAlgorithm, isNormalized: bool = False):
         super().__init__(n_crops)
         self.policy = rl_policy
@@ -126,7 +143,9 @@ class RuleBasedEMS(AbstractEMS):
                    state: Tuple[List[float], List[float], List[float], float, int],
                    v_reqs: Union[List[float], np.ndarray],
                    disturbances) -> Tuple[float, List[list]]:
-        """Computes the action since the current observation"""
+        """Computes the action since the current observation
+        disturbances: Tuple of (p_fv, p_load)
+        return pbat, [[Q_p, Qirr]]"""
         p_fv = disturbances[0]
         p_load = disturbances[1]
         n_crops = self.n_crops
@@ -149,6 +168,11 @@ def obs_to_array(obs: Tuple[List[float], List[float], List[float], float, int]) 
     n = len(v_tanks)  # number of crops
     return np.array(v_tanks + v_irrs + drawdowns + [soe, k]), n
 
+def mg_tuple2array(mg_tuple):
+    v_tanks, v_irrs, drawdowns, soe, k = mg_tuple
+    mg_array = np.concatenate((v_tanks, v_irrs, drawdowns, [soe, k]))
+    return mg_array
+
 
 def map_action(policy_output: Union[torch.Tensor, np.ndarray]) -> npt.NDArray[np.float32]:
     if torch.is_tensor(policy_output):
@@ -168,11 +192,11 @@ class MicrogridEnv(gym.Env):
         :param render:
         """
         self.render = render
+        self.days_per_episode = 3
 
         self.micro_grid = EnergyWaterMG(n_crops)
         self.n_crops = n_crops
         # Hyper params
-        self.max_steps: int = 288
         self.day_steps: int = 144
         self.start_index: int = 0
         self.k: int = 0
@@ -188,11 +212,11 @@ class MicrogridEnv(gym.Env):
 
         # Data variables 
 
-        self.p_fv: npt.NDArray[float] = np.array([0.0])
-        self.temperatura: npt.NDArray[float] = np.array([0.0])
-        self.p_demanded: npt.NDArray[float] = np.array([0.0])
-        self.radiation: npt.NDArray[float] = np.array([0.0])
-        self.V_refs: npt.NDArray[float] = get_ref()  # V_refs
+        self.p_fv: float = None
+        self.temperatura: npt.NDArray[np.float32] = None
+        self.p_load:float = None
+        self.radiation: npt.NDArray[np.float32] = None
+        self.V_refs: npt.NDArray[np.float32] = get_ref()  # V_refs
 
         # State variables en inputs
 
@@ -232,57 +256,7 @@ class MicrogridEnv(gym.Env):
                                                    high=self.action_high,
                                                    shape=(2 * n_crops,),
                                                    dtype=np.float32)
-
-    def step(self, action: np.ndarray, mode: str = "train") -> Tuple[np.ndarray, float, bool, bool, dict]:
-        """
-        Execute one step of the environment, given an action.
-        :param action: Action to be executed
-        :param mode: mode of the environment. Can be "train" or "eval"
-        :return: tuple of (next_observation, reward, terminated, truncated, info)
-        """
-        # Store the previous values of the variables to compute the reward
-        obs = self._get_obs()
-
-        action = map_action(action)
-        action = action.flatten()
-        Q_pumps = action[0:self.n_crops]
-        Q_irrs = action[self.n_crops:]
-        P_pumps = get_p_q_p(Q_pumps, h_p_const)
-        disturbances = np.array([self.p_fv[self.k % 144], self.p_demanded[self.k % 144]])
-        self.Pbat, _, self.res_energy = manage_batteries(float(obs[-3]), float(disturbances[0]), float(disturbances[1]),
-                                                         P_pumps)
-        pumps = [[Q_pumps[i], Q_irrs[i]] for i in range(self.n_crops)]
-        _ = self.micro_grid.next_step((self.Pbat, pumps))
-
-        truncated = False
-        terminated = False
-        Info = {}
-
-        self.k = self.k + 1
-
-        # self.drawdown = drawdown(self.k + 144, self.dQ)
-
-        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over
-
-            self.V_refs = [4.0 * np.random.rand() for _ in range(self.n_crops)]
-
-            if mode == "eval":
-                self.day_picked = (self.day_picked + 1) % 70
-            else:
-                self.day_picked = np.random.randint(0, 70)
-
-            self.p_fv, self.p_demanded = self._pick_meteorological_data(self.day_picked)
-
-        if self.k % 288 == 0:
-            self.V_ref = 4.0 * np.random.rand()
-            terminated = True
-
-        observation_next = self._get_obs()
-
-        reward = self.reward_fun(obs, action, observation_next)
-
-        return observation_next, reward, terminated, truncated, Info
-
+        
     def reset(self, seed: int = None, options: dict = None) -> Tuple[np.ndarray, dict]:
         """
         Reset the environment to the initial state
@@ -304,7 +278,7 @@ class MicrogridEnv(gym.Env):
                              (Vt_max - Vt_min) * np.random.random_sample() + Vt_min) for _ in
                   range(self.micro_grid.n_crops)]
 
-        V_refs = [3.0 * np.random.rand() + 1.0 for _ in range(self.micro_grid.n_crops)]
+        V_refs = [5.0 * np.random.rand() + 1.0 for _ in range(self.micro_grid.n_crops)]
 
         SoE = (SoE_max - SoE_min) * np.random.random_sample() + SoE_min
 
@@ -314,10 +288,59 @@ class MicrogridEnv(gym.Env):
                                   soe=SoE,
                                   k=0)
 
-        InitialObservation = self.set_initial_conditions(self.day_picked, V_refs, 0)
+        InitialObservation = self.set_initial_conditions(V_refs, 0)
         info = {}
 
         return InitialObservation, info
+
+    def step(self, action: np.ndarray, mode: str = "train") -> Tuple[np.ndarray, float, bool, bool, dict]:
+        """
+        Execute one step of the environment, given an action.
+        :param action: Action to be executed
+        :param mode: mode of the environment. Can be "train" or "eval"
+        :return: tuple of (next_observation, reward, terminated, truncated, info)
+        """
+        # Store the previous values of the variables to compute the reward
+        obs = self._get_obs()
+
+        action = map_action(action)
+        action = action.flatten()
+        Q_pumps = action[0:self.n_crops]
+        Q_irrs = action[self.n_crops:]
+        P_pumps = get_p_q_p(Q_pumps, h_p_const)
+        p_fv, p_load = self._get_disturbances() # update the disturbances
+        self.Pbat, _, self.res_energy = manage_batteries(float(obs[-3]), float(p_fv), float(p_load),
+                                                         P_pumps)
+        pumps = [[Q_pumps[i], Q_irrs[i]] for i in range(self.n_crops)]
+        _ = self.micro_grid.next_step((self.Pbat, pumps))
+
+        truncated = False
+        terminated = False
+        Info = {}
+
+        self.k = self.k + 1
+
+        # self.drawdown = drawdown(self.k + 144, self.dQ)
+
+        if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over
+
+            self.V_refs = [6.0 * np.random.rand() for _ in range(self.n_crops)]
+
+            if mode == "eval":
+                self.day_picked = (self.day_picked + 1) % 70
+            else:
+                self.day_picked = np.random.randint(0, 70)
+
+        if self.k % self.day_steps*self.days_per_episode == 0:
+            terminated = True
+
+        observation_next = self._get_obs()
+
+        reward = self.reward_fun(obs, action, observation_next)
+
+        return observation_next, reward, terminated, truncated, Info
+
+    
 
     def _pick_meteorological_data(self, day_picked: int) -> Tuple[np.ndarray, np.ndarray]:
         """Returns p_fv and p_demanded for a given day"""
@@ -331,7 +354,20 @@ class MicrogridEnv(gym.Env):
 
         return p_fv, p_demanded
 
-    def set_initial_conditions(self, day_picked: int, v_refs: List[float], instant_k: int):
+    def _get_disturbances(self) -> Tuple[float, float]:
+        """Returns the disturbances for the current time step
+        :return: Tuple of (p_fv, p_demanded)"""
+        n_steps = self.day_steps  # (144) # self.k + self.day_steps
+        idx = self.day_picked * n_steps + self.k  # self.max_steps
+        radiation = self.radiation_data[idx] + 1e-4 * np.random.randn()
+        temperatura = self.temperature_data[idx] + 1e-2 * np.random.randn()
+        p_fv = solar_power(radiation, temperatura) + 1e-4 * np.random.randn()
+        p_demanded = self.demand_data[idx]
+
+        return p_fv, p_demanded
+
+
+    def set_initial_conditions(self, v_refs: npt.NDArray[np.float32], instant_k: int):
         """
         Set the initial conditions of the environment
         :param instant_k:
@@ -341,20 +377,18 @@ class MicrogridEnv(gym.Env):
         """
         self.k = instant_k
         self.V_refs = v_refs
-        self.p_fv, self.p_demanded = self._pick_meteorological_data(day_picked)
+        self.p_fv, self.p_load = self._get_disturbances()
 
         v_tanks, v_irrs, drawdowns, soe, k = self.micro_grid.get_state()
-        p_fv, p_demanded = self.p_fv[self.k], self.p_demanded[self.k]
-        disturbances = np.array([p_fv, p_demanded])
-        _, _, e_residual = manage_batteries(soe, float(p_fv), float(p_demanded), [0])
 
-        init_obs = np.concatenate(
-            (np.array(v_refs + v_tanks + v_irrs), drawdowns, disturbances, np.array([soe, e_residual, self.k % 144])))
+        disturbances = np.array([self.p_fv, self.p_load])
+
+        init_obs = self._get_obs()
         return init_obs
 
     def _create_dQ(self, V_req) -> Tuple[list, SupportsFloat]:
         """Returns the dQ sequence from a previous day and the last value for the pump action Q_p"""
-        L = self.day_steps + self.max_steps
+        L = self.day_steps*(self.days_per_episode + 1)
         prev_Q = np.zeros(self.day_steps)
         sum_ = 0
         K = Q_p_max * dt / 1000
@@ -377,13 +411,12 @@ class MicrogridEnv(gym.Env):
         d_Q = [dq for dq in prev_d_Q]
         return d_Q, last_Q
 
-    def _get_obs(self) -> npt.NDArray[float]:
+    def _get_obs(self) -> npt.NDArray[np.float32]:
         """Return the observation of the environment"""
         v_tanks, v_irrs, drawdowns, soe, k = self.micro_grid.get_state()
-        disturbances = [self.p_fv[self.k % 144], self.p_demanded[self.k % 144]]
+        p_pv, p_load = self._get_disturbances()
 
-        observation = np.concatenate((np.array(self.V_refs + v_tanks + v_irrs), drawdowns,
-                                      np.array(disturbances + [soe, self.res_energy, self.k % 144])))
+        observation = np.concatenate((self.V_refs, v_tanks, v_irrs, drawdowns, [p_pv, p_load, soe, self.res_energy, self.k % 144]))
         return observation
 
 
@@ -434,7 +467,7 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
         reward += -4 * a[i] if s[i + n_crops] >= Vt_max and a[
             i] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
 
-        reward += -10 * a[i] if s[i + n_crops] > 1 else 0.0  # penalize drawdown
+        reward += -5 * a[i] if s[i + n_crops] > 1 else 0.0  # penalize drawdown
 
     e_balance = s_next[-2]
 
@@ -442,43 +475,6 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
 
     return reward
 
-
-def continuous_rwd_fun(s, a, s_next):
-    """ Default reward function 
-    :param s: current state
-    :param a: action
-    :param s_next: next state"""
-    K = s[-2] / 143
-    if s_next[-2] != 0:
-        norm_next_error = (s[0] - s_next[1]) / s[0]
-    else:
-        norm_next_error = (s[0] - s[1]) / s[0]
-
-    reward = (1 - norm_next_error) ** 2 if norm_next_error > 0 else (1 + norm_next_error) ** 2  # ta gucci
-    if norm_next_error < -1:
-        reward = -1.0
-    reward = K * np.maximum(reward, -1.0)  # ta gucci
-    reward = reward  #+ p_reward
-
-    reward += -10 * a[1] if s[3] <= Vt_min and a[
-        1] > 0 else 0.0  # penalize unfeasible action (irrigation is on and tank is empty)
-
-    reward += -10 * a[0] if s[3] >= Vt_max and a[
-        0] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
-
-    reward += -10 * a[0] if s[5] > 1 else 0.0  # penalize drawdown
-
-    e_balance = s_next[-1]
-
-    reward += e_balance if e_balance < 0 else 0.0
-
-    if a[0] < 0.0 or 1.0 < a[0]:
-        reward -= 10 * abs(a[0])
-
-    if a[1] < 0.0 or 1.0 < a[1]:
-        reward -= 10 * abs(a[1])
-
-    return reward
 
 
 def ems_ode(x, d, u) -> Tuple[np.ndarray, float, float]:
@@ -552,3 +548,17 @@ def get_p_q_p(q_p: Union[float, np.ndarray], h_p: float) -> np.ndarray:
         q_p = np.array([q_p])
     P_Q_p_ = B_p * (q_p * 1e-3) * h_p / 1e3
     return P_Q_p_
+
+class EnergyWaterMG2:
+    """Wrapper for the Energy Water Microgrid model but incorporating the 
+    betteries policy within the model"""
+    def __init__(self, n_crops: int = 1):
+        self.energy_water_mg = EnergyWaterMG(n_crops)
+    def next_step(self, actions: List[List[float]]) -> Tuple[
+        npt.NDArray[np.float32], npt.NDArray[np.float32], npt.NDArray[np.float32], float, float]:
+        SoE = self.energy_water_mg.soe
+        p_fv = self.energy_water_mg.p_fv
+        p_load = self.energy_water_mg.p_demanded
+        P_q_ps = get_p_q_p(actions, h_p_const)
+        manage_batteries(SoE, p_fv, p_load, P_q_ps)
+        self.energy_water_mg.next_step(actions)
