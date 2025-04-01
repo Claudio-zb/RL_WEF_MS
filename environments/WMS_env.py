@@ -111,7 +111,7 @@ class Cultivates:
             self.wind_speed = climate_data["wind_speed"]
             self.ET0 = self.get_ET0()
         except KeyError:
-            self.ET0 = climate_data["ET_0"].values.item()
+            self.ET0 = climate_data["ET_0"]
 
         assert isinstance(self.ET0, float) or isinstance(self.ET0, np.floating)
         

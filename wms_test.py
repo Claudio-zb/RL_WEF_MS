@@ -11,7 +11,7 @@ from environments.WMS_policy import ModelBasedIrrigationPolicy, TriggeredIrrigat
 
 irr_policy = TriggeredIrrigationPolicy(1, 5, 8)
 
-def create_rb_policy() -> ModelBasedIrrigationPolicy:
+def create_rule_based_policy() -> ModelBasedIrrigationPolicy:
     """
     Creates a rule-based irrigation policy
     """
@@ -22,20 +22,20 @@ def create_rb_policy() -> ModelBasedIrrigationPolicy:
 
     return ModelBasedIrrigationPolicy(n_crops=1, neural_model=theta_a_mdl, root_length_model=root_length_model)
 
-rb_policy = create_rb_policy()
+rule_based_policy = create_rule_based_policy()
 
-print("a")
 #%%
 daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
 obs, info = cultivate_env.start(daily_weather_data)
-simu_days = 135
+simu_days = 115
 prev_action = 0
 actions = []
 for i in range(simu_days):
     daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-    action = rb_policy.get_action(obs["potato"], prev_action, 0, 0)# irr_policy(obs)
+    action = rule_based_policy.get_action(obs["potato"], prev_action, 0, 0)# irr_policy(obs)
     actions.append(action)
     obs = cultivate_env.step([action], daily_weather_data)
+    prev_action = action
 
 crop_data = cultivate_env.crops[0].hist_data
 crop_data = np.array(crop_data)

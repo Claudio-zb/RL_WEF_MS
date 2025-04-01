@@ -331,7 +331,7 @@ class MicrogridEnv(gym.Env):
             else:
                 self.day_picked = np.random.randint(0, 70)
 
-        if self.k % self.day_steps*self.days_per_episode == 0:
+        if self.k % (self.day_steps*self.days_per_episode) == 0:
             terminated = True
 
         observation_next = self._get_obs()

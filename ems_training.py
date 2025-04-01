@@ -21,10 +21,11 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(2), sigma=0.1 * np.ones(2))
 
 
-def create_wrapped_env(log_file):
+def create_wrapped_env(log_file=None):
     env = MicrogridEnv()
     env = NormalizationWrapper(env)
-    env = Monitor(env, log_file)
+    if log_file is not None:
+        env = Monitor(env, log_file)
     return env
 
 
@@ -32,27 +33,30 @@ def create_wrapped_env(log_file):
 
 
 def create_callback(alg_name, environment):
-    return EvalCallback(environment, best_model_save_path=f'./logs/{alg_name}',
-                        log_path=f'./logs/ems/{alg_name}', eval_freq=2000,
+    return EvalCallback(environment, 
+                        best_model_save_path=f'./logs/{alg_name}',
+                        log_path=f'./logs/ems/{alg_name}', 
+                        eval_freq=episode_length*16, 
                         deterministic=True, render=False)
 
-
+episode_length = 144*3
+n_envs = 4
 train = True
 if train:
-    sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/ems/sac_monitor.csv"), n_envs=4, seed=0)
+    #sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/ems/sac_monitor.csv"), n_envs=4, seed=0)
     #td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/td3_monitor.csv"), n_envs=4, seed=0)
-    #ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs2/ems/ppo_monitor.csv"), n_envs=4, seed=0)
+    ppo_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=4, seed=0)
 
-    sac_env = create_wrapped_env("./logs/ems/sac_monitor.csv")
+    #sac_env = create_wrapped_env("./logs/ems/sac_monitor.csv")
     #td3_env = create_wrapped_env("./logs2/ems/td3_monitor.csv")
-    #ppo_env = create_wrapped_env("./logs2/ems/ppo_monitor.csv")
+    ppo_env = create_wrapped_env("./logs/ems/ppo/ppo_monitor.csv")
 
-    sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1)
+    #sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1)
     #td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1)
-    #ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=128)
+    ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=episode_length*2, device="cpu", n_steps=episode_length*n_envs*4)
 
-    models = [sac_model]  #[sac_model, td3_model, ppo_model]
-    envs = [sac_env]  # [sac_env, td3_env, ppo_env]
+    models = [ppo_model]  #[sac_model, td3_model, ppo_model]
+    envs = [ppo_env]  # [sac_env, td3_env, ppo_env]
     models_name = ["sac"]  #["sac", "td3", "ppo"]
     for model, name, env in zip(models, models_name, envs):
         start_time = time.time()
@@ -60,6 +64,31 @@ if train:
         end_time = time.time()
 
         print(f"Training {name} took {100*(end_time - start_time)} seconds")
+
+#%%
+# Load and plot evaluation data
+evaluation_data = np.load("logs/ems/ppo/evaluations.npz")
+
+# Extract the arrays
+timesteps = evaluation_data['timesteps']
+results = evaluation_data['results']
+ep_lengths = evaluation_data['ep_lengths']
+
+# Plot the results
+plt.figure(figsize=(8, 6))
+plt.plot(timesteps, results.mean(axis=1), label='Mean Return')
+plt.fill_between(timesteps, 
+                 results.mean(axis=1) - results.std(axis=1), 
+                 results.mean(axis=1) + results.std(axis=1), 
+                 alpha=0.3, label='Std Dev')
+plt.xlabel('Timesteps', fontsize=14)
+plt.ylabel('Mean Return', fontsize=14)
+plt.title('Evaluation Results Over Time', fontsize=16)
+plt.legend()
+plt.grid()
+plt.tight_layout()
+plt.savefig("logs/wms/evaluation_plot.png", dpi=300)
+plt.show()
 
 #%% Plotting the training curves
 h = 4
@@ -70,13 +99,13 @@ def moving_average(data, window_size):
 def moving_std(data, window_size):
     return data.rolling(window=window_size).std()
 
-window = 25
+window = 1
 
 fig, ax = plt.subplots()
-for name in ["sac", "td3", "ppo"]:
-    df = pd.read_csv(f"./logs/ems/{name}_monitor.csv", skiprows=1)
+for name in ["ppo"]:
+    df = pd.read_csv(f"./logs/ems/{name}/{name}_monitor.csv", skiprows=1)
     df['moving_avg'] = moving_average(df['r'], window)
-    df['moving_std'] = moving_std(df['r'], window)
+    #df['moving_std'] = moving_std(df['r'], window)
     ax.plot(df.index, df['moving_avg'], label=name.upper())
     ax.fill_between(df.index, df['moving_avg'] - df['moving_std'], df['moving_avg'] + df['moving_std'], alpha=0.3)
 

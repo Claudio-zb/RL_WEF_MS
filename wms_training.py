@@ -21,38 +21,42 @@ from environments.WMS_env import CultivateEnv
 
 action_noise = NormalActionNoise(mean=np.zeros(1), sigma= 2*np.ones(1))
 
-def create_wrapped_env(log_file):
+def create_wrapped_env(log_file=None):
     env = CultivateEnv()
-    env = Monitor(env, log_file)
+    if log_file is not None:
+        env = Monitor(env, log_file)
     return env
 
 # Create the vectorized environment
 def create_callback(alg_name, environment):
-    return EvalCallback(environment, best_model_save_path=f'./logs/wms/{alg_name}',
-                 log_path=f'./logs/wms/{alg_name}', eval_freq=1_000,
-                 deterministic=True, render=False)
+    return EvalCallback(environment, 
+                        best_model_save_path=f'./logs/wms/{alg_name}',
+                        log_path=f'./logs/wms/{alg_name}', 
+                        eval_freq=episode_length*n_envs*4,
+                        deterministic=True, render=False)
 
+episode_length = 144
+n_envs = 4
+
+models_dict = {"ppo": PPO, "td3": TD3, "sac": SAC}
 train = False
 if train:
-    sac_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/sac_monitor.csv"), n_envs=4, seed=0)
-    #td3_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/td3_monitor.csv"), n_envs=4, seed=0)
-    #ppo_vec_env = make_vec_env(lambda: create_wrapped_env("./logs/wms/ppo_monitor.csv"), n_envs=4, seed=0, vec_env_cls=SubprocVecEnv)
 
-    sac_env = create_wrapped_env("./logs/wms/sac_monitor.csv")
-    #td3_env = create_wrapped_env("./logs/wms/td3_monitor.csv")
-    #ppo_env = create_wrapped_env("./logs/wms/ppo_monitor.csv")
+    vec_envs = [make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs) for _ in models_dict.keys()]
+    envs = [create_wrapped_env(f"./logs/wms/{name}/{name}_monitor.csv") for name in models_dict.keys()]
+
+
 
     #td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, verbose=1, gradient_steps=-1, batch_size=256,
     #                policy_delay=3)
-    #ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, batch_size=256, normalize_advantage=True,
-    #                use_sde=True, device="cpu", clip_range=0.18)
-    sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1, batch_size=256, ent_coef=0.05)
+    ppo_model = PPO("MlpPolicy", vec_envs[0], verbose=1, batch_size=144*2, normalize_advantage=True,
+                    use_sde=True, device="cpu", clip_range=0.18, n_steps=episode_length*n_envs*4)
+    #sac_model = SAC("MlpPolicy", sac_env, verbose=1, gradient_steps=-1, batch_size=256, ent_coef=0.05)
 
-    models = [sac_model] #[ppo_model, sac_model, td3_model]
-    envs = [sac_env] #[ppo_env, sac_env, td3_env]
-    models_name = ["sac"] #["ppo", "sac", "td3"]
+    models = [ppo_model] #[ppo_model, sac_model, td3_model]
+    
     training_times = []
-    for model, name, env in zip(models, models_name, envs):
+    for model, name, env in zip(models, models_dict.keys(), envs):
         start_time = time.time()
         model.learn(total_timesteps=250_000, callback=create_callback(name, env))
         end_time = time.time()
@@ -60,6 +64,32 @@ if train:
         training_times.append(training_time)
         print(f"Training {name} took {end_time - start_time} seconds")
 
+#%%
+# Load and plot evaluation data
+evaluation_data = np.load("logs/wms/ppo/evaluations.npz")
+
+# Extract the arrays
+timesteps = evaluation_data['timesteps']
+results = evaluation_data['results']
+ep_lengths = evaluation_data['ep_lengths']
+
+# Plot the results
+plt.figure(figsize=(8, 6))
+plt.plot(timesteps, results.mean(axis=1), label='Mean Return', color = "tab:green")
+plt.fill_between(timesteps, 
+                 results.mean(axis=1) - results.std(axis=1), 
+                 results.mean(axis=1) + results.std(axis=1), 
+                 alpha=0.3, label='Std Dev', color = "tab:green")
+fig = plt.gcf()
+fig.set_size_inches(9, 4)
+plt.xlabel('Timesteps', fontsize=14)
+plt.ylabel('Mean Return', fontsize=14)
+plt.title('Evaluation Results Over Time', fontsize=16)
+plt.legend()
+plt.grid()
+plt.tight_layout()
+plt.savefig("logs/wms/evaluation_plot.png", dpi=300)
+plt.show()
 #%% Plotting the training curves
 h = 4
 
@@ -70,13 +100,13 @@ def moving_std(data, window_size):
     return data.rolling(window=window_size).std()
 
 fig, ax = plt.subplots()
-window = 20
-for name in ["sac", "td3", "ppo"]:
-    df = pd.read_csv(f"./logs/wms/{name}_monitor.csv", skiprows=1)
+window = 1
+for name in ["ppo"]: #["sac", "td3", "ppo"]:
+    df = pd.read_csv(f"./logs/wms/{name}/{name}_monitor.csv", skiprows=1)
     df['moving_avg'] = moving_average(df['r'], window)
-    df['moving_std'] = moving_std(df['r'],window)
+    #df['moving_std'] = moving_std(df['r'],window)
     ax.plot(df.index, df['moving_avg'], label=name.upper(), alpha=0.85)
-    ax.fill_between(df.index, df['moving_avg'] - df['moving_std'], df['moving_avg'] + df['moving_std'], alpha=0.3)
+    #ax.fill_between(df.index, df['moving_avg'] - df['moving_std'], df['moving_avg'] + df['moving_std'], alpha=0.3)
 
 ax.set_ylim(0, 80)
 ax.set_xlabel(r"Episode", fontsize = 14)
@@ -98,13 +128,13 @@ for name in ["sac"]: # , "td3", "ppo"]:
 
 #%%
 # Load the best models
-sac_best_model = SAC.load("./logs/wms/sac/best_model")
+#sac_best_model = SAC.load("./logs/wms/sac/best_model")
 #td3_best_model = TD3.load("./logs/wms/td3/best_model")
-#ppo_best_model = PPO.load("./logs/wms/ppo/best_model")
-best_models = [sac_best_model]#[sac_best_model, ppo_best_model, td3_best_model]
-models_name = ["sac"] #["sac", "ppo", "td3"]
+ppo_best_model = PPO.load("./logs/wms/ppo/best_model")
+best_models = [ppo_best_model]#[sac_best_model, ppo_best_model, td3_best_model]
+models_name = ["ppo"] #["sac", "ppo", "td3"]
 
-#%% perform the evaluation of SAC model
+#%% perform the evaluation of PPO model
 cultivate_env = CultivateEnv()
 for model, name in zip(best_models, models_name):
     x = []
@@ -138,15 +168,16 @@ for model, name in zip(best_models, models_name):
     plt.show()
 
     #%%
+    h = 4
     plt.step(t[:-1], a)
     fig = plt.gcf()
     fig.set_size_inches(h * 1.618, h*.65)
     plt.title("Daily water requirement")
-    plt.xlabel("Days since plantation")
-    plt.ylabel("Irrigation depth [mm]")
+    plt.xlabel("Time since plantation [days]")
+    plt.ylabel(r"Irrigation volume [$m^3$]")
     plt.grid()
     plt.tight_layout()
-    plt.savefig(f"logs/wms/sac/{name}_irrigation_depth.png", dpi=300)
+    plt.savefig(f"plots/agro_geo_model/{name}_irrigation_depth.png", dpi=300)
     plt.show()
 
     #%%
@@ -170,10 +201,10 @@ for model, name in zip(best_models, models_name):
     fig.set_size_inches(h * 2, h)
     ax.legend(loc="upper right")
     #ax.set_title("Soil water content evolution")
-    ax.set_xlabel("Days since plantation", fontsize = 17)
+    ax.set_xlabel("Time since plantation [Days]", fontsize = 17)
     ax.set_ylabel(r"Volumetric water content [$m^3/m^3$]", fontsize=17)
     plt.tight_layout()
-    plt.savefig(f"training_results/wms/{name}_soil_water_content.png", dpi=300)
+    plt.savefig(f"plots/agro_geo_model/{name}_soil_water_content.png", dpi=300)
     plt.show()
 
 #%%
@@ -192,12 +223,12 @@ for model, name in zip(best_models, models_name):
         axs[i].grid()
 
     # Set common labels
-    axs[-1].set_xlabel("Days since plantation")
+    axs[-1].set_xlabel("Time since plantation [days]")
     fig.text(0.04, 0.5, 'Volumetric water content [$m^3/m^3$]', va='center', rotation='vertical')
     fig.suptitle("Soil Moisture Evolution", fontsize=14)
     fig.set_size_inches(h * 2, h * .3 * num_layers)
     plt.tight_layout(rect=[0.05, 0, 1, 0.96])
-    plt.savefig(f"logs/wms/sac/soil_moisture_evolution.png", dpi=300)
+    plt.savefig(f"logs/agro_geo_model/soil_moisture_evolution.png", dpi=300)
     plt.show()
 
 
@@ -231,7 +262,7 @@ for model, name in zip(best_models, models_name):
     fig.set_size_inches(h * 2, h)
 
     plt.tight_layout()
-    plt.savefig(f"training_results/wms/{name}_Ks.png", dpi=300)
+    plt.savefig(f"plots/agro_geo_model/{name}_Ks.png", dpi=300)
     plt.show()
 
     print(f"{name} relative yield {cultivate_env.cultivates.crops[0].relative_yield}")
@@ -263,6 +294,14 @@ plt.grid()
 plt.tight_layout()
 plt.savefig("logs/wms/wms_eval_curve.png", dpi=300)
 plt.show()
+
+#%% 
+
+crop_data = cultivate_env.cultivates.get_hist_data()['potato'][0]
+
+#%%
+t = np.arange(0, len(crop_data["root_depth"]))
+plt.scatter(t, crop_data["K_s"])
 
 
 

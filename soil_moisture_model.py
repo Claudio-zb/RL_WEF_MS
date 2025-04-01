@@ -1,3 +1,4 @@
+#%%
 from environments.WMS_policy import TriggeredIrrigationPolicy
 from environments.WMS_env import Cultivates
 import torch
@@ -10,32 +11,32 @@ import numpy as np
 from predictive_models.utils import*
 
 #%% Data obtention
-obtain_data = False # Set to True
+obtain_data = True # Set to True
 
 if obtain_data:
     n_episodes = 500
-    simu_days = 135
+    simu_days = 114
     observations = []
     exogenous_variables = {"irrigation": [], "evapotranspiration": [], "precipitation": []}
     endogenous_variables = {"theta_evp": [], "theta_4": [], "theta_3": [], "theta_2": [], "theta_1": [],
                             "root_depth": []}
 
     irr_freq = np.random.randint(1, 5)
-    irr_volume = np.random.rand()*7
+    irr_volume = np.random.rand()*20
     irr_policy = TriggeredIrrigationPolicy(1, irr_freq, irr_volume)
 
     for n in range(n_episodes):
         cultivate_env = Cultivates()
         weather_data = pd.read_csv("environments/Data/WMS/weather_data.csv")
 
-        obs, info = cultivate_env.start()
+        obs, info = cultivate_env.start(weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict())
 
         for i in range(simu_days):
             daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
             action = irr_policy(obs)
             # record the exogenous variables
             exogenous_variables["irrigation"].append(action[0])
-            exogenous_variables["evapotranspiration"].append(daily_weather_data["ET0"])
+            exogenous_variables["evapotranspiration"].append(daily_weather_data["ET_0"])
             exogenous_variables["precipitation"].append(daily_weather_data["precipitation"])
             obs = cultivate_env.step(action, daily_weather_data)
             # record the endogenous variables

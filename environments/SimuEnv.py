@@ -18,7 +18,7 @@ class SimuEnv:
         self.irrigation_policy: IrrigationPolicy = irrigation_policy
         self.ems_policy: RuleBasedEMS = ems_policy
 
-        self.global_weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/extracted_data.csv")
+        self.global_weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/extracted_data.csv", index_col=None)
         self.daily_weather_data: pd.DataFrame = None
         self.ten_min_weather_data: pd.DataFrame = pd.read_csv("environments/Data/EMS/calan_2006.csv")
         self.ten_min_demand: np.ndarray = get_demand()
@@ -43,7 +43,8 @@ class SimuEnv:
         self.start(init_doy)
 
         cultivate_obs_hist, mg_obs_hist = [], []
-        daily_weather_data = self.daily_weather_data[self.daily_weather_data["doy"] == self.doy]
+        daily_weather_data = self.daily_weather_data[self.daily_weather_data["doy"] == self.doy].iloc[0].to_dict()
+
         cultivate_obs, cultivate_info = self.cultivate_env.start(daily_weather_data)
         mg_obs, prev_mg_obs = None, None
         done = False

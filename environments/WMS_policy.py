@@ -36,7 +36,7 @@ class LearnedIrrigationPolicy(IrrigationPolicy):
     
     def get_action(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         action = self.__call__(obs)  
-        return action
+        return action/1000.0
 
 
 class ModelBasedIrrigationPolicy:
@@ -59,9 +59,13 @@ class ModelBasedIrrigationPolicy:
         :param evapotranspiration: evapotranspiration [m3]
         :param expected_water: expected water [m3]
         """
-        obs = np.concatenate((np.array([prev_irrigation, evapotranspiration, expected_water]), obs))
-        theta_a = self.theta_model.predict(torch.tensor(obs, dtype=torch.float32))
-        root_length = self.root_length_model.predict(torch.tensor(obs, dtype=torch.float32))
+        if len(obs) > 6:
+            obs_ = np.concatenate((obs[:5], obs[-3:-2]))
+        else:
+            obs_ = obs  
+        obs = np.concatenate((np.array([prev_irrigation, evapotranspiration, expected_water]), obs_))
+        theta_a = self.theta_model.predict(torch.tensor(obs, dtype=torch.float32))-.1
+        root_length = self.root_length_model.predict(torch.tensor(obs, dtype=torch.float32)) 
         threshold = self.theta_fc - self.mad*(self.theta_fc - self.theta_wp)
         action = 0.0
         if theta_a < threshold:

@@ -4,19 +4,24 @@ from environments.WMS_policy import LearnedIrrigationPolicy, TriggeredIrrigation
 from environments.EMS_env import RuleBasedEMS
 from stable_baselines3 import SAC
 import pandas as pd
+from stable_baselines3 import PPO
 import numpy as np
 
 import matplotlib.pyplot as plt
 
+plt.rcParams['text.usetex'] = True
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
+
 #%%
-#irrigation_rl_model = TD3.load("logs/wms/td3/best_model.zip")
+irrigation_rl_model = LearnedIrrigationPolicy(1,PPO.load("logs/wms/ppo/best_model.zip"))
 # irrigation_policy = LearnedIrrigationPolicy(1, irrigation_rl_model)
-irrigation_policy = TriggeredIrrigationPolicy(1, 3, 3.0)
+#irrigation_policy = TriggeredIrrigationPolicy(1, 3, 3.0)
 
 ems_rl_policy = SAC.load("logs/ems/sac/best_model.zip")
 ems_policy = RuleBasedEMS(1, ems_rl_policy, isNormalized=True)
 
-simulation_env = SimuEnv(irrigation_policy=irrigation_policy,
+simulation_env = SimuEnv(irrigation_policy=irrigation_rl_model,
                          ems_policy=ems_policy)
 
 #%%
@@ -42,8 +47,25 @@ mg_obs = data["mg_obs"]
 wms_actions_2 = data["wms_actions_2"]
 #%%
 t = np.arange(0, len(wms_actions_2))
-plt.scatter(t, wms_actions_2[:,1])
-plt.scatter(t, data["wms_actions"])
+
+
+plt.step(t, wms_actions_2[:,1], label="water applied")
+plt.step(t, data["wms_actions"], label = "water required")
+plt.xlabel("Time since plantation [days]")
+plt.ylabel("Water amount[m3]")
+plt.grid()
+plt.legend()
+
+
+plt.title("Joint action of two agents")
+
+
+
+fig = plt.gcf()
+fig.set_size_inches(8, 4)
+plt.tight_layout()
+
+plt.savefig("WEFMS.png", dpi = 300)
 
 #%%
 #plt.plot(crop_actions)
@@ -64,6 +86,6 @@ plt.show()
 
 # %%
 
-plt.plot(mg_obs[:3*144,2])
+plt.plot(mg_obs[:3*144,-2])
 
 # %%
