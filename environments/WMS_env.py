@@ -118,6 +118,9 @@ class Cultivates:
         self.precipitation = climate_data["precipitation"]/1000  # [mm] -> [m]
 
         return
+    def set_initial_condition(self, obs:dict):
+        for crop_name in obs.keys():
+            self.crops[crop_name].set_initial_condition(obs[crop_name])
 
     def step(self, irrigations: Union[List, np.ndarray], weather_data: dict) -> dict:
         """Performance a new step in the simulation, given an action-disturbance pair
@@ -322,7 +325,7 @@ class Crop:
         self.days_since_plantation += 1
         self.doy = max(1, (self.doy + 1) % 365)
         self.ref_evapotranspiration = ET0
-        self.update(infiltrated_water)
+        self.update(infiltrated_water) # PASO MIY IMPORTANTE
         obs = self._get_observation()
         self.hist_data.append(obs)
         # compute in which stage i am
@@ -412,6 +415,21 @@ class Crop:
                         self.Ke_bound, 
                         self.soil.get_avg_hc()])
         return obs
+    
+    def set_initial_condition(self, obs: np.ndarray):
+        """
+        Sets the initial condition of the crop
+        :param obs: observation to set
+        """
+        
+        self.f_c = obs[0]
+        self.root_depth = obs[1]
+        self.potential_crop_evapotranspiration = obs[2]
+        self.ref_evapotranspiration = obs[3]
+        self.Kcb = obs[4]
+        self.crop_evapotranspiration = obs[5]
+        self.Ks = obs[6]
+        self.Ke = obs[7]
 
     def get_obs2(self) -> np.ndarray:
         """
