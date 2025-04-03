@@ -8,15 +8,15 @@ from environments.WMS_env import Cultivates
 import pyswarms as ps
 from pyswarms.utils.functions import single_obj as fx
 import matplotlib.pyplot as plt
+import copy
 #%%
 class MPCPolicy():
-    def __init__(self, model: Cultivates,init_weather_data, horizon: int = 10):
-        self.model = Cultivates()
-        self.model.start(init_weather_data)
+    def __init__(self, horizon: int = 10):
         self.horizon = horizon
         self.crops = 1
     
-    def get_action(self, obs):
+    def get_action(self, obs, model, disturbances):
+        self.model = model
         # Set-up hyperparameters
         options = {'c1': 0.5, 'c2': 0.3, 'w':0.9, 'k': 2, 'p': 2}
         # Create bounds
@@ -27,22 +27,22 @@ class MPCPolicy():
         # Call instance of PSO
         optimizer = ps.single.LocalBestPSO(n_particles=10*self.horizon, dimensions=self.horizon, options=options, bounds=bounds)
 
-        disturbances = [{"ET_0": 5., "precipitation": 0.}]*self.horizon
         cost_fun = lambda x: self.cost_function(obs, x, disturbances=disturbances)
-        
+
         # Perform optimization
-        cost, action = optimizer.optimize(cost_fun, iters=1000, n_processes=4)
+        cost, action = optimizer.optimize(cost_fun, iters=100, n_processes=None)
         return action[0]
     
     def cost_function(self, obs: np.ndarray, actions: np.ndarray, disturbances: list[dict]) -> float:
-        cost = 0.0
-        for action in actions:
+        cost = np.zeros(actions.shape[0])
+        for particle, action in enumerate(actions):
+            pso_model = copy.deepcopy(self.model)
             for crop in self.model.crops:
                 for idx in range(self.horizon):
-                    obs_dict = self.model.step(action[[idx]], disturbances[idx])
+                    obs_dict = pso_model.step([action[idx]], disturbances[idx])
                     obs_array = obs_dict["potato"]
                     Ks = obs_array[-1]
-                    cost += -Ks + action[idx]
+                    cost[particle] += -Ks + action[idx]
         return cost
 
 def obs_dict_to_array(obs: dict) -> np.ndarray:
@@ -62,7 +62,8 @@ cultivate_env = Cultivates()
 weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
 daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
 
-mpc = MPCPolicy(model=Cultivates(), init_weather_data=daily_weather_data, horizon=5)
+horizon = 5
+mpc = MPCPolicy(horizon=horizon)
 #%%
 obs, info = cultivate_env.start(daily_weather_data)
 simu_days = 10
@@ -70,8 +71,11 @@ prev_action = 0
 actions = []
 observations = []
 for i in range(simu_days):
+    future_weather_data = []
+    for j in range(horizon):
+        future_weather_data.append(weather_data.loc[weather_data["doy"] == cultivate_env.doy+j].iloc[0].to_dict())
     daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-    action = mpc.get_action(obs)# irr_policy(obs)
+    action = mpc.get_action(obs, cultivate_env, future_weather_data)# irr_policy(obs)
     actions.append(action)
     obs = cultivate_env.step([action], daily_weather_data)
     observations.append(obs)
