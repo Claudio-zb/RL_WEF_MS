@@ -63,6 +63,9 @@ class EnergyWaterMG:
         # loop over the crops
         for idx, v_tank in enumerate(self.v_tanks):
 
+            if self.drawdowns[idx] > 1.0:  # If the drawdown is too high, we cannot irrigate
+                q_irrs[idx] = 0.0
+
             if self.v_tanks[idx] <= Vt_min:  # If the tank is empty, there is no irrigation
                 q_irrs[idx] = 0.0
 
@@ -149,13 +152,21 @@ class RuleBasedEMS(AbstractEMS):
         p_fv = disturbances[0]
         p_load = disturbances[1]
         n_crops = self.n_crops
-        flattened_state = np.concatenate((v_reqs, state[0], state[1], state[2],
+
+        v_tanks, v_irrs, drawdowns = state[0], state[1], state[2]
+
+        flattened_state = np.concatenate((v_reqs, v_tanks, v_irrs, drawdowns,
                                           np.array([p_fv, p_load, state[3], self.residual, state[4]])))
         transformed_state = np.matmul(self.transform, flattened_state)
         actions = self.policy.predict(transformed_state, deterministic=True)[0]
         Q_p = actions[0:n_crops]
         P_q_ps = get_p_q_p(Q_p, h_p_const)
         Q_irr = actions[n_crops:]
+
+        for i in range(n_crops):
+            if v_reqs[i] < v_irrs[i]:
+                Q_irr[i] = 0.0
+        
         pumps = [[Q_p[i], Q_irr[i]] for i in range(n_crops)]
 
         SoE = state[3]
@@ -278,7 +289,7 @@ class MicrogridEnv(gym.Env):
                              (Vt_max - Vt_min) * np.random.random_sample() + Vt_min) for _ in
                   range(self.micro_grid.n_crops)]
 
-        V_refs = [5.0 * np.random.rand() + 1.0 for _ in range(self.micro_grid.n_crops)]
+        V_refs = [10.0 * np.random.rand() for _ in range(self.micro_grid.n_crops)]
 
         SoE = (SoE_max - SoE_min) * np.random.random_sample() + SoE_min
 
@@ -324,7 +335,7 @@ class MicrogridEnv(gym.Env):
 
         if (self.k % 144) == 0:  # The time at s' is 00:00 i.e. the final day is over
 
-            self.V_refs = [6.0 * np.random.rand() for _ in range(self.n_crops)]
+            self.V_refs = [10.0 * np.random.rand() for _ in range(self.n_crops)]
 
             if mode == "eval":
                 self.day_picked = (self.day_picked + 1) % 70
@@ -458,8 +469,11 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
     :return: reward"""
     reward = 0.0
     for i in range(n_crops):
-        norm_next_error = (s[i] - s_next[i + 2 * n_crops]) / s[i]  # Normalize the error
+        norm_next_error = (s[i] - s_next[i + 2 * n_crops]) / (s[i]+0.05)  # Normalize the error
         reward = np.clip(1 - abs(norm_next_error), -1.0, 1.0)
+        if abs(norm_next_error) < 0.05:
+            reward += 1.0
+        reward += -4 * a[i + 1] if s_next[i + 2 * n_crops] > s[i] else 0.0  # penalize exceeding the irrigation requirement
 
         reward += -4 * a[i + n_crops] if s[i + n_crops] <= Vt_min and a[
             i + n_crops] > 0 else 0.0  # penalize unfeasible action (irrigation is on and tank is empty)
@@ -467,59 +481,13 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
         reward += -4 * a[i] if s[i + n_crops] >= Vt_max and a[
             i] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
 
-        reward += -5 * a[i] if s[i + n_crops] > 1 else 0.0  # penalize drawdown
+        reward += -4 * a[i] if s[i + 3*n_crops] > 1 else 0.0  # penalize drawdown
 
     e_balance = s_next[-2]
 
     reward += e_balance if e_balance < 0 else 0
 
     return reward
-
-
-
-def ems_ode(x, d, u) -> Tuple[np.ndarray, float, float]:
-    """The ODE of the microgrid system
-    :param x: state vector V_irr, V_tank, SoE
-    :param d: disturbance vector V_ref, P_sun, P_demand
-    :param u: control vector Q_pump, Irrigation, P_bat
-    :return: next state, battery power, energy residual"""
-
-    V_irr = x[0]  # Irrigated volume [m3]
-    V_tank = x[1]  # Tank volume [m3]
-    SoE = x[2]  # State of Energy [kWh]
-    # s = x[3] # Well drawdown [m]
-
-    P_sun = d[1]  # Solar power [kW]
-    P_demand = d[2]  # Demand power [kW]
-
-    u = np.clip(u, [0.0, 0.0], [1.0, 1.0])  # Clip the action to the feasible range
-
-    Q_pump = u[0]  # Pump flow rate [l/s]
-    Irrigation = u[1]  # Irrigation flow rate [l/s]
-    # P_bat = u[2] # Battery power [kW]
-
-    if V_tank <= Vt_min:  # If the tank is empty, there is no irrigation
-        if Irrigation > 0:
-            Irrigation = 0.0
-
-    amount_to_irrigate = dt * (Irrigation * 1e-3)
-
-    amount_to_pump = dt * (Q_pump * 1e-3)  # Volume [m3]
-
-    V_tank_next = np.clip(V_tank + amount_to_pump - amount_to_irrigate, Vt_min, Vt_max)
-    V_Irr_next = V_irr + amount_to_irrigate
-
-    P_Q_p_ = get_p_q_p(Q_pump, h_p_const)  # water pump power [kW]
-
-    P_bat, SoE_next, E_residual = manage_batteries(SoE,
-                                                   P_sun,
-                                                   P_demand,
-                                                   P_Q_p_)
-    x_next = np.array([V_Irr_next,
-                       V_tank_next,
-                       SoE_next])
-
-    return x_next, P_bat, E_residual
 
 
 def drawdown(k: int, dQ: Union[np.ndarray, List]):  # drawdown of the well
@@ -548,17 +516,3 @@ def get_p_q_p(q_p: Union[float, np.ndarray], h_p: float) -> np.ndarray:
         q_p = np.array([q_p])
     P_Q_p_ = B_p * (q_p * 1e-3) * h_p / 1e3
     return P_Q_p_
-
-class EnergyWaterMG2:
-    """Wrapper for the Energy Water Microgrid model but incorporating the 
-    betteries policy within the model"""
-    def __init__(self, n_crops: int = 1):
-        self.energy_water_mg = EnergyWaterMG(n_crops)
-    def next_step(self, actions: List[List[float]]) -> Tuple[
-        npt.NDArray[np.float32], npt.NDArray[np.float32], npt.NDArray[np.float32], float, float]:
-        SoE = self.energy_water_mg.soe
-        p_fv = self.energy_water_mg.p_fv
-        p_load = self.energy_water_mg.p_demanded
-        P_q_ps = get_p_q_p(actions, h_p_const)
-        manage_batteries(SoE, p_fv, p_load, P_q_ps)
-        self.energy_water_mg.next_step(actions)

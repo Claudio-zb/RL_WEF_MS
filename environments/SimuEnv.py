@@ -42,7 +42,7 @@ class SimuEnv:
 
         self.start(init_doy)
 
-        cultivate_obs_hist, mg_obs_hist = [], []
+        cultivate_obs_hist, end_of_day_samples = [], []
         daily_weather_data = self.daily_weather_data[self.daily_weather_data["doy"] == self.doy].iloc[0].to_dict()
 
         cultivate_obs, cultivate_info = self.cultivate_env.start(daily_weather_data)
@@ -75,7 +75,7 @@ class SimuEnv:
 
             v_irrs = prev_mg_obs[1]
             v_irrs_hist.append(v_irrs)
-            mg_obs_hist.append(_prev_mg_obs)
+            end_of_day_samples.append(_prev_mg_obs)
 
             cultivate_obs = self.cultivate_env.step(v_irrs, weather_data)
             cultivate_obs_hist.append(copy.deepcopy(cultivate_obs))
@@ -86,7 +86,7 @@ class SimuEnv:
             if self.days_since_started >= total_days:
                 done = True
         observations = np.array(observations)
-        mg_obs_hist = np.array(mg_obs_hist)
+        end_of_day_samples = np.array(end_of_day_samples)
         q_ps = np.array(q_ps)
         q_is = np.array(q_is)
         self.soil_data = [crop.soil.get_hist_data() for crop in self.cultivate_env.crops]
@@ -94,7 +94,7 @@ class SimuEnv:
         self.last_simulation_data = {"cultivate_obs": cultivate_obs_hist,
                                      "mg_obs": observations, #mg_obs_hist,
                                      "wms_actions": v_reqs_hist,
-                                     "wms_actions_2": mg_obs_hist,
+                                     "end_of_day_samples": end_of_day_samples,
                                      "qp_actions": q_ps,
                                      "qi_actions": q_is}
         return

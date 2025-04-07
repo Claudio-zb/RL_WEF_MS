@@ -55,8 +55,8 @@ if obtain_data:
     exogenous_variables = pd.DataFrame(exogenous_variables)
     endogenous_variables = pd.DataFrame(endogenous_variables)
 
-    exogenous_variables.to_csv("exogenous_variables.csv", index=False)
-    endogenous_variables.to_csv("endogenous_variables.csv", index=False)
+    exogenous_variables.to_csv("environments/Data/WMS/exogenous_variables.csv", index=False)
+    endogenous_variables.to_csv("environments/Data/WMS/endogenous_variables.csv", index=False)
 
 #%%  Example usage
 

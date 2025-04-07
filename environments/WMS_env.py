@@ -121,7 +121,7 @@ class Cultivates:
 
     def step(self, irrigations: Union[List, np.ndarray], weather_data: dict) -> dict:
         """Performance a new step in the simulation, given an action-disturbance pair
-        param: irrigations: the amount of water [m3] going in by the evaporation layer
+        param: irrigations: the amount of water [m] going in by the evaporation layer
         param: climate_data: a dictionary with the daily weather data
         returns: a dictionary with the current state of active crops """
 
@@ -195,7 +195,8 @@ class Cultivates:
         """
         irrigation = irrigation
         assert isinstance(irrigation, float) or isinstance(irrigation, np.floating)
-        return irrigation + precipitation/1000, 0.0
+        precipitation = precipitation/1000  # [mm] -> [m3]
+        return irrigation + precipitation, 0.0
 
 
     def get_soil_data(self):

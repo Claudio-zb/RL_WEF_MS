@@ -1,28 +1,27 @@
-#%%
-import torch
 
+#%%
+from stable_baselines3 import PPO, SAC, TD3
 from predictive_models.utils import NN_soil_mdl
 from environments.WMS_env import *
 from matplotlib import pyplot as plt
 weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
 cultivate_env = Cultivates()
-from environments.WMS_policy import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
+from environments.WMS_policy import MPCIrrigationPolicy, RLIrrigationPolicy, rule_based_policy
 
 
-irr_policy = TriggeredIrrigationPolicy(1, 5, 8)
+rl_policy = RLIrrigationPolicy(1, PPO.load("logs/wms/ppo/best_model.zip"))
+rb_policy = rule_based_policy()
+mpc_policy = MPCIrrigationPolicy(1, 10)
 
-def create_rule_based_policy() -> ModelBasedIrrigationPolicy:
-    """
-    Creates a rule-based irrigation policy
-    """
-    theta_models = [torch.load(f"predictive_models/soil_moisture/theta_{5-j}.pth", weights_only=False) for j in range(1, 5)]
-    theta_models = [torch.load("predictive_models/soil_moisture/theta_evp.pth", weights_only=False)] + theta_models
-    root_length_model = torch.load("predictive_models/soil_moisture/root_depth.pth", weights_only=False)
-    theta_a_mdl = NN_soil_mdl(theta_models, root_length_model)
+# first step is selecting a year 
+#%%
 
-    return ModelBasedIrrigationPolicy(n_crops=1, neural_model=theta_a_mdl, root_length_model=root_length_model)
+year = 2003 
+# then get the index of the day of the year of that year
+doy = min([crop.plantation_day for crop in cultivate_env.crops])  
 
-rule_based_policy = create_rule_based_policy()
+index = weather_data[(weather_data["doy"] == 1) & (weather_data["year"] == 2003)].index.values.item()
+
 
 #%%
 daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
@@ -31,47 +30,49 @@ simu_days = 115
 prev_action = 0
 actions = []
 for i in range(simu_days):
-    daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-    action = rule_based_policy.get_action(obs["potato"], prev_action, 0, 0)# irr_policy(obs)
+    daily_weather_data = weather_data.iloc[index + i + 1].to_dict()
+    action = mpc_policy.get_action(obs, cultivate_env, daily_weather_data)
     actions.append(action)
-    obs = cultivate_env.step([action], daily_weather_data)
+    obs = cultivate_env.step(action, daily_weather_data)
     prev_action = action
 
-crop_data = cultivate_env.crops[0].hist_data
-crop_data = np.array(crop_data)
-soil_data = pd.DataFrame(cultivate_env.get_soil_data()[0])
+#%%
+# let's check the data
 
-  #%%
+crop_data, soil_data = cultivate_env.get_hist_data()["potato"]
 
-plt.plot(actions)
+soil_data = pd.DataFrame(soil_data)
+
+#%%
+actions_ = np.array([action[0] for action in actions])
+plt.plot(actions_)
 plt.show()
 
 #%% let's check after a period of simulation
 
-plt.plot(-crop_data[:, 0], label="root depth")
+plt.plot(-crop_data["root_depth"], label="root depth")
 for i in range(1, 5):
     plt.hlines(-0.15*i, 0, simu_days, color='gray', linestyles="--")
 plt.ylim(-5*.15, 0)
 plt.ylabel("Depth [m]")
 plt.xlabel("Days since plantation")
 plt.title("Root depth")
-plt.savefig("root_depth.png", dpi=300)
+#plt.savefig("root_depth.png", dpi=300)
 plt.show()
 
 #%%
-plt.plot(crop_data[:,-1], label="Ke_bound")
-plt.plot(crop_data[:,-2], label="K_r")
-plt.plot(crop_data[:,-3], label="K_e")
-plt.plot(crop_data[:,-4], label="K_s")
+plt.plot(crop_data["Kcb"], label="K_r")
+plt.plot(crop_data["K_e"], label="K_e")
+plt.plot(crop_data["K_s"], label="K_s")
 plt.legend()
 plt.title("Kr")
 plt.show()
 
 #%%
 
-plt.plot(crop_data[:,1], label="potential crop et")
-plt.plot(crop_data[:,2], label="ref et")
-plt.plot(crop_data[:,4], label="actual et evap")
+plt.plot(crop_data["ET_p"], label="potential crop et")
+plt.plot(crop_data["ET_0"], label="ref et")
+plt.plot(crop_data["ET_a"], label="actual et evap")
 plt.legend()
 plt.title("Evapotranspiration")
 plt.show()
@@ -112,7 +113,7 @@ plt.title("Soil moisture")
 plt.tight_layout()
 plt.ylabel("Water content [m3/m3]")
 plt.xlabel("Days since plantation")
-plt.savefig("soil_moisture.png", dpi=300)
+#plt.savefig("soil_moisture.png", dpi=300)
 plt.show()
 
 #%% Lets plot the water content data
