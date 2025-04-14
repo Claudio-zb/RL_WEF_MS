@@ -9,29 +9,26 @@ cultivate_env = Cultivates()
 from environments.WMS_policy import MPCIrrigationPolicy, RLIrrigationPolicy, rule_based_policy
 
 
-rl_policy = RLIrrigationPolicy(1, PPO.load("logs/wms/ppo/best_model.zip"))
+rl_policy = RLIrrigationPolicy(1, TD3.load("experimental_logs/wms/td3/best_model.zip"))
 rb_policy = rule_based_policy()
 mpc_policy = MPCIrrigationPolicy(1, 10)
-
-# first step is selecting a year 
-#%%
 
 year = 2003 
 # then get the index of the day of the year of that year
 doy = min([crop.plantation_day for crop in cultivate_env.crops])  
+index = weather_data[(weather_data["doy"] == doy) & (weather_data["year"] == year)].index.values.item()
 
-index = weather_data[(weather_data["doy"] == 1) & (weather_data["year"] == 2003)].index.values.item()
-
-
+days_ahead = 1
 #%%
-daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-obs, info = cultivate_env.start(daily_weather_data)
+
+obs, info = cultivate_env.start()
 simu_days = 115
 prev_action = 0
 actions = []
 for i in range(simu_days):
-    daily_weather_data = weather_data.iloc[index + i + 1].to_dict()
-    action = mpc_policy.get_action(obs, cultivate_env, daily_weather_data)
+    daily_weather_data = weather_data.iloc[index + i].to_dict()
+    preps = weather_data.iloc[index+i:index+i+days_ahead]["precipitation"].values
+    action = rl_policy.get_action(obs, preps)
     actions.append(action)
     obs = cultivate_env.step(action, daily_weather_data)
     prev_action = action
@@ -42,11 +39,23 @@ for i in range(simu_days):
 crop_data, soil_data = cultivate_env.get_hist_data()["potato"]
 
 soil_data = pd.DataFrame(soil_data)
+soil_data.to_csv("soil_data_2.csv")
+crop_data = pd.DataFrame(crop_data)
+crop_data.to_csv("crop_data_2.csv")
 
 #%%
 actions_ = np.array([action[0] for action in actions])
-plt.plot(actions_)
+np.save("actions_2.npy", actions_)
+#%%
+
+plt.plot(actions_*1000)
+#plt.ylim(0, 10)
 plt.show()
+
+#%% Compute the total irrigation and yield
+total_irrigation = np.zeros(simu_days)
+
+
 
 #%% let's check after a period of simulation
 
@@ -78,7 +87,7 @@ plt.title("Evapotranspiration")
 plt.show()
 
 
-#%% Lets plot the soil moisture data
+ #%% Lets plot the soil moisture data
 soil_moisture = cultivate_env.get_soil_data()[0]
 pd_soil_moisture = pd.DataFrame(soil_moisture)
 

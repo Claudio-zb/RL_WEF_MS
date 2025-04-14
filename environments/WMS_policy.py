@@ -33,17 +33,33 @@ class IrrigationPolicy(Policy, metaclass = ABCMeta):
 
 class RLIrrigationPolicy(IrrigationPolicy):
     """Irrigation manager implemented by RL agent"""
-    def __init__(self, n_crops: int, rl_policy: BaseAlgorithm):
+    def __init__(self, n_crops: int, rl_policy: BaseAlgorithm, 
+                 days_ahead:int = 1, isNormalized:float=True):
+        
         super().__init__(n_crops)
         self.rl_policy:BaseAlgorithm = rl_policy
-
-    def __call__(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
-        obs_array = obs_dict_2_obs_array(obs)
-        action = self.rl_policy.predict(obs_array, deterministic=True)
-        return action
+        self.isNormalized:float = isNormalized
+        self.count:int = 1
+        self.relative_yield:float = 1.0
+        self.days_ahead: int = 1 
     
-    def get_action(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
-        action = self.__call__(obs)  
+    def get_action(self, obs: Dict[str, np.ndarray], precipitations:np.ndarray) -> np.ndarray:
+        """Receives the observation and precipitation predictions [mm] 
+           and returns the denormalized irrigation [m]"""
+
+        obs_array = obs_dict_2_obs_array(obs)
+        if self.isNormalized:
+            obs_array_ = np.zeros(9*self.n_crops + self.days_ahead)
+            obs_array_[:8*self.n_crops] = obs_array
+            self.relative_yield = self.relative_yield*obs_array[-1]
+            obs_array_[8] = self.relative_yield**(1/self.count)
+            # obs_array = 
+            self.count += 1
+            obs_array_[9:] = precipitations
+            action = self.rl_policy.predict(obs_array_, deterministic=True)[0]*20.0
+        else:
+            action = self.rl_policy.predict(obs_array, deterministic=True)[0]
+
         return action/1000.0
 
 

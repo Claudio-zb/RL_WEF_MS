@@ -7,8 +7,7 @@ import gymnasium as gym
 
 class CultivateEnv(gym.Env):
     def __init__(self):
-        self.global_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
-        self.weather_data: pd.DataFrame = None
+        self.weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/extracted_data.csv")
         self.cultivates: Cultivates = Cultivates()
         self.n_crops: int = len(self.cultivates.crops)
         self.observation_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=1.0, shape=(8 * self.n_crops,),
@@ -16,20 +15,32 @@ class CultivateEnv(gym.Env):
         self.action_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=20.0, shape=(self.n_crops,), dtype=np.float32)
         self.reward_function: Callable = lambda s, a, s_next: reward_function(s, a, s_next, self.n_crops)
         self.initial_year: int = None
+        self.days_since_plantation: int = 0
+        self.index: int = 0
 
     def reset(self, seed: int = None, options: dict = None) -> Tuple[np.ndarray, dict]:
         if seed is not None:
             np.random.seed(seed)
-        self.initial_year = np.random.randint(1981, 2011)
-        self.weather_data = self.global_data[(self.global_data["year"] == self.initial_year) | (self.global_data["year"] == self.initial_year + 1)]
-        weather_data = self.weather_data.loc[(self.weather_data["doy"] == self.cultivates.doy) & (self.weather_data["year"] == self.initial_year)].iloc[0].to_dict()
-        dict_obs, _ = self.cultivates.start(weather_data)
 
         if options is not None:
-            for crop in self.cultivates.crops:
-                crop.soil.set_theta(options["theta"])
+            if options["mode"] == "eval":
+                self.initial_year = np.random.randint(2012, 2018)
+            if options["mode"] == "test":
+                self.initial_year = 2018
+                
+        else:
+            self.initial_year = np.random.randint(1981, 2011)
+        # then get the index of the day of the year of that year
+        doy = min([crop.plantation_day for crop in self.cultivates.crops])  
+        self.days_since_plantation = 0
 
-            dict_obs = self.cultivates.get_obs()
+        self.index = int(self.weather_data[(self.weather_data["doy"] == doy) & (self.weather_data["year"] == self.initial_year)].index.values.item())
+        #self.weather_data = self.global_data[(self.global_data["year"] == self.initial_year) | (self.global_data["year"] == self.initial_year + 1)]
+        #weather_data = self.weather_data.loc[(self.weather_data["doy"] == self.cultivates.doy) & (self.weather_data["year"] == self.initial_year)].iloc[0].to_dict()
+        
+        dict_obs, _ = self.cultivates.start()
+        for crop in self.cultivates.crops:
+            crop.soil.evp_layer.set_theta(crop.soil.evp_layer.theta_fc)  # set evp layer at field capacity
 
         array_obs = obs_dict_2_obs_array(dict_obs)
         return array_obs, {}
@@ -37,17 +48,12 @@ class CultivateEnv(gym.Env):
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
         terminated, truncated = False, False
 
+        daily_weather_data = self.weather_data.iloc[self.index + self.days_since_plantation].to_dict()
+        self.days_since_plantation += 1            
         
-        if self.cultivates.doy == 366:
-            self.initial_year += 1
-        if self.cultivates.doy == 365:
-            if not (self.initial_year % 4 == 0 and (self.initial_year % 100 != 0 or self.initial_year % 400 == 0)):
-                self.initial_year += 1
-            
-        weather_data = self.weather_data.loc[(self.weather_data["doy"] == self.cultivates.doy) & (self.weather_data["year"] == self.initial_year)].iloc[0].to_dict()
         prev_obs = obs_dict_2_obs_array(self.cultivates.get_obs())
 
-        dict_obs = self.cultivates.step(action/1000, weather_data)
+        dict_obs = self.cultivates.step(action/1000, daily_weather_data)
         array_obs = obs_dict_2_obs_array(dict_obs)
 
         for crop in self.cultivates.crops:
@@ -66,6 +72,7 @@ def reward_function(s: np.ndarray, a: np.ndarray, s_next: np.ndarray, n_crops) -
 
     Ks = sum([s_next[i+7] for i in range(n_crops)])
     return Ks - sum(a)/15
+
 
 
 class Cultivates:
@@ -87,13 +94,13 @@ class Cultivates:
         self.ET0: float = 0.0
 
 
-    def start(self, init_weather_info:dict) -> Tuple[dict, dict]:
+    def start(self) -> Tuple[dict, dict]:
         """
         Starts the simulation of crops
         :return: a dictionary with the initial state of the crops and a dictionary with the info
         """
         self.doy = min([crop.plantation_day for crop in self.crops])
-        self.set_climate_data(init_weather_info)
+        #self.set_climate_data(init_weather_info)
         for crop in self.crops:
             crop.reset()
         return self.get_obs(), {}
@@ -288,12 +295,12 @@ class Crop:
     def reset(self, et0: float = 0.0):
         assert(isinstance(et0, float) or isinstance(et0, np.floating))
 
-        self.ref_evapotranspiration = et0
+        self.soil.reset()
         self.update(0.0)
         self.hist_data = []
         self.days_since_plantation = 0
         self.doy = 0
-        self.soil.reset()
+        
 
 
 
@@ -539,61 +546,45 @@ class Crop:
         """
         Update Ks as a function of the depletion
         """
-
-        stop = False
-        theta_wps = []
-        partial_depletions = []
-        partial_taws = []
-        lenghts = []
-        theta_ts = []
-        thetas = []
-        reversed_layers = [self.soil.evp_layer] + self.soil.layers[::-1]
+        reversed_layers = self.soil.get_reversed_layers()  # top to bottom ordered
+        thetas = np.array([soil.get_theta() for soil in reversed_layers])
+        theta_wps = np.array([soil.theta_wp for soil in reversed_layers])
+        theta_fcs = np.array([soil.theta_fc for soil in reversed_layers])
+        nominal_et_frac = np.array([layer.uptake_percentage for layer in reversed_layers])
+        lenghts = np.zeros_like(thetas)
+        
         cum_depths = np.cumsum(np.array([layer.depth for layer in reversed_layers]))
         for idx, layer in enumerate(reversed_layers):
-            theta, theta_fc, theta_wp = layer.get_theta(), layer.theta_fc, layer.theta_wp
             if self.root_depth >= cum_depths[idx]:
                 z = layer.depth  # length of root in the layer
+                lenghts[idx] = z 
             else:
                 if idx >= 1 :
                     z = self.root_depth - cum_depths[idx - 1]  # length of root in the layer
                 else:
                     z = self.root_depth
-                stop = True
-            lenghts.append(z)
-            theta_wps.append(layer.theta_wp)
-            theta_ts.append(layer.theta_fc - (layer.theta_fc - layer.theta_wp) * self.MAD)
-            thetas.append(theta)
-            partial_depletion = np.clip(theta_fc - theta, 0, theta_fc - theta_wp) * z
-            if isinstance(partial_depletion, np.ndarray):
-                partial_depletion = partial_depletion[0]
-            partial_depletions.append(partial_depletion)
-            partial_taws.append((theta_fc - theta_wp) * z)
-            if stop:
+                lenghts[idx] = z 
                 break
-        depletion = np.array(partial_depletions).sum()
-        taw = np.array(partial_taws).sum()
-        if depletion > taw * self.MAD:
-            Ks = (taw - depletion) / ((1 - self.MAD) * taw)
-        else:
-            Ks = 1.0
-        lenghts = np.array(lenghts)
-        #print(len(lenghts))
-        nominal_et_frac = lenghts / lenghts.sum()
+        theta_ts = theta_fcs - (theta_fcs - theta_wps) * self.MAD
+        partial_taws = (theta_fcs - theta_wps) * lenghts
+        partial_depletions = np.clip(theta_fcs - thetas, 0, theta_fcs - theta_wps) * lenghts
+        
+        depletion, taw = partial_depletions.sum(), partial_taws.sum()
+        
+        Ks = (taw - depletion) / ((1 - self.MAD) * taw) if depletion > (taw * self.MAD) else 1.0
 
-        adjustement = (np.array(thetas) - np.array(theta_wps)) / (np.array(theta_ts) - np.array(theta_wps))
+        adjustement = (thetas - theta_wps) / (theta_ts - theta_wps)
         first_estimate = np.clip(adjustement, 0, 1) * nominal_et_frac
-        if first_estimate.sum() != 0:
-            final_fraction = first_estimate / first_estimate.sum()
+        
+        final_fraction = first_estimate/first_estimate.sum() if first_estimate.sum() != 0 else nominal_et_frac
 
-        else:
-            final_fraction = nominal_et_frac
         self.depletion = depletion
         self.raw = taw * self.MAD
 
-        #assert np.isclose(final_fraction.sum(), 1.0)
+        assert np.isclose(final_fraction.sum(), 1.0)
 
         # pad the array with zeros to reach the number of layers
-        final_fraction = np.pad(final_fraction, (0, len(self.soil.layers) + 1 - len(final_fraction)), 'constant')
+        #final_fraction = np.pad(final_fraction, (0, len(self.soil.layers) + 1 - len(final_fraction)), 'constant')
         return Ks, final_fraction
     
 
@@ -681,7 +672,7 @@ class Layer:
 
     def reset(self):
         # set random theta
-        self.theta = np.random.rand() * (self.theta_fc - self.theta_wp) + self.theta_wp
+        self.theta = self.theta_fc
         self.hist_theta = []
         self.uptake_percentage = 0.0
 
@@ -919,20 +910,91 @@ def harmonic_mean(x1, z1, x2, z2):
 def aritmethic_mean(x1, z1, x2, z2):
     return (x1 * z1 + x2 * z2) / (z1 + z2)
 
-class NormalizationWMS(gym.Wrapper):
-    def __init__(self, env: CultivateEnv):
-        super(NormalizationWMS, self).__init__(env)
+class NormalizedWMS(gym.Wrapper):
+    "Normalizes the action space and adds the relative yield as observation"
+    def __init__(self, env: CultivateEnv, days_ahead: int = 1, reward_weigths:np.ndarray = None):
+        super(NormalizedWMS, self).__init__(env)
         self.env: CultivateEnv = env
-        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(self.env.n_crops,), dtype=np.float32)
-        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(7 * self.env.n_crops,), dtype=np.float32)
+        self.n_crops = self.env.n_crops
+        self.days_ahead:int = days_ahead
+        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(self.env.n_crops,), 
+                                           dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, 
+                                                shape=(9 * self.env.n_crops + days_ahead,), 
+                                                dtype=np.float32)
+        self.relative_yield:np.ndarray = np.ones(self.n_crops, dtype=np.float32)
+        self.days:int = 1
+        self.prev_obs_: np.ndarray = np.zeros(self.n_crops * 9 + days_ahead)
+        if reward_weigths is None:
+            self.reward_function = lambda s, a, s_next: reward_function2(s, a, s_next, self.n_crops)
+        else:
+            self.reward_function = lambda s, a, s_next: reward_function2(s, a, s_next, self.n_crops, reward_weigths)
 
     def reset(self, seed: int = None, options: dict = None) -> Tuple[np.ndarray, dict]:
+        self.days = 1
         obs, info = self.env.reset(seed, options)
-        return obs , info
+        self.relative_yield = np.ones(self.n_crops, dtype=np.float32)
+        
+        obs_ = np.zeros(self.n_crops * 9 + self.days_ahead, dtype=np.float32)
+        for i in range(self.n_crops):
+            self.relative_yield[i] = (obs[(i+1)*7] * self.relative_yield[i])
+            obs_[i*8:(i+1)*8] = obs  # change the values from the first 8 items
+            obs_[(i+1)*8] = self.relative_yield[i]**(1/self.days) # change the value of the 9th item
+        # now we need to add the predictions
+        index = self.env.index
+        future_precipitations = self.env.weather_data.iloc[index:index + self.days_ahead, 1:]["precipitation"].values.flatten()
+        obs_[self.n_crops*9:] = future_precipitations
+        self.prev_obs_ = obs_
+        return obs_ , info
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
-        obs, rew, terminated, truncated, info = self.env.step(action*10.0)
-        return obs, rew, terminated, truncated, info
+        action_ = action*20.0
+
+        obs, _, terminated, truncated, info = self.env.step(action_)
+        self.days += 1
+        obs_ = np.zeros(self.n_crops * 9 + self.days_ahead, dtype=np.float32)
+        for i in range(self.n_crops):
+            self.relative_yield[i] = (obs[(i+1)*7] * self.relative_yield[i])
+            obs_[i*8:(i+1)*8] = obs  # change the values from the first 8 items
+            obs_[(i+1)*8] = self.relative_yield[i]**(1/self.days) # change the value of the 9th item
+        # now we need to add the predictions
+        index = self.env.index + self.days
+        future_precipitations = self.env.weather_data.iloc[index:index + self.days_ahead, 1:]["precipitation"].values.flatten()
+        obs_[self.n_crops*9:] = future_precipitations
+        rew = self.reward_function(self.prev_obs_, action, obs_)
+        self.prev_obs = obs
+        return obs_, rew, terminated, truncated, {}
+    
+class EvalWMS(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.env = env
+
+    def reset(self, seed: int = None, options:dict = None):
+        return self.env.reset(options = {"mode": "eval"})
+    
+    def step(self, action):
+        return super().step(action)
+    
+class TestWMS(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.env = env
+
+    def reset(self, seed: int = None, options:dict = None):
+        return self.env.reset(options = {"mode": "test"})
+    
+    def step(self, action):
+        return super().step(action)
+    
+def reward_function2(s: np.ndarray, a: np.ndarray, s_next: np.ndarray, n_crops, 
+                     weights = np.array([1.0, 1.0, 0.333])) -> float:
+    reward = 0.0
+    for i in range(n_crops):
+        Ks = s_next[(i+1)*8]
+        delta_Ks = s_next[(i+1)*7] - s[(i+1)*7]
+        reward += weights[0]*Ks + weights[1]*np.clip(delta_Ks, -np.inf, 0.0)
+    return reward - sum(a)*weights[2]
     
 def obs_dict_2_obs_array(obs: Dict[str, np.ndarray]) -> np.ndarray:
     """Turns an observation dictionary into a flattened array"""

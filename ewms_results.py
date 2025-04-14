@@ -14,7 +14,7 @@ plt.rcParams['font.family'] = 'serif'
 plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 #%%
-irrigation_rl_model = RLIrrigationPolicy(1,PPO.load("logs/wms/ppo/best_model.zip"))
+irrigation_rl_model = RLIrrigationPolicy(1,PPO.load("logs/wms/sac/best_model.zip"))
 
 ems_rl_policy = TD3.load("experimental_logs/ems/td3/best_model.zip")
 ems_policy = RuleBasedEMS(1, ems_rl_policy, isNormalized=True)
@@ -48,8 +48,8 @@ wms_actions_2 = data["end_of_day_samples"]
 t = np.arange(0, len(wms_actions_2))
 
 
-plt.step(t, wms_actions_2[:,1], label=r"$V_{req}$")
-plt.step(t, data["wms_actions"], label = r"$V_{irr}|_{\text{end of the day}}$")
+plt.step(t, wms_actions_2[:,1], label=r"$V_{req}$", where="post")
+plt.step(t, data["wms_actions"], label = r"$V_{irr}|_{\text{end of the day}}$", where="post" )
 plt.xlabel("Time since plantation [days]")
 plt.ylabel("Water amount[m3]")
 plt.grid()
