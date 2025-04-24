@@ -218,7 +218,7 @@ class PPO(RL_algorithm):
 
         return torch.tensor(batch_advantages, dtype=torch.float).cuda()
 
-    def evaluate(self, batch_obs: torch.Tensor, batch_acts: torch.Tensor) -> (torch.Tensor, torch.Tensor, torch.Tensor):
+    def evaluate(self, batch_obs: torch.Tensor, batch_acts: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Evaluates the current policy on a batch of observations and actions by computing the log probability
         :param batch_obs:

@@ -4,10 +4,11 @@ import time
 import torch
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.base_class import BaseAlgorithm
+from RL_algorithms.PPO2 import train as ppo_train
 
 from stable_baselines3.common.noise import OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
-from stable_baselines3 import TD3, PPO, SAC
+from stable_baselines3 import TD3, SAC
 
 from stable_baselines3.common.env_util import make_vec_env
 
@@ -54,24 +55,25 @@ def create_callback(alg_name, environment):
 episode_length = 114
 n_envs = 4
 
-models_dict = {"td3": TD3, "sac": SAC, "ppo": PPO}
-alg_names = ["td3", "sac", "ppo"]
+models_dict = {"td3": TD3, "sac": SAC}
+alg_names = ["td3", "sac"]
 
 #train = True
 #experimental = True
 #path = "logs/wms/" if not experimental else "experimental_logs/wms/"
 
-set_of_weights = np.array([[1.0, 1.0, 1.0], 
-                           [1.0, 1.0, 1/2], 
-                           [1.0, 1.0, 1/3],
-                           [1.0, 1.0, 1/4]])
+set_of_weights = np.array([[.9, .9, 1.2],
+                           [.95, .95, 1.1],
+                           [1.0, 1.0, 1.0], 
+                           [1.05, 1.05, 0.9], 
+                           [1.1, 1.1, 0.8]])
 
 #%%
-train = False
+train = True
 if train: 
-    for weights in set_of_weights:
+    for idx, weights in enumerate(set_of_weights):
 
-        path = f"logs/wms/weights_{np.around(weights[0], 2)}_{np.around(weights[1], 2)}_{np.around(weights[2], 2)}/"
+        path = f"logs/wms/weights_{idx}/"
 
         print(f"Training with weights {weights}")
 
@@ -85,11 +87,7 @@ if train:
         sac_model: BaseAlgorithm = SAC("MlpPolicy", vec_envs[1], verbose=1, batch_size=episode_length*4, 
                         ent_coef=0.1, train_freq=2, gradient_steps=2)
         
-        ppo_model: BaseAlgorithm = PPO("MlpPolicy", vec_envs[2], verbose=1, batch_size=episode_length*4, normalize_advantage=True,
-                        device="cpu", clip_range=0.18, n_steps=episode_length*n_envs*4, 
-                        learning_rate=0.0001)
-                        
-        models:list[BaseAlgorithm] = [td3_model, sac_model, ppo_model]
+        models:list[BaseAlgorithm] = [td3_model, sac_model]
         
         training_times = []
         for model, name, eval_env in zip(models, alg_names, eval_envs):
@@ -100,14 +98,24 @@ if train:
             training_times.append(training_time)
             print(f"Training {name} took {end_time - start_time} seconds")
 
+        ### ppo training
+        ppo_env = NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights)  
+        ppo_train(ppo_env, 
+                  max_training_timesteps=60_000,
+                  update_freq=144*2,
+                  eval_freq=144*2,
+                  log_path=path+"ppo",
+                  eval_env= EvalWMS(NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights)),
+                  n_epochs=5)
 #%%
 
 # Load the training curves
 
-folders = ["weights_1.0_1.0_1.0", 
-               "weights_1.0_1.0_0.5", 
-               "weights_1.0_1.0_0.33", 
-               "weights_1.0_1.0_0.25"]
+folders = ["weights_0", 
+               "weights_1", 
+               "weights_2", 
+               "weights_3",
+               "weights_4"]
 
 for index, folder in enumerate(folders):
     path = f"logs/wms/{folder}/"
@@ -188,36 +196,6 @@ plt.tight_layout()
 plt.savefig(f"{path}evaluation_plot.png", dpi=300)
 plt.show()
 
-#%% Plotting the training curves
-h = 4
-
-def moving_average(data, window_size):
-    return data.rolling(window=window_size).mean()
-
-def moving_std(data, window_size):
-    return data.rolling(window=window_size).std()
-
-fig, ax = plt.subplots()
-window = 1
-for name in ["td3"]: #["sac", "td3", "ppo"]:
-    df = pd.read_csv(f"{path}{name}/{name}_monitor.csv", skiprows=1)
-    df['moving_avg'] = moving_average(df['r'], window)
-    #df['moving_std'] = moving_std(df['r'],window)
-    ax.plot(df.index, df['moving_avg'], label=name.upper(), alpha=0.85)
-    #ax.fill_between(df.index, df['moving_avg'] - df['moving_std'], df['moving_avg'] + df['moving_std'], alpha=0.3)
-
-ax.set_ylim(0, 80)
-ax.set_xlabel(r"Episode", fontsize = 14)
-ax.set_ylabel(r"Mean reward per episode", fontsize = 14)
-#ax.set_title(r"\textbf{RL algorithms training curves}")
-fig.set_size_inches(h * 2, h)
-plt.legend()
-plt.grid()
-plt.tight_layout()
-plt.savefig("logs/wms/wms_plot.png", dpi=300)
-plt.show()
-
-
 
 #%%
 # Load the best models
@@ -229,7 +207,7 @@ best_models = [sac_best_model]#[sac_best_model, ppo_best_model, td3_best_model]
 models_name = ["sac"] #["sac", "ppo", "td3"]
 
 #%% perform the evaluation of PPO model
-cultivate_env = NormalizedWMS(CultivateEnv())
+cultivate_env = TestWMS(NormalizedWMS(CultivateEnv(), reward_weigths=weights))
 for model, name in zip(best_models, models_name):
     x = []
     a = []

@@ -1,24 +1,58 @@
-
 #%%
 from stable_baselines3 import PPO, SAC, TD3
 from predictive_models.utils import NN_soil_mdl
-from environments.WMS_env import *
+from environments.Cultivates import *
 from matplotlib import pyplot as plt
+import pandas as pd
+from environments.WMS_env import NormalizedWMS, CultivateEnv
 weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
 cultivate_env = Cultivates()
-from environments.WMS_policy import MPCIrrigationPolicy, RLIrrigationPolicy, rule_based_policy
+from environments.WMS_policies import MPCIrrigationPolicy, RLIrrigationPolicy, ScheduledIrrigationPolicy
+cultivate_gym_env = NormalizedWMS(CultivateEnv(), 1)
 
+agent = TD3.load(r"logs\wms\weights_1.0_1.0_1.0\td3\best_model")
 
-rl_policy = RLIrrigationPolicy(1, TD3.load("experimental_logs/wms/td3/best_model.zip"))
-rb_policy = rule_based_policy()
-mpc_policy = MPCIrrigationPolicy(1, 10)
-
+scheduled_policy = ScheduledIrrigationPolicy(n_crops=1, frequency=0, irr_amount=20.0)
+mpc_policy = MPCIrrigationPolicy(model=Cultivates(), n_crops=1, horizon=10)
+#rl_policy = RLIrrigationPolicy(n_crops=1, model_path="models/ppo_model.zip")
 year = 2003 
 # then get the index of the day of the year of that year
 doy = min([crop.plantation_day for crop in cultivate_env.crops])  
 index = weather_data[(weather_data["doy"] == doy) & (weather_data["year"] == year)].index.values.item()
 
 days_ahead = 1
+
+#%%
+
+obs, info = cultivate_gym_env.reset()
+actions = []
+rewards = []
+observations = []
+done = False
+while not done:
+    #action = scheduled_policy.get_action(obs)/20*1000/10
+    action = agent.predict(obs, deterministic=True)[0]
+    actions.append(action)
+    obs, reward, terminated, truncated, info = cultivate_gym_env.step(action)
+    observations.append(obs)
+    done = terminated or truncated
+    rewards.append(reward)
+observations = np.array(observations)
+#%%
+plt.plot(observations[:,8])
+#%%
+plt.plot(rewards)
+plt.title("Scheduled irrigation policy")
+#%%
+
+crop_data = pd.DataFrame(cultivate_gym_env.env.cultivates.get_hist_data()["potato"][0])
+soil_data = pd.DataFrame(cultivate_gym_env.env.cultivates.get_hist_data()["potato"][1])
+
+#%%
+
+soil_data.plot(y=["layer_0_0", "layer_1_0", "layer_2_0", "layer_3_0", "layer_4_0"])
+plt.title("Soil moisture")
+
 #%%
 
 obs, info = cultivate_env.start()
@@ -27,10 +61,13 @@ prev_action = 0
 actions = []
 for i in range(simu_days):
     daily_weather_data = weather_data.iloc[index + i].to_dict()
-    preps = weather_data.iloc[index+i:index+i+days_ahead]["precipitation"].values
-    action = rl_policy.get_action(obs, preps)
+    precipitation = weather_data.iloc[index+i:index+i+days_ahead]["precipitation"].values
+    et0 = weather_data.iloc[index+i:index+i+days_ahead]["ET_0"].values
+    timestamp = np.array([index+i])
+    disturbances = np.hstack((precipitation, et0, timestamp))
+    action = mpc_policy.get_action(obs, disturbances)
     actions.append(action)
-    obs = cultivate_env.step(action, daily_weather_data)
+    obs, _ = cultivate_env.step(action, daily_weather_data)
     prev_action = action
 
 #%%

@@ -1,6 +1,6 @@
 #%%
-from environments.WMS_policy import TriggeredIrrigationPolicy
-from environments.WMS_env import Cultivates
+from environments.WMS_policies import TriggeredIrrigationPolicy
+from environments.Cultivates import Cultivates
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset

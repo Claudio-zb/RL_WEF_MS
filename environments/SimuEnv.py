@@ -1,5 +1,5 @@
-from environments.WMS_policy import IrrigationPolicy 
-from environments.WMS_env import Cultivates
+from environments.WMS_policies import IrrigationPolicy 
+from environments.Cultivates import Cultivates
 from environments.EMS_env import EnergyWaterMG, RuleBasedEMS
 from typing import Callable
 import pandas as pd
