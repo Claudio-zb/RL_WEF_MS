@@ -1,6 +1,6 @@
 #%%
 from environments.SimuEnv import SimuEnv
-from environments.WMS_policy import RLIrrigationPolicy, RuleBasedIrrigationPolicy, ScheduledIrrigationPolicy, MPCIrrigationPolicy
+from environments.WMS_policies import RLIrrigationPolicy, RuleBasedIrrigationPolicy, ScheduledIrrigationPolicy, MPCIrrigationPolicy
 from environments.EMS_env import RuleBasedEMS
 from stable_baselines3 import SAC, TD3, PPO
 import pandas as pd

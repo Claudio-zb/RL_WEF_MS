@@ -1,7 +1,7 @@
 #%%
-from environments.WMS_env import *
+from environments.Cultivates import *
 from matplotlib import pyplot as plt
-from environments.WMS_policy import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
+from environments.WMS_policies import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
 from environments.Data.WMS.WMS_profile import * 
 
 plots_path = "plots/agro_model/"
