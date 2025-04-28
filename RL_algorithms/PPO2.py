@@ -392,7 +392,7 @@ def train(env:gym.Env, max_training_timesteps:int, update_freq:int, eval_freq:in
 
                 if eval_reward_mean > max_eval_reward:
                     max_eval_reward = eval_reward_mean
-                    ppo_agent.save(log_dir + "/ppo_" + env_name + "_best.pth")
+                    ppo_agent.save(log_dir + "/best_model.pth")
                     print("saving new best model with mean reward : ", max_eval_reward)
 
             # break; if the episode is over

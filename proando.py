@@ -1,23 +1,44 @@
+#%%
 from environments.Cultivates import * 
+from environments.WMS_policies import RBIrrigationPolicy, IrrigationPolicy
 from matplotlib import pyplot as plt
 
 import pandas as pd
 import numpy as np
 
-cultivates_env = Cultivates()
-cultivates_env2 = Cultivates()
+
 weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
 
-obs, doy = cultivates_env.start()
-cultivates_env2.start()
-for i in range(12):
-    obs, doy = cultivates_env.step([0], weather_data.iloc[i].to_dict())
-cultivates_env2.set_state(obs, doy)
-
-obs2, doy2 = cultivates_env2.step([0], weather_data.iloc[12].to_dict())
-obs, doy = cultivates_env.step([0], weather_data.iloc[12].to_dict())
-
-print(obs, doy)
-print(obs2, doy2)
-
 print("yeah whatever")
+year = 2018
+
+irrigation_policy = RBIrrigationPolicy(n_crops=1, model=Cultivates(), year=year)
+
+def evaluate_policy(policy:IrrigationPolicy) -> tuple[np.ndarray, np.ndarray, float, float]: 
+    cultivates = Cultivates()
+    doy = cultivates.crops[0].plantation_day
+    season_duration = 114
+    index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
+    observations = []
+    obs_dict, _ = cultivates.start()
+    observations.append(obs_dict["potato"])
+    actions = []
+    for day_since_plantation in range(season_duration):
+        daily_weather_data = weather_data.iloc[index + day_since_plantation].to_dict()
+        disturbances = np.array([daily_weather_data["precipitation"], daily_weather_data["ET_0"]])
+        action = policy.get_action(obs_dict, disturbances, doy)
+        actions.append(action[0])
+        obs_dict, _ = cultivates.step(action, daily_weather_data)
+        observations.append(obs_dict["potato"])
+    observations = np.array(observations)
+
+    observations = np.array(observations)
+    actions = np.array(actions)
+
+    total_water = np.sum(actions)
+    relative_yield = np.exp(np.mean(np.log(observations[:, 7] + 1e-10)))
+
+    return observations, actions, relative_yield, total_water
+
+    
+observations, actions, relative_yield, total_water = evaluate_policy(irrigation_policy)

@@ -60,7 +60,7 @@ class Cultivates:
         """Set the state of the crops"""
         self.doy = int(doy)
         for crop in self.crops:
-            crop.is_active = True if state[crop.crop_name][-1] > 0 else False # is active if days since plantations >= 1
+            crop._is_active = True if state[crop.crop_name][-1] > 0 else False # is active if days since plantations >= 1
             crop.set_state(state[crop.crop_name], self.doy)
         
         
@@ -689,6 +689,9 @@ class Soil:
         self.outcoming_water:float = 0.0
         self.hist_data = []
         self.n_layers:int = len(self.layers)
+        self.depth:float = None
+        self.theta_fc:float = None
+        self.theta_wp:float = None
 
     def __get_item__(self, idx):
         if idx < 0 or idx > self.n_layers:
@@ -698,6 +701,21 @@ class Soil:
     def add_layer(self, layer: Layer):
         self.layers.append(layer)
         return
+    
+    def get_depth(self) -> float:
+        if self.depth is None:
+            self.depth = sum([layer.depth for layer in self.get_reversed_layers()])  
+        return self.depth
+    
+    def get_theta_fc(self) -> float:
+        if self.theta_fc is None:
+            self.theta_fc = np.mean([layer.theta_fc for layer in self.get_reversed_layers()])
+        return self.theta_fc
+    
+    def get_theta_wp(self) -> float:
+        if self.theta_wp is None:
+            self.theta_wp = np.mean([layer.theta_wp for layer in self.get_reversed_layers()])
+        return self.theta_wp
 
     def set_evp_layer(self, evp_layer: EvpLayer):
         self.evp_layer = evp_layer
@@ -733,7 +751,6 @@ class Soil:
             h_c += layer.h_c 
         h_c = h_c / n_layers
         return h_c
-
 
     def reset(self):
         for layer in self.layers:
