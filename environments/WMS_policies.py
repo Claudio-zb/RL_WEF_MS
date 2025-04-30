@@ -46,32 +46,35 @@ class PPOIrrigationPolicy(IrrigationPolicy):
 
 class RLIrrigationPolicy(IrrigationPolicy):
     """Irrigation manager implemented by RL agent"""
-    def __init__(self, n_crops: int, rl_policy: BaseAlgorithm, 
+    def __init__(self, n_crops: int, rl_policy: BaseAlgorithm, year:int, 
                  days_ahead:int = 1, isNormalized:float=True):
         
-        super().__init__(n_crops)
+        super().__init__(n_crops, year)
         self.rl_policy:BaseAlgorithm = rl_policy
         self.isNormalized:float = isNormalized
         self.count:int = 1
         self.relative_yield:float = 1.0
         self.days_ahead: int = 1 
+        self.weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
+        self.days_ahead = days_ahead
     
     def get_action(self, obs: Dict[str, np.ndarray], disturbances:np.ndarray, doy) -> np.ndarray:
-        precipitations = disturbances
+        
+        index = int(self.weather_data.loc[(self.weather_data["year"] == self.year) & (self.weather_data["doy"] == doy)].index.values[0])
+        
+        precipitations = self.weather_data.iloc[index:index+self.days_ahead]["precipitation"].values
         obs_array = obs_dict_2_obs_array(obs)
-        if self.isNormalized:
-            obs_array_ = np.zeros(9*self.n_crops + self.days_ahead)
-            obs_array_[:8*self.n_crops] = obs_array
-            self.relative_yield = self.relative_yield*obs_array[-1]
-            obs_array_[8] = self.relative_yield**(1/self.count)
-            # obs_array = 
-            self.count += 1
-            obs_array_[9:] = precipitations
-            action = self.rl_policy.predict(obs_array_, deterministic=True)[0]*20.0
-        else:
-            action = self.rl_policy.predict(obs_array, deterministic=True)[0]
-
-        return action/1000.0
+        obs_array_ = np.zeros(11*self.n_crops + self.days_ahead) 
+        obs_array_[:10*self.n_crops] = obs_array  # assign the observations (length = 10)
+        obs_array_[8] = 0.0 if obs_array_[8] < 3 else 1.0 # normalize the drought indicator
+        obs_array_[9] = obs_array_[9] / 114 # normalize the time component
+        self.relative_yield = self.relative_yield*obs_array[7]
+        obs_array_[10] = self.relative_yield**(1/self.count)
+        
+        obs_array_[11:] = np.abs(precipitations*(1.0 + np.random.randn(self.days_ahead)*0.1)) # add noise to the precipitation predictions
+        action = self.rl_policy.predict(obs_array_, deterministic=True)[0]*20.0/1000
+        self.count += 1
+        return action
 
 
 class RuleBasedIrrigationPolicy(IrrigationPolicy):
@@ -138,8 +141,11 @@ class RBIrrigationPolicy(IrrigationPolicy):
         
         self.model.set_state(obs, doy)
         obs_dict, _ = self.model.step([0.0], disturbances_dict)
-        expected_water = self.weather_data.iloc[self.index + self.days_since_plantation:self.index + self.days_since_plantation + 3]["precipitation"].values.sum()
-        expected_water = expected_water*0.001 # [mm] -> [m]
+        expected_water = self.weather_data.iloc[self.index + self.days_since_plantation:self.index + self.days_since_plantation + 3]["precipitation"].values
+        # add 10% of uncertainty to expected water
+        expected_water = np.abs(expected_water*(1.0 + np.random.randn(len(expected_water))*0.1))
+
+        expected_water = sum(expected_water)*0.001 # [mm] -> [m]
         actions = np.zeros(self.n_crops)
         
         for idx, crop in enumerate(self.model.crops):
@@ -153,6 +159,8 @@ class RBIrrigationPolicy(IrrigationPolicy):
                 action = 0.0
 
             actions[idx] = action
+        
+        self.days_since_plantation += 1
 
         return actions
             
@@ -187,10 +195,10 @@ class ScheduledIrrigationPolicy(IrrigationPolicy):
 
 class MPCIrrigationPolicy(IrrigationPolicy):
     """Class that defines policies via Model Predictive Control"""
-    def __init__(self, model:Cultivates, n_crops:int = 1, horizon: int = 10, 
+    def __init__(self, n_crops:int, model:Cultivates, year:int, horizon: int = 7, 
                  reward_weights:np.ndarray = np.array([1.0, 1.0, 1.0])):
 
-        super().__init__(n_crops)
+        super().__init__(n_crops, year)
 
         self.horizon = horizon
         self.weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
@@ -200,9 +208,13 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         self.et_model:Predictor = torch.load("predictive_models/et_model_2.pth", weights_only=False)
         self.et_model.to("cpu")
         self.reward_weights = reward_weights
+        self.first_index:int = None
+        self.days_count:int = 0
     
-    def get_action(self, obs:np.ndarray, disturbances:np.ndarray) -> List[np.floating]:
-        timestamp = int(disturbances[-1])
+    def get_action(self, obs:np.ndarray, disturbances:np.ndarray, doy:int) -> np.ndarray[np.floating]:
+        if self.first_index is None:
+            self.first_index = int(self.weather_data.loc[(self.weather_data["year"] == self.year) & (self.weather_data["doy"] == doy)].index.values[0])
+        timestamp = self.first_index + self.days_count
         self.model.set_state(obs, int(obs["potato"][-1]))
         # Set-up hyperparameters
         init_position_ = np.concatenate((self.previous_solution[1:], np.zeros(1)))
@@ -220,8 +232,8 @@ class MPCIrrigationPolicy(IrrigationPolicy):
                                                isNormalized=False).to("cpu").numpy().flatten()
         
         precipitation_preds = self.weather_data.iloc[timestamp:timestamp+self.horizon]["precipitation"].values
-        precipitation_preds[1:5] = precipitation_preds[1:5]*(np.random.uniform(low=0, high=0.01, size=(4,)) + 1.0)
-        precipitation_preds[5:] = precipitation_preds[5:]*(np.random.uniform(low=0, high=0.02, size=(2,)) + 1.0)
+        precipitation_preds[1:5] = np.abs(np.random.normal(precipitation_preds[0:5], 0.1*precipitation_preds[0:5]))
+        precipitation_preds[5:] = np.abs(np.random.normal(precipitation_preds[5:], 0.2*precipitation_preds[5:]))
         precipitation_preds = np.abs(precipitation_preds)
         for j in range(self.horizon):
             weather_dict = {"ET_0":et_predictions[j],
@@ -238,8 +250,9 @@ class MPCIrrigationPolicy(IrrigationPolicy):
                                                    weights=self.reward_weights)
 
         # Perform optimization
-        cost, action = optimizer.optimize(cost_fun, iters=50, n_processes=None)
+        cost, action = optimizer.optimize(cost_fun, iters=20, n_processes=None)
         self.previous_solution = action
+        self.days_count += 1
         return [action[0]]  # [m]
     
     def cost_function(self, obs: dict[str, np.ndarray], actions: np.ndarray, pred_disturbances: List[dict],

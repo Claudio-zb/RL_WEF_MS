@@ -98,7 +98,7 @@ class ActorCritic(nn.Module):
             action_probs = self.actor(state)
             dist = Categorical(action_probs)
 
-        action = dist.sample()
+        action = torch.clip(dist.sample(), 0., 1.)
         action_logprob = dist.log_prob(action)
         state_val = self.critic(state)
 
@@ -290,8 +290,8 @@ def train(env:gym.Env, max_training_timesteps:int, update_freq:int, eval_freq:in
     print_freq = max_ep_len * 10        # print avg reward in the interval (in num timesteps)
     log_freq = max_ep_len * 2           # log avg reward in the interval (in num timesteps)
 
-    action_std = 0.6                    # starting std for action distribution (Multivariate Normal)        
-    min_action_std = 0.1                # minimum action_std (stop decay after action_std <= min_action_std)
+    action_std = 0.2                    # starting std for action distribution (Multivariate Normal)        
+    min_action_std = 0.01                # minimum action_std (stop decay after action_std <= min_action_std)
     action_std_decay_freq = max_training_timesteps // 20  # action_std decay frequency (in num timesteps)
     action_std_decay_rate = (action_std - min_action_std) / 20 # action_std decay rate (per decay frequency)
     
@@ -325,7 +325,7 @@ def train(env:gym.Env, max_training_timesteps:int, update_freq:int, eval_freq:in
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    log_dir = log_dir + '/' + env_name + '/'
+    log_dir = log_dir + '/'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 

@@ -39,7 +39,7 @@ def create_eval_env(log_file=None, weights=None):
     eval_env = EvalWMS(env)
     if log_file is not None:
         eval_env = Monitor(eval_env, log_file)
-    return env
+    return eval_env
 
 # Create the vectorized environment
 def create_callback(alg_name, environment):
@@ -60,25 +60,25 @@ alg_names = ["td3", "sac"]
 #experimental = True
 #path = "logs/wms/" if not experimental else "experimental_logs/wms/"
 
-set_of_weights = np.array([[.9, .9, 1.2],
-                           [.95, .95, 1.1],
-                           [1.0, 1.0, 1.0], 
-                           [1.05, 1.05, 0.9], 
-                           [1.1, 1.1, 0.8]])
+set_of_weights = np.array([[1., 1., 1.],
+                           [1., 1., 1.25],
+                           [1., 1., 1.50], 
+                           [1., 1., 0.75], 
+                           [1., 1., 2.],
+                           [1., 1.25, 1.],
+                           [1., 1.5, 1.],
+                           [1., 1.75, 1.],
+                           [1., 2., 1.]])
 
-set_of_weights2 = np.array([[0.90, 1.2, 0.90],
-                            [0.8, 1.4, 0.8],
-                            [0.7, 1.6, 0.7],
-                            [0.6, 1.8, 0.6],])
 
-set_of_weights = np.concatenate((set_of_weights, set_of_weights2), axis=0)
+indexes = [0,1,2,3,4,5,6,7,8]
 
-indexes = [0,1,2,3,4] #[5, 6, 7, 8]
+weights_dict = {index: set_of_weights[index] for index in indexes}
 
 #%%
-train = False
+train = True
 if train: 
-    for idx, weights in zip(indexes, set_of_weights2):
+    for idx, weights in zip(indexes, set_of_weights):
 
         path = f"logs/wms/weights_{idx}/"
 
@@ -88,18 +88,19 @@ if train:
         eval_envs = [create_eval_env(f"{path}{name}/{name}_monitor.csv", weights=weights) for name in alg_names]
         
         td3_model: BaseAlgorithm = TD3("MlpPolicy", vec_envs[0], action_noise=action_noise, 
-                        verbose=1, batch_size=episode_length*4, train_freq=2, 
-                        gradient_steps=2)
+                                        verbose=1, batch_size=episode_length*5, train_freq=2, 
+                                        gradient_steps=2)
         
-        sac_model: BaseAlgorithm = SAC("MlpPolicy", vec_envs[1], verbose=1, batch_size=episode_length*4, 
-                        ent_coef=0.1, train_freq=2, gradient_steps=2)
+        sac_model: BaseAlgorithm = SAC("MlpPolicy", vec_envs[1], 
+                                        verbose=1, batch_size=episode_length*5, train_freq=2, 
+                                        gradient_steps=2)
         
         models:list[BaseAlgorithm] = [td3_model, sac_model]
         
         training_times = []
         for model, name, eval_env in zip(models, alg_names, eval_envs):
             start_time = time.time()
-            model.learn(total_timesteps=60_000, callback=create_callback(name, eval_env))
+            model.learn(total_timesteps=40_000, callback=create_callback(name, eval_env))
             end_time = time.time()
             training_time = end_time - start_time
             training_times.append(training_time)
@@ -108,7 +109,7 @@ if train:
         ### ppo training
         ppo_env = NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights)  
         ppo_train(ppo_env, 
-                  max_training_timesteps=60_000,
+                  max_training_timesteps=40_000,
                   update_freq=144*2,
                   eval_freq=144*2,
                   log_path=path+"ppo",
@@ -116,25 +117,7 @@ if train:
                   n_epochs=5)
 #%%  Compute statistics for the trained models
 
-folders = ["weights_0", 
-            "weights_1", 
-            "weights_2", 
-            "weights_3",
-            "weights_4",
-            "weights_5", 
-            "weights_6", 
-            "weights_7", 
-            "weights_8"]
-
-weights_dict = {0: [0.9, 1.2, 0.9],
-                1: [0.95, 1.1, 0.95],
-                2: [1.0, 1.0, 1.0],
-                3: [1.05, 0.9, 1.05],
-                4: [1.1, 0.8, 1.1],
-                5: [0.90, 1.2, 0.90],
-                6: [0.8, 1.4, 0.8],
-                7: [0.7, 1.6, 0.7],
-                8: [0.6, 1.8, 0.6]}
+folders = [f"weights_{index}" for index in indexes]
 
 alg_names = ["td3", "sac", "ppo"]
 
@@ -148,7 +131,7 @@ for index, folder in enumerate(folders):
     path = f"logs/wms/{folder}/"
     relative_yields = []
     total_water_usage = []
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, axs = plt.subplots(2,1,figsize=(10, 6))
     for alg_name in alg_names:
         val_env = TestWMS(NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights_dict[index]))
         if alg_name == "ppo":
@@ -156,22 +139,24 @@ for index, folder in enumerate(folders):
                                 action_dim=val_env.action_space.shape[0],
                                 has_continuous_action_space=True,
                                 action_std_init=0.6)
-            agent.load_state_dict(torch.load(f"{path}{alg_name}/ppo_CultivateEnv_best.pth"))
+            agent.load_state_dict(torch.load(f"{path}{alg_name}/best_model.pth"))
         else:
             agent = models_dict[alg_name].load(f"{path}{alg_name}/best_model")
         obs, _ = val_env.reset()
         done = False
         actions = []
         observations = []
+        rewards = []
         while not done:
             if alg_name == "ppo":
                 action = agent.get_action(obs)
             else:
                 action, _ = agent.predict(obs, deterministic=True)
             actions.append(action*20)
-            obs, rewards, terminated, truncated, info = val_env.step(action)
+            obs, reward, terminated, truncated, info = val_env.step(action)
             done = terminated or truncated
             observations.append(obs)
+            rewards.append(reward)
         
         observations = np.array(observations)
         actions = np.array(actions)
@@ -183,8 +168,10 @@ for index, folder in enumerate(folders):
 
         print(f"Total water for {alg_name} with weights {index} is {total_water} m3")
         print(f"Relative yield for {alg_name} with weights {index} is {relative_yield}")
-        ax.plot(observations[:, 7], label=f"{alg_name} K_s")
-    ax.legend()
+        print(f"The return is {sum(rewards)}")
+        axs[0].plot(observations[:, 7], label=f"{alg_name} K_s")
+        axs[1].plot(actions, label=f"{alg_name} V_req")
+    axs[0].legend()
     plt.show()
 
     alg_yields.append(relative_yields)
