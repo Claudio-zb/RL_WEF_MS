@@ -5,17 +5,22 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="soil moisture models">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ems_training.py" beforeDir="false" afterPath="$PROJECT_DIR$/ems_training.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/Data/WMS/WMS_profile.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Data/WMS/WMS_profile.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/SimuEnv.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/SimuEnv.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/WMS_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/WMS_env.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environments/WMS_policy.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/WMS_policy.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ewms_results.py" beforeDir="false" afterPath="$PROJECT_DIR$/ewms_results.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/ems/eval_monitor.csv" beforeDir="false" afterPath="$PROJECT_DIR$/logs/ems/eval_monitor.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/wms/sac/best_model.zip" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/sac/best_model.zip" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/wms/sac/evaluations.npz" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/sac/evaluations.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/wms/sac_monitor.csv" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/sac_monitor.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RL_algorithms/PPO2.py" beforeDir="false" afterPath="$PROJECT_DIR$/RL_algorithms/PPO2.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/Cultivates.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Cultivates.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/WMS_policies.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/WMS_policies.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/relative_yield_comparison.png" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/relative_yield_comparison.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/water_usage_comparison.png" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/water_usage_comparison.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_0/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_0/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_1/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_1/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_2/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_2/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_3/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_3/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_4/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_4/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/predict_et.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/predict_et.ipynb" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/wms_training.py" beforeDir="false" afterPath="$PROJECT_DIR$/wms_training.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -56,12 +61,12 @@
     &quot;assignee&quot;: &quot;Claudio-zb&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/Claudio-zb/RL_EMS.git&quot;,
-    &quot;accountId&quot;: &quot;922d3e20-ac81-4016-8757-2b06ed891434&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Claudio-zb/RL_EMS.git",
+    "accountId": "c2e83655-631c-46d6-9388-ffed9e66ff8e"
   }
-}</component>
+}]]></component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="CurrentFile" />
   </component>
@@ -74,32 +79,32 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.Quad_env.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.WMS_env.executor&quot;: &quot;Coverage&quot;,
-    &quot;Python.ems_training.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ewms_results.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main2.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.main2.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python.proando.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.soil_moisture_model.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.wms_test.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.wms_training.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;sb__irr__mwthod&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/lyapunov/Documents/RL_EMS&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settings.ide.settings.notifications&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.Quad_env.executor": "Debug",
+    "Python.WMS_env.executor": "Coverage",
+    "Python.ems_training.executor": "Run",
+    "Python.ewms_results.executor": "Debug",
+    "Python.main.executor": "Run",
+    "Python.main2.executor": "Debug",
+    "Python.main2.py.executor": "Run",
+    "Python.proando.executor": "Debug",
+    "Python.soil_moisture_model.executor": "Debug",
+    "Python.wms_test.executor": "Debug",
+    "Python.wms_training.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "principal",
+    "last_opened_file_path": "/home/lyapunov/Documents/RL_EMS",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "reference.settings.ide.settings.notifications",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="PyConsoleOptionsProvider">
     <option name="myPythonConsoleState">
       <console-settings module-name="RL_EMS" is-module-sdk="true">
@@ -233,8 +238,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-deb605915726-JavaScript-PY-243.22562.220" />
-        <option value="bundled-python-sdk-0fc6c617c4bd-9a18a617cbe4-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.22562.220" />
+        <option value="bundled-js-predefined-d6986cc7102b-1632447f56bf-JavaScript-PY-243.25659.43" />
+        <option value="bundled-python-sdk-181015f7ab06-4df51de95216-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.25659.43" />
       </set>
     </attachedChunks>
   </component>
@@ -331,6 +336,7 @@
       <workItem from="1738069366874" duration="4956000" />
       <workItem from="1738175624040" duration="5486000" />
       <workItem from="1741033205896" duration="803000" />
+      <workItem from="1745600979613" duration="595000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;soil dynamic included&quot;">
       <option name="closed" value="true" />

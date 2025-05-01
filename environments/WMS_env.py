@@ -40,8 +40,6 @@ class CultivateEnv(gym.Env):
         #weather_data = self.weather_data.loc[(self.weather_data["doy"] == self.cultivates.doy) & (self.weather_data["year"] == self.initial_year)].iloc[0].to_dict()
         
         dict_obs, _ = self.cultivates.start()
-        for crop in self.cultivates.crops:
-            crop.soil.evp_layer.set_theta(crop.soil.evp_layer.theta_fc)  # set evp layer at field capacity
 
         array_obs = obs_dict_2_obs_array(dict_obs)
         return array_obs, {}
@@ -50,9 +48,8 @@ class CultivateEnv(gym.Env):
         terminated, truncated = False, False
 
         daily_weather_data = self.weather_data.iloc[self.index + self.days_since_plantation].to_dict()
-        self.days_since_plantation += 1            
-        
         prev_obs = obs_dict_2_obs_array(self.cultivates.get_obs())
+        self.days_since_plantation += 1            
 
         dict_obs, _ = self.cultivates.step(action/1000, daily_weather_data)
         array_obs = obs_dict_2_obs_array(dict_obs)
@@ -102,15 +99,19 @@ class NormalizedWMS(gym.Wrapper):
         obs_ = np.zeros(len(obs) + 1 + self.days_ahead, dtype=np.float32)
         for i in range(self.n_crops):
             self.relative_yield[i] = (obs[(i+1)*7] * self.relative_yield[i])
-            obs_[i*10:(i+1)*10] = obs  # change the values from the first 10 items
-            obs_[(i+1)*10] = self.relative_yield[i]**(1/self.days) # change the value of the 9th item
+            obs_[i*10:(i+1)*10] = obs  # asign the values from the observation (length = 10)
+            obs_[8] = 0.0 if obs_[8] < 3 else 1.0 # normalize the drought indicator
+            obs_[9] = obs_[9] / 114  # normalize the time component
+            obs_[(i+1)*10] = self.relative_yield[i]**(1/self.days) #  add the relative yield as the 11th component
+
         # now we need to add the predictions
-        index = self.env.index
+        index = self.env.index 
         future_precipitations = self.env.weather_data.iloc[index:index + self.days_ahead, 1:]["precipitation"].values.flatten()
+        # add uncertainty to the future precipitation
+        future_precipitations = np.abs(np.random.normal(future_precipitations, 0.1*future_precipitations))
         obs_[self.n_crops*11:] = future_precipitations
         self.prev_obs_ = obs_
-        obs_[8] = 0.0 if obs_[8] < 3 else 1.0
-        obs_[9] = obs_[9] / 114  # normalize the action space
+
         return obs_ , info
 
     def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
@@ -121,29 +122,32 @@ class NormalizedWMS(gym.Wrapper):
         obs_ = np.zeros(self.n_crops * 11 + self.days_ahead, dtype=np.float32)
         for i in range(self.n_crops):
             self.relative_yield[i] = (obs[(i+1)*7] * self.relative_yield[i])
-            obs_[i*10:(i+1)*10] = obs  # change the values from the first 8 items
-            obs_[(i+1)*10] = self.relative_yield[i]**(1/self.days) # change the value of the 9th item
+            obs_[i*10:(i+1)*10] = obs  # asign the values from the observation (length = 10)
+            obs_[8] = 0.0 if obs_[8] < 3 else 1.0 # normalize the drought indicator
+            obs_[9] = obs_[9] / 114  # normalize the time component
+            obs_[(i+1)*10] = self.relative_yield[i]**(1/self.days) #  add the relative yield as the 11th component
+
         # now we need to add the predictions
-        index = self.env.index + self.days
+        index = self.env.index + self.env.days_since_plantation
         future_precipitations = self.env.weather_data.iloc[index:index + self.days_ahead, 1:]["precipitation"].values.flatten()
         obs_[self.n_crops*11:] = future_precipitations
         rew = self.reward_function(self.prev_obs_, action, obs_)
-        obs_[8] = 0.0 if obs_[8] < 3 else 1.0
-        obs_[9] = obs_[9] / 114  # normalize the action space
-        self.prev_obs = obs
+
+        self.prev_obs_ = obs_
+        
         return obs_, rew, terminated, truncated, {}
     
-    
 class EvalWMS(gym.Wrapper):
-    def __init__(self, env):
+    def __init__(self, env:NormalizedWMS):
+        assert isinstance(env, NormalizedWMS), "EvalWMS wrapper can only be used with NormalizedWMS"
         super().__init__(env)
-        self.env = env
+        self.env:NormalizedWMS = env
 
     def reset(self, seed: int = None, options:dict = None):
         return self.env.reset(options = {"mode": "eval"})
     
     def step(self, action):
-        return super().step(action)
+        return self.env.step(action)
     
 class TestWMS(gym.Wrapper):
     def __init__(self, env):
@@ -154,7 +158,7 @@ class TestWMS(gym.Wrapper):
         return self.env.reset(options = {"mode": "test"})
     
     def step(self, action):
-        return super().step(action)
+        return self.env.step(action)
     
 def reward_function2(s: np.ndarray, a: np.ndarray, s_next: np.ndarray, n_crops, 
                      weights = np.array([1.0, 1.0, 0.333])) -> float:

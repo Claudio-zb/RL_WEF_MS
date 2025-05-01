@@ -60,7 +60,7 @@ class Cultivates:
         """Set the state of the crops"""
         self.doy = int(doy)
         for crop in self.crops:
-            crop.is_active = True if state[crop.crop_name][-1] > 0 else False # is active if days since plantations >= 1
+            crop._is_active = True if state[crop.crop_name][-1] > 0 else False # is active if days since plantations >= 1
             crop.set_state(state[crop.crop_name], self.doy)
         
         
@@ -78,7 +78,7 @@ class Cultivates:
             if crop.is_active():
                 infiltrated_water, runoff_water = self.compute_infiltration(irrigations[idx], self.precipitation)
                 crop.step(self.ET0, infiltrated_water)
-        self.doy = max(1, (self.doy + 1) % 365)
+        self.doy = max(1, (self.doy + 1) % 365) 
         return self.get_obs(), self.doy
 
     def get_hist_data(self):
@@ -403,6 +403,7 @@ class Crop:
 
     def get_obs(self) -> np.ndarray:
         """Get the current state of the crop: soil moistures, foliar coberture, root depth, Ks, days of water stress and days since plantation"""
+     
         soil_moistures = self.soil.get_thetas()
         root_depth_and_ks = np.array([self.f_c, self.root_depth, self.Ks, self.days_of_water_stress, self.days_since_plantation])
         return np.concatenate((soil_moistures, root_depth_and_ks))
@@ -649,7 +650,10 @@ class EvpLayer(Layer):
         depletion = np.clip(self.theta_fc - self.theta, 0, self.tew/self.depth) * self.depth # [m]
         Kr = (self.tew - depletion) / (self.tew - self.rew) if depletion > self.rew else 1.0
         return Kr
-
+    def reset(self):
+        "Evaporation layer begins at field capacity"
+        self.set_theta(self.theta_fc)
+        return
 
 def layer_from_dict(layer_dict: dict[str, float]) -> Layer:
     """Initialize a layer object from a dictionary"""
@@ -689,6 +693,9 @@ class Soil:
         self.outcoming_water:float = 0.0
         self.hist_data = []
         self.n_layers:int = len(self.layers)
+        self.depth:float = None
+        self.theta_fc:float = None
+        self.theta_wp:float = None
 
     def __get_item__(self, idx):
         if idx < 0 or idx > self.n_layers:
@@ -698,6 +705,21 @@ class Soil:
     def add_layer(self, layer: Layer):
         self.layers.append(layer)
         return
+    
+    def get_depth(self) -> float:
+        if self.depth is None:
+            self.depth = sum([layer.depth for layer in self.get_reversed_layers()])  
+        return self.depth
+    
+    def get_theta_fc(self) -> float:
+        if self.theta_fc is None:
+            self.theta_fc = np.mean([layer.theta_fc for layer in self.get_reversed_layers()])
+        return self.theta_fc
+    
+    def get_theta_wp(self) -> float:
+        if self.theta_wp is None:
+            self.theta_wp = np.mean([layer.theta_wp for layer in self.get_reversed_layers()])
+        return self.theta_wp
 
     def set_evp_layer(self, evp_layer: EvpLayer):
         self.evp_layer = evp_layer
@@ -713,8 +735,8 @@ class Soil:
 
     def get_thetas(self):
         """Returns the theta values of the soil layers from top to bottom"""
-        thetas = [self.evp_layer.get_theta()]
-        for layer in self.layers[::-1]:
+        thetas = []
+        for layer in self.get_reversed_layers():
             thetas.append(layer.get_theta())
         return np.array(thetas)
     
@@ -733,7 +755,6 @@ class Soil:
             h_c += layer.h_c 
         h_c = h_c / n_layers
         return h_c
-
 
     def reset(self):
         for layer in self.layers:
