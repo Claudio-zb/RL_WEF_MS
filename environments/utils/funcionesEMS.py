@@ -177,3 +177,16 @@ def generate_t_matrix(n_crops:int, v_ref_max:float=5) -> np.ndarray:
     t_matrix[4*n_crops+3, 4*n_crops+4] = 1/144
 
     return t_matrix
+
+def get_p_q_p(q_p: Union[float, np.ndarray], h_p: float) -> np.ndarray:
+    """Water pump power [kW]
+    :param q_p: flow rate [l/s]
+    :param h_p: height [m]
+    :return: power [kW]"""
+    if type(q_p) == float:
+        q_p = np.array([q_p])
+    q_p = q_p * 1e-3 # l/s -> m3/s
+    P_Q_p_ = B_p * q_p * h_p
+    P_Q_p_ = P_Q_p_ * 1e-3  # W -> kW
+    return P_Q_p_
+
