@@ -70,13 +70,12 @@ set_of_weights = np.array([[1., 1., 1.],
                            [1., 1.75, 1.],
                            [1., 2., 1.]])
 
-
 indexes = [0,1,2,3,4,5,6,7,8]
 
 weights_dict = {index: set_of_weights[index] for index in indexes}
 
 #%%
-train = True
+train = False
 if train: 
     for idx, weights in zip(indexes, set_of_weights):
 
@@ -206,37 +205,39 @@ for index, folder in enumerate(folders):
 #%% Plot relative yields
 x = np.arange(len(weight_labels))  # Label locations
 width = 0.25  # Bar width
+colors = ["tab:blue", "tab:orange", "tab:green"]
+alg_yields = np.array(alg_yields)
 
-fig, ax = plt.subplots(figsize=(10, 6))
+fig, ax = plt.subplots(figsize=(8, 4))
 for i, alg_name in enumerate(alg_names):
-    ax.bar(x + i * width, [ry[i] for ry in alg_yields], width, label=alg_name.upper())
+    ax.bar(x + i * width, [ry[i] for ry in alg_yields*100], width, color = colors[i], label=alg_name.upper())   
 
-#ax.set_xlabel("Reward Function Weights")
-ax.set_ylabel("Relative Yield")
-ax.set_title("Relative Yield Comparison by Reward Function Weights")
+# add red lines 
+#ax.axhline(100, color='red', linestyle='--')
+#ax.axhline(95, color='red', linestyle='--')
+
+
+ax.set_ylabel(r"Relative Yield (\%)")
 ax.set_xticks(x + width)
-#ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_2 = {weights[2]}$" for weights in weight_labels], 
-#                   )
-ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_2 = {weights[2]}$" for weights in weight_labels], 
-                   )
-ax.legend()
+ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
+ax.legend(loc = "best")
+#ax.set_ylim(94, 100.9)
 plt.tight_layout()
-plt.savefig("logs/wms/relative_yield_comparison.png", dpi=300)
+plt.savefig("logs/wms/relative_yield_comparison_1.png", dpi=300)
 plt.show()
 
-# Plot water usage
-fig, ax = plt.subplots(figsize=(10, 6))
+#%% Plot water usage
+fig, ax = plt.subplots(figsize=(8, 4))
 for i, alg_name in enumerate(alg_names):
     ax.bar(x + i * width, [wu[i] for wu in alg_water_usage], width, label=alg_name.upper())
 
-#ax.set_xlabel("Reward Function Weights")
 ax.set_ylabel("Total Water Usage (m³)")
-ax.set_title("Water Usage Comparison by Reward Function Weights")
 ax.set_xticks(x + width)
-ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_2 = {weights[2]}$" for weights in weight_labels])
+ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
 ax.legend()
 plt.tight_layout()
 plt.savefig("logs/wms/water_usage_comparison.png", dpi=300)
 plt.show()
 
-# %%
+#%%
+

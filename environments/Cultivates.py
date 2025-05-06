@@ -22,15 +22,17 @@ class Cultivates:
         self.ET0: float = 0.0
 
 
-    def start(self) -> tuple[dict[str, Any], int]:
+    def start(self, seed:int = None) -> tuple[dict[str, Any], int]:
         """
         Starts the simulation of crops
         :return: a dictionary with the initial state of the crops and the day of year
         """
+        if seed is not None:
+            np.random.seed(seed)
         self.doy = min([crop.plantation_day for crop in self.crops])
         #self.set_climate_data(init_weather_info)
         for crop in self.crops:
-            crop.reset()
+            crop.reset(seed=seed)
             if crop.plantation_day == self.doy:
                 crop.start()
         return self.get_obs(), self.doy
@@ -231,14 +233,23 @@ class Crop:
         return f"Crop: {self.crop_name}"
 
 
-    def reset(self, doy: int = 0):
+    def reset(self, doy: int = 0, seed:int = None):
         
 
-        self.soil.reset()
+        self.soil.reset(seed=seed)
         del self.hist_data[:]
         self.days_since_plantation = 1
         self.doy = doy
         self.days_of_water_stress = 0
+        # # crop variables
+        self.root_depth = self.root_depth_init  # [m]
+        self.f_c = self.f_c_list[0]
+        
+        self.Kcb = self.Kcb_list[0]
+        self.Ky = self.Ky_list[0]
+        self.Ks = 1.0
+        self.Ke = .5
+        
         
 
     def start(self) -> tuple[Any, dict[str, Any]]:
@@ -252,6 +263,7 @@ class Crop:
         self.doy = self.plantation_day  # let's see
         obs = self._get_observation()
         self.hist_data.append(obs)
+        
         return obs, {}
     
     def set_state(self, state: np.ndarray[np.floating], doy: int):
@@ -290,6 +302,9 @@ class Crop:
         # compute in which stage i am
 
         if self.days_since_plantation == sum(self.stages_duration):
+            self._is_active = False
+
+        if np.isclose(self.Ks, 0.0):
             self._is_active = False
 
         return self._get_observation()
@@ -372,7 +387,8 @@ class Crop:
                           "ET_a": hist_data[:, 5],
                           "K_s": hist_data[:, 6],
                           "K_e": hist_data[:, 7],
-                          "avg_h_c": hist_data[:, -1]}
+                          "avg_h_c": hist_data[:, 10],
+                          "K_y": hist_data[:, 11],}
         return crop_hist_data, self.soil.get_hist_data()
 
     def _get_observation(self) -> np.ndarray:
@@ -390,7 +406,8 @@ class Crop:
                         self.Ke,
                         self.Kr,
                         self.Ke_bound, 
-                        self.soil.get_avg_hc()])
+                        self.soil.get_avg_hc(),
+                        self.Ky])
         return obs
 
     def get_obs2(self) -> np.ndarray:
@@ -604,8 +621,10 @@ class Layer:
     def get_hist_data(self):
         return np.array(self.hist_theta)
 
-    def reset(self):
+    def reset(self, seed:int = None):
         # set random theta
+        if seed is not None:
+            np.random.seed(seed)
         self.theta = np.random.uniform(self.theta_wp, self.theta_fc)
         del self.hist_theta[:]
         self.uptake_percentage = 0.0
@@ -653,6 +672,8 @@ class EvpLayer(Layer):
     def reset(self):
         "Evaporation layer begins at field capacity"
         self.set_theta(self.theta_fc)
+        del self.hist_theta[:]
+        self.uptake_percentage = 0.0
         return
 
 def layer_from_dict(layer_dict: dict[str, float]) -> Layer:
@@ -756,9 +777,9 @@ class Soil:
         h_c = h_c / n_layers
         return h_c
 
-    def reset(self):
+    def reset(self, seed:int = None):
         for layer in self.layers:
-            layer.reset()
+            layer.reset(seed=seed)
         self.evp_layer.reset()
         self.hist_data = []
 

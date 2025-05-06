@@ -1,10 +1,11 @@
 #%%
 from environments.Cultivates import *
 from matplotlib import pyplot as plt
-from environments.WMS_policies import ModelBasedIrrigationPolicy, TriggeredIrrigationPolicy
+from environments.WMS_policies import ScheduledIrrigationPolicy
 from environments.Data.WMS.WMS_profile import * 
+import pandas as pd
 
-plots_path = "plots/agro_model/"
+plots_path = "plots/agro_geo_model/"    
 plt.rcParams['text.usetex'] = True
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
@@ -12,63 +13,119 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 weather_data = pd.read_csv("environments/Data/WMS/weather_data.csv")
 # Setting up the environment
 
+def compute_yield(Ks, Ky):
+    """
+    Compute the yield based on the water stress coefficient and the crop coefficient.
+    """
+    yields = 1 - Ky * (1 - Ks)
+    return np.exp(np.mean(np.log(yields)))
+
+year = 2013
+crop_info = potato
 
 cultivate_env = Cultivates(crop_params=[potato])
-irr_policy = TriggeredIrrigationPolicy(1, 2, 7)
+cultivate_env_2 = Cultivates(crop_params=[potato])
+cultivate_nw = Cultivates(crop_params=[potato])
 
-#%%
+irr_policy = ScheduledIrrigationPolicy(n_crops=1, frequency=3, irr_amount=15)
+irr_policy_2 = ScheduledIrrigationPolicy(n_crops=1, frequency=3, irr_amount=5.)
+
+seed = 1
+fig_size = (8, 3)
+
+#%% First lets simulate the irrgated one 
 simu_days = np.sum(potato["stages_duration"])
 initial_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-obs, info = cultivate_env.start(init_weather_info=initial_weather_data)
-prev_action = 0
-actions = []
+precipitations = []
+obs, info = cultivate_env.start(seed=seed)
+obs_2, info_2 = cultivate_env_2.start(seed=seed)
+obs_nw, info_nw = cultivate_nw.start(seed=seed)
 for i in range(simu_days):
     daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
-    action = irr_policy(obs)[0]
-    actions.append(action)
-    obs = cultivate_env.step([action], daily_weather_data)
+    precipitations.append(daily_weather_data["precipitation"])
+    obs = cultivate_env.step(irr_policy(obs), daily_weather_data)
+    obs_2 = cultivate_env_2.step(irr_policy_2(obs), daily_weather_data)
+    obs_nw = cultivate_nw.step([0.0], daily_weather_data)
 
 crop_data, soil_data = cultivate_env.crops[0].get_hist_data()
-actions = np.array(actions)
+crop_data_2, soil_data_2 = cultivate_env_2.crops[0].get_hist_data()
+crop_data_nw, soil_data_nw = cultivate_nw.crops[0].get_hist_data()
 
-
-#%% let's check after a period of simulation
+#prepare the data for plotting
 
 t = np.cumsum([0] + potato["stages_duration"]) 
 v0 = potato["root_depth_max"] +.2
-v1 = potato["f_c"][1] + .2
+v1 = potato["f_c"][1] 
 stage_names = ["Initial Stage", "Development Stage", "Mid Season Stage", "Late Stage"]
+colors = ["tab:blue", "tab:green", "tab:orange", "tab:red"]
 
-#%%
-simu_time = np.array(range(1, simu_days))
-fig, axs = plt.subplots(2,1)
-fig.set_size_inches(8.0, 5)
+simu_time = np.array(range(simu_days))
+simu_time2 = np.array(range(len(crop_data_2["root_depth"])))
+simu_time_nw = np.array(range(len(crop_data_nw["root_depth"])))
 
+#%% Plot the root depth
+plt.clf()
+fig, ax = plt.subplots()
 
-axs[0].scatter(simu_time, crop_data["root_depth"][:-1], label="root depth", s=10, alpha = .5)
-axs[0].set_ylabel("Depth [m]")
-axs[0].set_title("Root depth")
-axs[0].invert_yaxis()
+fig.set_size_inches(fig_size)
+ax.plot(simu_time, crop_data["root_depth"][:-1], label="Irrigation profile 1", alpha = .75, marker='o', markersize=2, linestyle='-')
+#ax.plot(simu_time, crop_data["root_depth"][:-1], label="Irrigation profile 1", marker='o', linestyle='-')
+ax.plot(simu_time2[:-1], crop_data_2["root_depth"][:-1], label="Irrigation profile 2", alpha = .75, marker='o', markersize=2, linestyle='-')
+ax.plot(simu_time_nw, crop_data_nw["root_depth"], label="No Irrigation", alpha = .75, marker='o', markersize=2, linestyle='-')
+ax.set_ylabel("Root Depth (m)")
+ax.set_xlabel("Time since plantation (days)")
+ax.invert_yaxis()
 
 for idx, item in enumerate(t[:-1]):
     a, b = (t[idx], t[idx+1]) 
-    axs[0].fill_between(simu_time[a:b], np.zeros_like(simu_time[a:b]), v0*np.ones_like(simu_time[a:b]), alpha = .2)
-    axs[1].fill_between(simu_time[a:b], np.zeros_like(simu_time[a:b]), v1*np.ones_like(simu_time[a:b]), alpha = .2)
+    ax.fill_between(simu_time[a:b], np.zeros_like(simu_time[a:b]), v0*np.ones_like(simu_time[a:b]), alpha = .2, 
+                        color = colors[idx])
 
-    axs[0].text((a + b)/2, v0, stage_names[idx], ha = "center")
-    axs[1].text((a + b)/2, v1, stage_names[idx], ha = "center", va = "top")
+    ax.text((a + b)/2, v0, stage_names[idx], ha = "center", va = "bottom")
+ax.legend(loc = "upper right")
+fig.tight_layout()
+fig.savefig(plots_path + "root_depth.png", dpi=300)
 
-axs[1].scatter(simu_time, crop_data["f_c"][:-1], color = "gray", alpha = .5, s = 5)
-axs[1].set_ylim(0, v1)
-axs[1].set_ylabel(r"Coverage percentage [\%]")
-axs[1].set_xlabel("Days since plantation")
-axs[1].set_title("Coverage")
+#%% plot the coverage 
+vv1 = 100*(v1 *3+ max(crop_data["f_c"][:-1]))/4
 
-plt.tight_layout()
-plt.savefig(plots_path + "root_depth.png", dpi=300)
-plt.show() 
+fig_1, ax_1 = plt.subplots()
+
+fig_1.set_size_inches(fig_size)
+for idx, item in enumerate(t[:-1]):
+    a, b = (t[idx], t[idx+1]) 
+    ax_1.fill_between(simu_time[a:b], np.zeros_like(simu_time[a:b]), 100*v1*np.ones_like(simu_time[a:b]), alpha = .2,
+                        color = colors[idx])
+
+    ax_1.text((a + b)/2, vv1, stage_names[idx], ha = "center", va = "top")
+
+ax_1.plot(simu_time, 100*crop_data["f_c"][:-1], alpha = .5, label = "Irrigation profile 1", marker='o', markersize=2, linestyle='-')
+ax_1.plot(simu_time2[:-1], 100*crop_data_2["f_c"][:-1], alpha = .5, label = "Irrigation profile 2", marker='o', markersize=2, linestyle='-')
+ax_1.plot(simu_time_nw, 100*crop_data_nw["f_c"], alpha = .5, label = "No Irrigation", marker='o', markersize=2, linestyle='-')
+ax_1.set_ylim(0, 100*v1)
+ax_1.set_ylabel(r"Coverage percentage (\%)")
+ax_1.set_xlabel("Time since plantation (days)")
+ax_1.legend(loc = "best")
+fig_1.tight_layout()
+fig_1.savefig(plots_path + "coverage.png", dpi=300)
 
 #%%
+fig_2, ax_2 = plt.subplots()
+fig_2.set_size_inches(fig_size)
+
+ax_2.plot(simu_time, crop_data["K_s"][:-1], color = "tab:blue", label="Irrigation profile 1", marker='o', markersize=2, linestyle='-')
+ax_2.plot(simu_time2, crop_data_2["K_s"], color = "tab:orange", label="Irrigation profile 2", marker='o', markersize=2, linestyle='-')
+ax_2.plot(simu_time_nw, crop_data_nw["K_s"], color = "tab:green", label="No Irrigation", marker='o', markersize=2, linestyle='-')
+ax_2.set_ylabel(r"Water stress coefficient $K_s$")
+ax_2.set_xlabel("Time since plantation (days)")
+ax_2.grid()
+ax_2.legend()
+fig_2.tight_layout()
+fig_2.savefig(plots_path + "K_s.png", dpi=300)
+
+#%% For the first case, let's plot the water content and the evapotranspiration
+
+    #%%
 color = "red"
 v0 = -.95
 v1 = .9
@@ -86,6 +143,7 @@ for idx, item in enumerate(layers_depth[:-1]):
     ax.vlines(t[idx], 0, layers_depth[-1], color=color, linestyles="--")
 
 ax.scatter(simu_time, crop_data["root_depth"][1:], color = "gray", label="Root depth", s=10)
+ax.scatter(simu_time2, crop_data_nw["root_depth"], color = "blue", label="No irrigation", s=10)
 
 ax.legend(loc = "lower left")
 
@@ -174,15 +232,14 @@ plt.savefig(plots_path + "evapotranspirations.png", dpi=300)
 plt.show()
 
 #%%
-crop_evp = crop_data["ET_a"][1:]
+crop_evp = crop_data["ET_a"][2:]
 
-plt.plot(simu_time, crop_evp, label= r"$ET_a$", color = "darkgreen")
-plt.plot(simu_time, crop_evp, label= r"$ET_a$", color = "darkgreen")
-evaporation = crop_data["ET_0"][1:]*crop_data["K_e"][1:]
+plt.plot(simu_time[:-1], crop_evp, label= r"$ET_a$", color = "darkgreen")
+evaporation = crop_data["ET_0"][2:]*crop_data["K_e"][2:]
 transpiration = crop_evp - evaporation
 
-plt.fill_between(simu_time, 0, evaporation, color = "aquamarine",alpha=0.5)
-plt.fill_between(simu_time, evaporation, crop_evp, color = "limegreen", alpha=0.5)
+plt.fill_between(simu_time[:-1], 0, evaporation, color = "aquamarine",alpha=0.5)
+plt.fill_between(simu_time[:-1], evaporation, crop_evp, color = "limegreen", alpha=0.5)
 
 # Adding text annotations
 mid_point = simu_days // 2
@@ -190,16 +247,15 @@ mid_point = simu_days // 2
 plt.text(t[1]/2, 0.1, 'Evaporation', color='tab:blue', ha='center')
 
 
-plt.text((t[1]+t[2])/2, (crop_evp[(t[1]+t[2])//2] + evaporation[(t[1]+t[2])//2]) / 2, 'Transpiration', color='green', ha='center')
+plt.text((t[2]+t[3])/2, (crop_evp[(t[2]+t[3])//2] + evaporation[(t[2]+t[3])//2]) / 2, 'Transpiration', color='green', ha='center')
 
 
 fig = plt.gcf() 
-fig.set_size_inches(7.5,3)
+fig.set_size_inches(fig_size)
 plt.legend()
-plt.xlabel("Time since plantation [days]")
-plt.ylabel("Water loss [mm]")
+plt.xlabel("Time since plantation (days)")
+plt.ylabel("Water loss (mm)")
 plt.legend(loc = "upper right")
-plt.title("Tomato crop evapotranspiration during a season")
 plt.grid()
 plt.tight_layout()
 plt.savefig(plots_path + "evapotranspiration.png", dpi=300)
@@ -237,17 +293,15 @@ plt.hlines(theta_res,0, simu_days, color='black', linestyles="--")
 fig = plt.gcf()
 fig.set_size_inches(8, 4)
 plt.legend(ncol=2, loc = "lower left")
-plt.title("Soil moisture")
-plt.tight_layout()
-plt.ylabel("Volumetric water content [m3/m3]")
-plt.xlabel("Days since plantation")
+plt.ylabel(r"Volumetric water content ($m^3/m^3$)")
+plt.xlabel("Time since plantation (days)")
 plt.ylim(0.1, 0.33)
 plt.grid()
+plt.tight_layout()
 plt.savefig(plots_path + "soil_moisture.png", dpi=300)
-
 plt.show()
 
-     #%% Lets plot the water content data
+#%% Lets plot the water content data
 
 plt.plot(soil_moisture["layer_4_3"]*1e3, label="evp_layer")
 plt.plot(soil_moisture["layer_3_3"]*1e3, label="layer_4")

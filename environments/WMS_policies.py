@@ -138,10 +138,9 @@ class RBIrrigationPolicy(IrrigationPolicy):
     def get_action(self, obs, disturbances, doy) -> np.ndarray:
 
         disturbances_dict = self.weather_data.iloc[self.index + self.days_since_plantation].to_dict()
-        
         self.model.set_state(obs, doy)
         obs_dict, _ = self.model.step([0.0], disturbances_dict)
-        expected_water = self.weather_data.iloc[self.index + self.days_since_plantation:self.index + self.days_since_plantation + 3]["precipitation"].values
+        expected_water = self.weather_data.iloc[self.index + self.days_since_plantation:self.index + self.days_since_plantation + 4]["precipitation"].values
         # add 10% of uncertainty to expected water
         expected_water = np.abs(expected_water*(1.0 + np.random.randn(len(expected_water))*0.1))
 
@@ -151,7 +150,19 @@ class RBIrrigationPolicy(IrrigationPolicy):
         for idx, crop in enumerate(self.model.crops):
             obs_array = obs_dict[crop.crop_name]
             n_layers = len(crop.soil.get_reversed_layers())
-            theta_a = np.sum([obs_array[i]*crop.soil.get_reversed_layers()[i].depth for i in range(n_layers)])/crop.soil.get_depth()
+            reversed_layers = crop.soil.get_reversed_layers()
+            a_ = []
+            cummulative_depth = 0.0
+            i = 0
+            while cummulative_depth < crop.root_depth:
+                layer = reversed_layers[i]
+                if cummulative_depth + layer.depth > crop.root_depth:
+                    break
+                a_.append(layer.get_theta()*layer.depth)
+                cummulative_depth += layer.depth
+                i+=1
+            a_.append(layer.get_theta()*(crop.root_depth - cummulative_depth))
+            theta_a = np.sum(a_)/crop.root_depth
             threshold = crop.soil.get_theta_fc() - crop.MAD*(crop.soil.get_theta_fc() - crop.soil.get_theta_wp())
             if theta_a < threshold:
                 action = (crop.soil.get_theta_fc() - theta_a)*abs(crop.root_depth) - expected_water
@@ -176,10 +187,10 @@ class ScheduledIrrigationPolicy(IrrigationPolicy):
         :param frequency: frequency of irrigation
         :param irr_amount: amount of irrigation [mm]
         """
-        super().__init__(n_crops)
+        super().__init__(n_crops, year = 1)
         self.days_count: int = 1
-        self.irr_amount = irr_amount
-        self.frequency = frequency
+        self.irr_amount:float = irr_amount
+        self.frequency:int = frequency
 
     def __call__(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         irrigation = np.zeros(self.n_crops)
@@ -232,7 +243,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
                                                isNormalized=False).to("cpu").numpy().flatten()
         
         precipitation_preds = self.weather_data.iloc[timestamp:timestamp+self.horizon]["precipitation"].values
-        precipitation_preds[1:5] = np.abs(np.random.normal(precipitation_preds[0:5], 0.1*precipitation_preds[0:5]))
+        precipitation_preds[0:5] = np.abs(np.random.normal(precipitation_preds[0:5], 0.1*precipitation_preds[0:5]))
         precipitation_preds[5:] = np.abs(np.random.normal(precipitation_preds[5:], 0.2*precipitation_preds[5:]))
         precipitation_preds = np.abs(precipitation_preds)
         for j in range(self.horizon):
