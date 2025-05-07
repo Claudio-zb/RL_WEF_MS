@@ -84,7 +84,7 @@ class EnergyWaterMG:
     
     def get_observation(self) -> np.ndarray[np.float32]:
         """ Get the observation of the environment
-        Returns: Array of """
+        Returns: Array of v_tanks, v_irrs, drawdowns, p_pumps, soe, e_residual, k"""
 
         observation = np.concatenate((self.v_tanks, self.v_irrs, self.drawdowns, self.p_pumps, [self.soe, self.e_residual, self.k % 144]))
         return observation

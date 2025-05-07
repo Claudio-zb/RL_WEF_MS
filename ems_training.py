@@ -2,7 +2,7 @@
 import pandas as pd
 from stable_baselines3.common.monitor import Monitor
 
-from environments.EMS_env import MicrogridEnv, NormalizationWrapper, RuleBasedEMS
+from environments.EMS_env import MicrogridEnv, NormalizationWrapper
 from stable_baselines3.common.noise import OrnsteinUhlenbeckActionNoise
 
 import numpy as np
@@ -44,7 +44,7 @@ def create_callback(alg_name, environment):
                         deterministic=True, render=False)
 
 episode_length = 144*3
-train = False
+train = True
 if train:
     sac_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs, seed=0)
     td3_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs, seed=0)

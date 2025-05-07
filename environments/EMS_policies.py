@@ -20,7 +20,6 @@ class PumpingPolicy(ABC):
         :return: The action to be taken.
         """
         pass
-    
 
 
 class RBPumpingPolicy(PumpingPolicy):

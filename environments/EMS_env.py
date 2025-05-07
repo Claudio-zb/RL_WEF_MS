@@ -227,10 +227,10 @@ class MicrogridEnv(gym.Env):
 
     def _get_obs(self) -> npt.NDArray[np.float32]:
         """Return the observation of the environment"""
-        v_tanks, v_irrs, drawdowns, soe, k = self.micro_grid.get_state()
+        mg_obs = self.micro_grid.get_observation()
         p_pv, p_load = self._get_disturbances()
 
-        observation = np.concatenate((self.V_refs, v_tanks, v_irrs, drawdowns, [p_pv, p_load, soe, self.k % 144]))
+        observation = np.concatenate((self.V_refs, mg_obs, [p_pv, p_load]))
         return observation
 
 
@@ -243,10 +243,10 @@ class NormalizationWrapper(gym.Wrapper):
         low = np.matmul(self.transform, env.observation_space.low)
         high = np.matmul(self.transform, env.observation_space.high)
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
-        #self.action_space = spaces.Box(low=-self.action_high,
-        #                               high=self.action_high,
-        #                               shape=(2,),
-        #                               dtype=np.float32)
+        self.action_space = spaces.Box(low=-self.action_high,
+                                       high=self.action_high,
+                                       shape=(2,),
+                                       dtype=np.float32)
 
     def reset(self, seed=None, options=None):
         self.prev_action = np.zeros_like(self.env.action_space.shape[-1])

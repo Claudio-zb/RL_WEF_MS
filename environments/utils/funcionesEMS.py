@@ -160,21 +160,24 @@ def generate_t_matrix(n_crops:int, v_ref_max:float=5) -> np.ndarray:
     """
     Generates the transformation matrix for the observation vector
     returns: t_matrix, the transformation matrix
+    v_ref, v_tank, v_irr, drawdowns, p_ps, soe, k, e_res p_pv, p_load
     """
-    t_matrix = np.zeros((4*n_crops+4, 4*n_crops+5), dtype=np.float32)
+    t_matrix = np.zeros((5*n_crops+4, 4*n_crops+6), dtype=np.float32)
     for i in range(n_crops):
         t_matrix[i, i] = 1/v_ref_max
         t_matrix[i+n_crops, i+n_crops] = 1/Vt_max
         t_matrix[i+2*n_crops, i+2*n_crops] = 1/v_ref_max
-        t_matrix[i + 3 * n_crops, i + 3 * n_crops] = 1.0
-        # drawdowns
-    t_matrix[4*n_crops, 4*n_crops] = 1/(max_power_sun-max_power_d)
-    # demanded power is combined with the power from the pvs array
-    t_matrix[4*n_crops, 4*n_crops+1] = - 1/(max_power_sun - max_power_d)
-    t_matrix[4*n_crops+1, 4*n_crops+2] = 1/SoE_max
-    #residual energy
-    t_matrix[4*n_crops+2, 4*n_crops+3] = 1
-    t_matrix[4*n_crops+3, 4*n_crops+4] = 1/144
+        t_matrix[i+3*n_crops, i+3*n_crops] = 1.0 # drawdowns
+        t_matrix[i+4*n_crops, i+4*n_crops] = 1.0 # p_pump
+
+        t_matrix[5*n_crops+3, i+4*n_crops] = -1.0/(max_power_sun-max_power_d) # -p_pump
+    t_matrix[5*n_crops, 5*n_crops] = 1/SoE_max #soe
+    t_matrix[5*n_crops+1, 5*n_crops+1] = 1.0 # e residual
+    t_matrix[5*n_crops+2, 5*n_crops+2] = 1/143 # 
+    
+    #lets continue with the other components
+    t_matrix[5*n_crops+3, 5*n_crops+3] = 1.0/(max_power_sun-max_power_d) # p_pv
+    t_matrix[5*n_crops+3, 5*n_crops+4] = -1.0/(max_power_sun-max_power_d) # p_l 
 
     return t_matrix
 
