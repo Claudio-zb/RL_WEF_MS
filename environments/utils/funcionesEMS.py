@@ -143,10 +143,10 @@ def manage_batteries(SoE: float,
         E_deficit = next_SoE - SoE_min if next_SoE < SoE_min else 0
 
         next_SoE = np.clip(next_SoE, SoE_min, SoE_max)
-        if delta_SoE > 0:
-            Pbat = np.max([SoE_max - SoE, 0]) / (dt / 3600) / n_c
-        else:
-            Pbat = np.min([SoE_min - SoE, 0]) * n_d / (dt / 3600)
+        
+        Pbat = np.max([SoE_max - SoE, 0]) / (dt / 3600) / n_c if next_SoE > SoE_max else Pbat
+        
+        Pbat = np.min([SoE_min - SoE, 0]) * n_d / (dt / 3600) if next_SoE < SoE_min else Pbat
         # Pbat = np.max([SoE_max - SoE, 0]) / (dt / 3600) / n_c + np.min([SoE_min - SoE, 0]) * n_d / (dt / 3600)
 
     E_surplus = E_surplus + P_not_used * (dt / 3600) if P_not_used > 0 else E_surplus
