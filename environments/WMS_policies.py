@@ -174,9 +174,6 @@ class RBIrrigationPolicy(IrrigationPolicy):
         self.days_since_plantation += 1
 
         return actions
-            
-        
-
 
 
 class ScheduledIrrigationPolicy(IrrigationPolicy):

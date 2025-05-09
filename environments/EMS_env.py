@@ -62,12 +62,11 @@ class MicrogridEnv(gym.Env):
         self.reward_fun = lambda s, a, s_next: default_rwd_fun(s, a, s_next, n_crops=n_crops)
 
         # Bounds for observations
-        obs_low = np.array(n_crops * [0.0] + n_crops * [Vt_min] + 2 * n_crops * [0.0] + [0.0, 0.0, SoE_min, -10., 0],
+        obs_low = np.array(n_crops * [0.0] + n_crops * [Vt_min] + 3 * n_crops * [0.0] + [SoE_min, -10., 0, 0., 0.],
                            dtype=np.float32)
 
         obs_high = np.array(
-            n_crops * [4.0] + n_crops * [Vt_max] + 2 * n_crops * [0.0] + [max_power_sun, max_power_d, SoE_max, 50.,
-                                                                          143],
+            n_crops * [20.0] + n_crops * [Vt_max] + 3 * n_crops * [0.0] + [SoE_max, 50., 143, max_power_sun, max_power_d,],
             dtype=np.float32)
 
         # Bounds for actions
@@ -79,7 +78,7 @@ class MicrogridEnv(gym.Env):
 
         self.observation_space: spaces.Box = spaces.Box(low=obs_low,
                                                         high=obs_high,
-                                                        shape=(4 * n_crops + 5,),
+                                                        shape=(5 * n_crops + 5,),
                                                         dtype=np.float32)
 
         self.action_space: spaces.Box = spaces.Box(low=self.action_low,
@@ -243,9 +242,9 @@ class NormalizationWrapper(gym.Wrapper):
         low = np.matmul(self.transform, env.observation_space.low)
         high = np.matmul(self.transform, env.observation_space.high)
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
-        self.action_space = spaces.Box(low=-self.action_high,
-                                       high=self.action_high,
-                                       shape=(2,),
+        self.action_space = spaces.Box(low=np.zeros(2*self.env.n_crops),
+                                       high=np.ones(2*self.env.n_crops),
+                                       shape=(2*self.env.n_crops,),
                                        dtype=np.float32)
 
     def reset(self, seed=None, options=None):
@@ -274,7 +273,7 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
     for i in range(n_crops):
         norm_next_error = (s[i] - s_next[i + 2 * n_crops]) / (s[i]+0.05)  # Normalize the error
         reward = np.clip(1 - abs(norm_next_error), -1.0, 1.0)
-        if abs(norm_next_error) < 0.05:
+        if abs(norm_next_error) < 0.05: # bonus for being close to the reference
             reward += 1.0
         reward += -4 * a[i + 1] if s_next[i + 2 * n_crops] > s[i] else 0.0  # penalize exceeding the irrigation requirement
 
@@ -286,7 +285,7 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
 
         reward += -4 * a[i] if s[i + 3*n_crops] > 1 else 0.0  # penalize drawdown
 
-    e_balance = s_next[-2]
+    e_balance = s_next[7]
 
     reward += e_balance if e_balance < 0 else 0
 

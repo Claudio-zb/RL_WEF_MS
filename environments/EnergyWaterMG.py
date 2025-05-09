@@ -27,12 +27,10 @@ class EnergyWaterMG:
         self.dQs: list[np.ndarray] = [np.array([0])] * n_crops
         self.e_residual: float = 0.0  # residual energy [kWh]
 
-        # daily time counter
+        # 10-minutes counter
         self.k: int = 0
-        self.doy = 1
 
-    def next_step(self, actions: np.ndarray, disturbances:np.ndarray) -> tuple[
-        np.ndarray[np.float32], np.ndarray[np.float32], np.ndarray[np.float32], float, float]:
+    def next_step(self, actions: np.ndarray, disturbances:np.ndarray) -> np.ndarray[np.float32]:
         """
         note: the pbat action is computed from an external policy
         :param actions: array of actions [q_p, ..., q_irr]
@@ -46,8 +44,13 @@ class EnergyWaterMG:
 
 
         # unpacking the actions
-        q_ps = np.clip(actions[:self.n_crops], 0, Q_p_max)  # [l/s]
-        q_irrs = np.clip(actions[self.n_crops:], 0, I_max)  # [l/s]
+        if isinstance(actions, np.ndarray):
+            q_ps = np.clip(actions[:self.n_crops], 0, Q_p_max)  # [l/s]
+            q_irrs = np.clip(actions[self.n_crops:], 0, I_max)  # [l/s]
+
+        else:
+            q_ps = actions[:self.n_crops]  # [l/s]
+            q_irrs = actions[self.n_crops:] # [l/s]
 
         # loop over the crops
         for idx, v_tank in enumerate(self.v_tanks):
@@ -89,19 +92,21 @@ class EnergyWaterMG:
         observation = np.concatenate((self.v_tanks, self.v_irrs, self.drawdowns, self.p_pumps, [self.soe, self.e_residual, self.k % 144]))
         return observation
 
-    def set_state(self, v_tanks: list, v_irrs: list, dqs: list, soe: float, k: int):
+    def set_state(self, observation: np.ndarray[np.float32], dQs:list[np.ndarray[np.float32]]=None) -> None:
         """ Set the state of the environment """
-        self.v_tanks = v_tanks
-        self.v_irrs = v_irrs
-        self.dQs = dqs
-        self.soe = soe
-        self.k = k
+        self.v_tanks = observation[:self.n_crops]
+        self.v_irrs = observation[self.n_crops:2*self.n_crops]
+        self.drawdowns = observation[2*self.n_crops:3*self.n_crops]
+        self.soe = observation[4*self.n_crops]
+        self.k = int(observation[6*self.n_crops])
+        if dQs is not None:
+            self.dQs = dQs
+        else:
+            self.dQs = [np.array([0])] * self.n_crops
 
-    def start(self, doy: int) -> tuple[
-        np.ndarray[np.float32], np.ndarray[np.float32], np.ndarray[np.float32], float, float]:
+    def start(self) -> np.ndarray[np.float32]:
         """ Start the model in a certain day of year
         Returns: tuple of (v_tanks, v_irrs, drawdowns, soe, k)"""
-        self.doy = doy
         self.k = 0
         self.v_irrs = np.zeros(self.n_crops)
         self.prev_Qps = np.zeros(self.n_crops)

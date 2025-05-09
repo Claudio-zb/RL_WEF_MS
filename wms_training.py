@@ -20,7 +20,7 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 from environments.WMS_env import CultivateEnv, NormalizedWMS, EvalWMS, TestWMS
 
-action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(1), sigma= .075*np.ones(1)) #NormalActionNoise(mean=np.zeros(1), sigma= 1*np.ones(1))
+action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(1), sigma= .075*np.ones(1)) 
 
 def create_wrapped_env(log_file=None, weights=None):
     if weights is not None:
@@ -60,15 +60,15 @@ alg_names = ["td3", "sac"]
 #experimental = True
 #path = "logs/wms/" if not experimental else "experimental_logs/wms/"
 
-set_of_weights = np.array([[1., 1., 1.],
+set_of_weights = np.array([[1., 2., 1.],
+                           [1., 1.75, 1.],
+                           [1., 1.5, 1.],
+                           [1., 1.25, 1.],
+                            [1., 1., 1.],
                            [1., 1., 1.25],
                            [1., 1., 1.50], 
-                           [1., 1., 0.75], 
-                           [1., 1., 2.],
-                           [1., 1.25, 1.],
-                           [1., 1.5, 1.],
-                           [1., 1.75, 1.],
-                           [1., 2., 1.]])
+                           [1., 1., 1.75], 
+                           [1., 1., 2.]])
 
 indexes = [0,1,2,3,4,5,6,7,8]
 
@@ -212,11 +212,6 @@ fig, ax = plt.subplots(figsize=(8, 4))
 for i, alg_name in enumerate(alg_names):
     ax.bar(x + i * width, [ry[i] for ry in alg_yields*100], width, color = colors[i], label=alg_name.upper())   
 
-# add red lines 
-#ax.axhline(100, color='red', linestyle='--')
-#ax.axhline(95, color='red', linestyle='--')
-
-
 ax.set_ylabel(r"Relative Yield (\%)")
 ax.set_xticks(x + width)
 ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
@@ -239,5 +234,5 @@ plt.tight_layout()
 plt.savefig("logs/wms/water_usage_comparison.png", dpi=300)
 plt.show()
 
-#%%
+    #%%
 
