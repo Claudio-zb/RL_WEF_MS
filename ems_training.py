@@ -44,7 +44,7 @@ def create_callback(alg_name, environment):
                         deterministic=True, render=False)
 
 episode_length = 144*3
-train = True
+train = False
 if train:
     sac_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs, seed=0)
     td3_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs, seed=0)
@@ -202,7 +202,7 @@ for alg, name in zip(best_models, models_name):
     print((x[143, 0] - x[143, 2])/x[143, 0])
     print((x[287, 0] - x[287, 2])/x[287, 0])
 
-    print((0.03966951699351884+0.03457275545314583)/2)
+    #print((0.03966951699351884+0.03457275545314583)/2)
 
     #%%
     plt.step(t, x[1:, 3])

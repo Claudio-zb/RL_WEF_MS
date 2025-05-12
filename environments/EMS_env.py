@@ -106,16 +106,20 @@ class MicrogridEnv(gym.Env):
         V_tank = [np.minimum((Vt_max - Vt_min) * np.random.random_sample() + Vt_min,
                              (Vt_max - Vt_min) * np.random.random_sample() + Vt_min) for _ in
                   range(self.micro_grid.n_crops)]
+        
+        v_irrs = [0.0 for _ in range(self.micro_grid.n_crops)]
+        drawdowns = [0.0 for _ in range(self.micro_grid.n_crops)]
 
-        V_refs = [10.0 * np.random.rand() for _ in range(self.micro_grid.n_crops)]
+        pbats = [0.0 for _ in range(self.micro_grid.n_crops)]
+        dqs=[np.array([0]) for _ in range(self.micro_grid.n_crops)]
+        e_residual = 0.0
+
+
+        V_refs = [20.0 * np.random.rand() for _ in range(self.micro_grid.n_crops)]
 
         SoE = (SoE_max - SoE_min) * np.random.random_sample() + SoE_min
-
-        self.micro_grid.set_state(v_tanks=V_tank,
-                                  v_irrs=[0.0 for _ in range(self.micro_grid.n_crops)],
-                                  dqs=[np.array([0]) for _ in range(self.micro_grid.n_crops)],
-                                  soe=SoE,
-                                  k=0)
+        observation = np.array((V_tank + v_irrs + drawdowns + pbats + [SoE, e_residual, 0]))
+        self.micro_grid.set_state(observation, dqs)
 
         InitialObservation = self.set_initial_conditions(V_refs, 0)
         info = {}

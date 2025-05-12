@@ -9,6 +9,7 @@ import copy
 import pandas as pd
 from environments.Cultivates import Cultivates
 from typing import Any
+from environments.utils.predict_utils import Predictor
 
 
 def obs_dict_2_obs_array(obs: Dict[str, np.ndarray]) -> np.ndarray:
@@ -291,55 +292,3 @@ class ObservationHandler(metaclass = ABCMeta):
     @abstractmethod
     def get_observation(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         pass
-
-class Predictor(torch.nn.Module):
-
-    def __init__(self, n_features, n_hidden, n_layers, mean, std, device="cpu"):
-        super(Predictor, self).__init__()
-        self.device = device
-        self.lstm = torch.nn.LSTMCell(n_features, n_hidden, n_layers, device)
-        self.mlp = torch.nn.Linear(n_hidden, n_features, device=device)
-        self.mean = torch.tensor(mean, dtype=torch.float32).to(device)
-        self.std = torch.tensor(std, dtype=torch.float32).to(device)
-
-    def forward(self, x:torch.Tensor):
-        h_and_c = None
-        batch_size, n_features, t_steps = x.shape
-        y = torch.zeros((batch_size, n_features, t_steps), device=x.device)
-        for i in range(t_steps):
-            h_and_c = self.lstm.forward(x[:,:,i], h_and_c)
-            y[:,:,i] = self.mlp(h_and_c[0])
-        return y
-    
-    def predict(self, x:torch.Tensor, n_steps:int, isNormalized:bool = False) -> torch.Tensor:
-        """
-        Predict the next n_steps values of the input sequence x.
-        """
-        assert x.dim() == 2, "Input x must be a 2D tensor." 
-        
-        x = x if isNormalized else (x - self.mean) / self.std
-            
-        with torch.no_grad():
-            h_and_c = None
-            n_features, t_steps = x.shape
-            y = torch.zeros((n_features, n_steps), device=x.device)
-            for i in range(t_steps):
-                h_and_c = self.lstm.forward(x[:,i], h_and_c)
-            y[:,0] = self.mlp(h_and_c[0])
-            for i in range(n_steps-1):
-                h_and_c = self.lstm.forward(y[:,i], h_and_c)
-                y[:,i+1] = self.mlp(h_and_c[0])
-
-        y = y if isNormalized else y * self.std + self.mean
-
-        return y
-    
-    def load_model_parameters(self, state_dict):
-        self.load_state_dict(state_dict)
-
-    def to(self, device):
-        self.device = device
-        self.lstm.to(device)
-        self.mlp.to(device)
-        self.mean = self.mean.to(device)
-        self.std = self.std.to(device)

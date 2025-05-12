@@ -221,6 +221,29 @@ plt.tight_layout()
 plt.savefig("logs/wms/relative_yield_comparison_1.png", dpi=300)
 plt.show()
 
+#%% Plot relative yields
+x = np.arange(len(weight_labels))  # Label locations
+width = 0.25  # Bar width
+colors = ["tab:blue", "tab:orange", "tab:green"]
+alg_yields = np.array(alg_yields)
+
+fig, ax = plt.subplots(figsize=(8, 4))
+for i, alg_name in enumerate(alg_names):
+    ax.bar(x + i * width, [ry[i] for ry in alg_yields*100], width, color = colors[i], label=alg_name.upper())   
+
+ax.axhline(100, color='red', linestyle='--', linewidth=1)
+ax.axhline(95, color='red', linestyle='--', linewidth=1)
+
+
+ax.set_ylabel(r"Relative Yield (\%)")
+ax.set_xticks(x + width)
+ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
+ax.legend(loc = "best")
+ax.set_ylim(94, 100.9)
+plt.tight_layout()
+plt.savefig("logs/wms/relative_yield_comparison_2.png", dpi=300)
+plt.show()
+
 #%% Plot water usage
 fig, ax = plt.subplots(figsize=(8, 4))
 for i, alg_name in enumerate(alg_names):
