@@ -1,5 +1,7 @@
 import torch
+from torch.utils.data import Dataset
 import numpy as np
+import random
 
 # Early stopping configuration
 class EarlyStopping:
@@ -19,6 +21,67 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 self.early_stop = True
         return self.early_stop
+    
+class PVDataSet(Dataset):
+    def __init__(self, data:torch.Tensor, x_len:int=288, pred_steps:int=144):
+        self.data:torch.Tensor = data
+        self.pred_steps:int = pred_steps
+        self.x_len:int = x_len
+        self.n_days = len(data) // pred_steps
+    
+    def __getitem__(self, index):
+        """Pick a random day and return the input and output sequences.
+        It uses mixed-up signals for data augmentation."""
+        
+        j = random.randint(0, self.n_days - 4) # pick a random day 
+        k = index % 144 # moment of day 
+        jdex = 144*j+k # pick a random coefficient
+        
+        lambda_ = random.uniform(0, .2)
+
+        day_val = self.data[index:index+self.x_len]
+        next_day_val = self.data[index+1: index+self.x_len+self.pred_steps]
+
+        other_day_val = self.data[jdex:jdex+self.x_len]
+        other_next_day_val = self.data[jdex+1: jdex+self.x_len+self.pred_steps]
+
+        x = day_val*(1-lambda_) + other_day_val*(lambda_)
+        y = next_day_val*(1-lambda_) + other_next_day_val*(lambda_)
+        return x.unsqueeze(-1), y.unsqueeze(-1) # (t_steps, n_features)
+    
+    def __len__(self):
+        return len(self.data) - self.x_len - self.pred_steps
+    
+class PDDataSet(Dataset):
+    def __init__(self, data:torch.Tensor, x_len:int=288, pred_steps:int=144):
+        self.data:torch.Tensor = data
+        self.pred_steps:int = pred_steps
+        self.x_len:int = x_len
+        self.n_days = len(data) // pred_steps
+    
+    def __getitem__(self, index):
+        """Pick a random day and return the input and output sequences.
+        It uses mixed-up signals for data augmentation."""
+        
+        j = random.randint(0, self.n_days - 4) # pick a random day 
+        k = index % 24 # moment of day 
+        jdex = 24*j+k # pick a random coefficient
+        
+        lambda_ = random.uniform(0, .2)
+
+        day_val = self.data[index:index+self.x_len]
+        next_day_val = self.data[index+1: index+self.x_len+self.pred_steps]
+
+        other_day_val = self.data[jdex:jdex+self.x_len]
+        other_next_day_val = self.data[jdex+1: jdex+self.x_len+self.pred_steps]
+
+        x = day_val*(1-lambda_) + other_day_val*(lambda_)
+        y = next_day_val*(1-lambda_) + other_next_day_val*(lambda_)
+        return x.unsqueeze(-1), y.unsqueeze(-1) # (t_steps, n_features)
+    
+    def __len__(self):
+        return len(self.data) - self.x_len - self.pred_steps
+
 
 class Predictor(torch.nn.Module):
 
@@ -30,56 +93,41 @@ class Predictor(torch.nn.Module):
         self.n_features:int = n_features
         self.pred_steps:int = pred_steps
 
-        self.lstm = torch.nn.LSTMCell(n_features, n_hidden, n_layers, device)
+        self.lstm = torch.nn.LSTMCell(input_size=n_features, hidden_size=n_hidden, device=device)
         self.mlp = torch.nn.Linear(n_hidden, n_features, device=device)
         self.mean = torch.tensor(mean, dtype=torch.float32).to(device)
         self.std = torch.tensor(std, dtype=torch.float32).to(device)
+        self.hidden = None
 
-    #def forward(self, x:torch.Tensor):
-    #    h_and_c = None
-    #    batch_size, n_features, t_steps = x.shape
-    #    y = torch.zeros((batch_size, n_features, t_steps), device=x.device)
-    #    for i in range(t_steps):
-    #        h_and_c = self.lstm.forward(x[:,:,i], h_and_c)
-    #        y[:,:,i] = self.mlp(h_and_c[0])
-    #    return y
-
-    def forward(self, x:torch.Tensor):
-        self.pred_steps = 144
-        h_and_c = None
-        batch_size, n_features, t_steps = x.shape
-        y = torch.zeros((batch_size, n_features, t_steps), device=x.device)
+    def forward(self, x:torch.Tensor, hidden:torch.Tensor = None, n_steps=1) -> torch.Tensor:
+        self.hidden = hidden
+        batch_size, t_steps, n_features = x.shape
+        y = torch.zeros((batch_size, t_steps, n_features,), device=x.device)
         for i in range(t_steps):
-            h_and_c = self.lstm.forward(x[:,:,i], h_and_c)
-        y[:,:,0] = self.mlp(h_and_c[0])
-        for i in range(self.pred_steps-1):
-            h_and_c = self.lstm.forward(y[:,:,i].clone(), h_and_c)
-            y[:,:,i+1] = self.mlp(h_and_c[0])
-
+            self.hidden = self.lstm.forward(x[:,i,:], self.hidden)
+            y[:,i,:] = self.mlp(self.hidden[0])
+        output = self.mlp(self.hidden[0])
+        for j in range(n_steps-1):
+            self.hidden = self.lstm.forward(output, self.hidden)
+            output = self.mlp(self.hidden[0])
+            y = torch.cat((y, output.unsqueeze(-1)), dim=1)
         return y
-    
-    def predict(self, x:torch.Tensor, n_steps:int, isNormalized:bool = False) -> torch.Tensor:
+
+    def predict(self, x:torch.Tensor, n_steps:int, mode = "train") -> torch.Tensor:
         """
         Predict the next n_steps values of the input sequence x.
-        """
-        assert x.dim() == 2, "Input x must be a 2D tensor." 
-        
-        x = x if isNormalized else (x - self.mean) / self.std
-            
-        with torch.no_grad():
-            h_and_c = None
-            n_features, t_steps = x.shape
-            y = torch.zeros((n_features, n_steps), device=x.device)
-            for i in range(t_steps):
-                h_and_c = self.lstm.forward(x[:,i], h_and_c)
-            y[:,0] = self.mlp(h_and_c[0])
-            for i in range(n_steps-1):
-                h_and_c = self.lstm.forward(y[:,i], h_and_c)
-                y[:,i+1] = self.mlp(h_and_c[0])
+        """    
+        self.hidden = None
 
-        y = y if isNormalized else y * self.std + self.mean
+        if mode == "train": 
+            for i in range(n_steps):
+                x = self.forward(x, self.hidden)
 
-        return y
+        if mode == "eval":
+            with torch.no_grad():
+                for i in range(n_steps):
+                    x = self.forward(x, self.hidden)        
+        return x
 
     def to(self, device):
         self.device = device
@@ -97,7 +145,7 @@ class Predictor(torch.nn.Module):
             'model_state_dict': self.state_dict(),
             'mean': self.mean.cpu(),
             'std': self.std.cpu(),
-            'n_features': self.n_hidden,
+            'n_features': self.n_features,
             'n_hidden': self.n_hidden,
             'n_layers':self.n_layers,
             'pred_steps': self.pred_steps

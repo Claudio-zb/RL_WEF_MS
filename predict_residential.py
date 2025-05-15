@@ -1,30 +1,30 @@
 #%%
-from environments.utils.predict_utils import Predictor, EarlyStopping, PVDataSet, load_model
+from environments.utils.predict_utils import Predictor, EarlyStopping, PDDataSet, load_model
 from environments.Data.EMS.EMS_constants import *
 import numpy as np
 from environments.utils.funcionesEMS import *
 import torch
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-n_pred = 144
+n_pred = 24
 
-pv_inv = solar_power(get_rad("inv")[0:81*144], get_temperatura("inv")[0:81*144])
-pv_ver = solar_power(get_rad("ver")[0:81*144], get_temperatura("ver")[0:81*144])
+demand = get_demand_2() # we have 180 days
 
-p_pv = np.concatenate((pv_inv, pv_ver), axis=0)
-mean, std = np.mean(p_pv), np.std(p_pv)
-
-train_length = 60*144 #60 days
-val_length = 21*144 #21 days
+mean, std = np.mean(demand), np.std(demand)
 
 
-p_pv_train = torch.tensor(np.concatenate((pv_inv[:train_length], pv_ver[:train_length]) - mean)/std, dtype=torch.float32)
-p_pv_val = torch.tensor(np.concatenate((pv_inv[train_length:], pv_ver[train_length:]) - mean)/std, dtype=torch.float32)
+#%%
+train_length = 130*24 #60 days
+val_length = 50*24 #21 days
+
+
+p_d_train = torch.tensor((demand - mean)/std, dtype=torch.float32)
+p_d_val = torch.tensor((demand - mean)/std, dtype=torch.float32)
 
 #%%
 
-train_dataset = PVDataSet(p_pv_train, x_len=288, pred_steps=n_pred)
-val_dataset = PVDataSet(p_pv_val, x_len=288, pred_steps=n_pred)
+train_dataset = PDDataSet(p_d_train, x_len=24*2, pred_steps=n_pred)
+val_dataset = PDDataSet(p_d_val, x_len=24*2, pred_steps=n_pred)
 
 train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
@@ -32,8 +32,6 @@ val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
 for x,y in train_loader:
     print(x.shape, y.shape)
     break
-
-#%%
 
 #%%
 
@@ -47,7 +45,7 @@ loss_fn = torch.nn.HuberLoss()
 early_stopping = EarlyStopping(patience=10, tolerance=1e-5)
 
 #%% train the model
-train = False
+train = True
 if train:
     for epoch in range(100):
         mdl.train()
@@ -79,9 +77,9 @@ if train:
                     break
         if stop_training:
             break
-mdl.save(mdl.state_dict(), "predictive_models/pv_model.pt")
+mdl.save("predictive_models/pd_model.pt")
 #%%
-test_dataset = PVDataSet(p_pv_val, x_len=144, pred_steps=144)
+test_dataset = PDDataSet(p_d_val, x_len=48, pred_steps=24)
 
 test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 x, y = test_dataset[0]
@@ -89,17 +87,17 @@ plt.plot(x.to("cpu").numpy().flatten(), label="Input")
 plt.plot(y.to("cpu").numpy().flatten(), label="True")
 #%%
 
-mdl = load_model("predictive_models/pv_model.pt", device="cuda")
+mdl = load_model("predictive_models/pd_model.pt", device="cuda")
 mdl.eval()
 #%%
 for x, y in test_loader:
     x = x.to("cuda")
     y = y.to("cuda")
     break
-a = mdl.forward(x.to("cuda")[0:1], None, 288+144).to("cpu").detach().numpy().flatten()[144:]
+a = mdl.forward(x.to("cuda")[0:1], None, 24*3).to("cpu").detach().numpy().flatten()[48:]
 plt.plot(a, label="Predicted")
 
-plt.plot(y[0:1].to("cpu").numpy().flatten(), label="True")
+plt.plot(y[0:1].to("cpu").numpy().flatten()[48:], label="True")
 
 #%%
 plt.plot(x.to("cpu").numpy().flatten(), label="Input")

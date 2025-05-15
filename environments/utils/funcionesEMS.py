@@ -20,10 +20,18 @@ def get_demand() -> np.ndarray:
     demand = demand.flatten()
     return demand
 
+def get_demand_2() -> np.ndarray:
+    """
+    Read the demand data from the csv file and returns it as a numpy array
+    :return: Demand data as a numpy array [kWh]
+    """
+
+    hourly_demand = np.genfromtxt("environments/Data/EMS/consumption.csv", delimiter=',')
+    return hourly_demand.flatten()
 
 def get_temperatura(season: str = 'ver') -> np.ndarray:
     """
-    Read the temperature data from the csv file and returns it as a numpy array
+    Read the temperature data from the csv file and returns it as a numpy array 1 hour sampled
 
     :param season: 'ver' for summer and 'inv' for winter
     :return: Temperature data as a numpy array
