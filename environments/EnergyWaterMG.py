@@ -142,7 +142,7 @@ def drawdown(k: int, dQ: Union[np.ndarray, list]):  # drawdown of the well
     """
     Computes the drawdown of the well according the theis equation
     :param k: time instant
-    :param dQ: delta flow rate [m3/s]
+    :param dQ: delta flow rate [m3/s2]
     :return: drawdown
     """
     assert k == len(dQ), "The length of dQ should match the number of temporal k points"
@@ -151,6 +151,27 @@ def drawdown(k: int, dQ: Union[np.ndarray, list]):  # drawdown of the well
     l = np.arange(1, k + 1)
     arg = (r_wells ** 2 * S) / (4 * T * (k - l + 1) * 600)
     sum_ = np.dot(dQ, exp1(arg))
+    s_val = 1 / (4 * np.pi * T) * sum_
+    return s_val
+
+def drawdown2(k: int, Q: Iterable):  # drawdown of the well
+    """
+    Computes the drawdown of the well according the theis equation
+    :param k: time instant
+    :param Q: flow rate [l/s]
+    :return: drawdown
+    """
+
+    assert k == len(Q), "The length of dQ should match the number of temporal k points"
+    
+    l = np.arange(1, k + 1)
+    arg = (r_wells ** 2 * S) / (4 * T * (k - l + 1) * 600) 
+    arg0 = (r_wells ** 2 * S) / (4 * T * k * 600) if k > 0 else np.inf
+    arg = np.concatenate(([arg0], arg))
+    dW = np.diff(exp1(arg))
+    sum_ = 0.0
+    for i in range(k):
+        sum_ += Q[i] * dW[i] * 1e-3
     s_val = 1 / (4 * np.pi * T) * sum_
     return s_val
 
