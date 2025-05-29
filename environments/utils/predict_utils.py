@@ -22,6 +22,39 @@ class EarlyStopping:
                 self.early_stop = True
         return self.early_stop
     
+class ETDataset(Dataset):
+    def __init__(self, data:torch.Tensor, x_len:int = 7, pred_steps:int = 7):
+        self.data:torch.Tensor = data
+        self.pred_steps:int = pred_steps
+        self.x_len:int = x_len
+        self.n_weeks = len(data) // pred_steps
+    
+    def __getitem__(self, index):
+        """Pick a random day and return the input and output sequences.
+        It uses mixed-up signals for data augmentation."""
+        
+        j = random.randint(0, self.n_weeks - 4) # pick a random day 
+        k = index % 7 # moment of day 
+        jdex = 7*j+k # pick a random coefficient
+        
+        lambda_ = random.uniform(0, .2)
+
+        week_val = self.data[index:index+self.x_len]
+        next_week_val = self.data[index+1: index+self.x_len+self.pred_steps]
+
+        other_week_val = self.data[jdex:jdex+self.x_len]
+        other_next_week_val = self.data[jdex+1: jdex+self.x_len+self.pred_steps]
+
+        x = week_val*(1-lambda_) + other_week_val*(lambda_)
+        y = next_week_val*(1-lambda_) + other_next_week_val*(lambda_)
+        return x.unsqueeze(-1), y.unsqueeze(-1) # (t_steps, n_features)
+    
+    def __len__(self):
+        return len(self.data) - self.x_len - self.pred_steps
+
+    
+
+    
 class PVDataSet(Dataset):
     def __init__(self, data:torch.Tensor, x_len:int=288, pred_steps:int=144):
         self.data:torch.Tensor = data
@@ -166,4 +199,21 @@ def load_model(file_path: str, device="cpu"):
     model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
     return model
+
+class Forecaster():
+    """Wrapper for the Predictor model to handle input normalization and prediction."""
+    def __init__(self, model:Predictor):
+        self.model = model
+        model.to("cpu")
+        self.mean = model.mean.clone()
+        self.std = model.std.clone()
+
+    def predict(self, pv_array:np.ndarray, n_steps:int):
+        pv_tensor = torch.tensor(pv_array, dtype=torch.float32).unsqueeze(0).unsqueeze(-1)
+        with torch.no_grad():
+            pv_tensor = (pv_tensor - self.mean) / self.std
+            prediction = self.model.forward(pv_tensor, None, n_steps)
+            prediction = torch.clamp_min(prediction * self.std + self.mean, 0.0)
+        return prediction.detach().numpy().flatten()[-n_steps:]
+        
 
