@@ -50,7 +50,7 @@ def create_callback(alg_name, environment):
                         deterministic=True, render=False)
 
 
-episode_length = 114
+episode_length = 85
 n_envs = 4
 
 models_dict = {"td3": TD3, "sac": SAC}
@@ -75,7 +75,7 @@ indexes = [0,1,2,3,4,5,6,7,8]
 weights_dict = {index: set_of_weights[index] for index in indexes}
 
 #%%
-train = False
+train = True
 if train: 
     for idx, weights in zip(indexes, set_of_weights):
 

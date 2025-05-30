@@ -275,6 +275,7 @@ class Crop:
         self.Ks = state[n_layers + 2]
         self.days_of_water_stress = state[n_layers + 3]
         self.days_since_plantation = state[n_layers + 4]
+        self.Ky = state[n_layers + 5]
 
     def step(self, ET0: float, infiltrated_water: float = 0.0) -> np.ndarray:
         """
@@ -301,7 +302,7 @@ class Crop:
         self.hist_data.append(obs)
         # compute in which stage i am
 
-        if self.days_since_plantation == sum(self.stages_duration):
+        if self.days_since_plantation == sum(self.stages_duration[:-1]):
             self._is_active = False
 
         if np.isclose(self.Ks, 0.0):
@@ -422,8 +423,9 @@ class Crop:
         """Get the current state of the crop: soil moistures, foliar coberture, root depth, Ks, days of water stress and days since plantation"""
      
         soil_moistures = self.soil.get_thetas()
-        root_depth_and_ks = np.array([self.f_c, self.root_depth, self.Ks, self.days_of_water_stress, self.days_since_plantation])
-        return np.concatenate((soil_moistures, root_depth_and_ks))
+        crop_status = np.array([self.f_c, self.root_depth, self.Ks, self.days_of_water_stress, 
+                                self.days_since_plantation, self.Ky])
+        return np.concatenate((soil_moistures, crop_status))
 
     def update_root_depth(self):
         """

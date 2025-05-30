@@ -10,7 +10,7 @@ class CultivateEnv(gym.Env):
         self.weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/extracted_data.csv")
         self.cultivates: Cultivates = Cultivates()
         self.n_crops: int = len(self.cultivates.crops)
-        self.observation_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=1.0, shape=(10 * self.n_crops,),
+        self.observation_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=1.0, shape=(11 * self.n_crops,),
                                                                 dtype=np.float32)
         self.action_space: gym.spaces.Box = gym.spaces.Box(low=0.0, high=20.0, shape=(self.n_crops,), dtype=np.float32)
         self.reward_function: Callable = lambda s, a, s_next: reward_function(s, a, s_next, self.n_crops)
@@ -81,7 +81,7 @@ class NormalizedWMS(gym.Wrapper):
         self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(self.env.n_crops,), 
                                            dtype=np.float32)
         self.observation_space = gym.spaces.Box(low=0.0, high=1.0, 
-                                                shape=(11 * self.env.n_crops + days_ahead,), 
+                                                shape=(12 * self.env.n_crops + days_ahead,), 
                                                 dtype=np.float32)
         self.relative_yield:np.ndarray = np.ones(self.n_crops, dtype=np.float32)
         self.days:int = 1
@@ -99,10 +99,10 @@ class NormalizedWMS(gym.Wrapper):
         obs_ = np.zeros(len(obs) + 1 + self.days_ahead, dtype=np.float32)
         for i in range(self.n_crops):
             self.relative_yield[i] = (obs[(i+1)*7] * self.relative_yield[i])
-            obs_[i*10:(i+1)*10] = obs  # asign the values from the observation (length = 10)
+            obs_[i*11:(i+1)*11] = obs  # asign the values from the observation (length = 11)
             obs_[8] = 0.0 if obs_[8] < 3 else 1.0 # normalize the drought indicator
             obs_[9] = obs_[9] / 114  # normalize the time component
-            obs_[(i+1)*10] = self.relative_yield[i]**(1/self.days) #  add the relative yield as the 11th component
+            obs_[(i+1)*11] = self.relative_yield[i]**(1/self.days) #  add the relative yield as the 12th component
 
         # now we need to add the predictions
         index = self.env.index 
@@ -119,13 +119,13 @@ class NormalizedWMS(gym.Wrapper):
 
         obs, _, terminated, truncated, info = self.env.step(action_)
         self.days += 1
-        obs_ = np.zeros(self.n_crops * 11 + self.days_ahead, dtype=np.float32)
+        obs_ = np.zeros(len(obs) + 1 + self.days_ahead, dtype=np.float32)
         for i in range(self.n_crops):
             self.relative_yield[i] = (obs[(i+1)*7] * self.relative_yield[i])
-            obs_[i*10:(i+1)*10] = obs  # asign the values from the observation (length = 10)
+            obs_[i*10:(i+1)*11] = obs  # asign the values from the observation (length = 10)
             obs_[8] = 0.0 if obs_[8] < 3 else 1.0 # normalize the drought indicator
             obs_[9] = obs_[9] / 114  # normalize the time component
-            obs_[(i+1)*10] = self.relative_yield[i]**(1/self.days) #  add the relative yield as the 11th component
+            obs_[(i+1)*11] = self.relative_yield[i]**(1/self.days) #  add the relative yield as the 12th component
 
         # now we need to add the predictions
         index = self.env.index + self.env.days_since_plantation
@@ -165,8 +165,9 @@ def reward_function2(s: np.ndarray, a: np.ndarray, s_next: np.ndarray, n_crops,
     reward = 0.0
     for i in range(n_crops):
         Ks = s_next[(i+1)*7]
+        Ky = s_next[(i+1)*10]
         delta_Ks = s_next[(i+1)*7] - s[(i+1)*7]
-        reward += weights[0]*Ks + weights[1]*np.clip(delta_Ks, -np.inf, 0.0)
+        reward += weights[0]*(1-Ky*(1-Ks)) + weights[1]*np.clip(delta_Ks, -np.inf, 0.0)
     return reward - sum(a)*weights[2]
     
 def obs_dict_2_obs_array(obs: dict[str, np.ndarray]) -> np.ndarray:
