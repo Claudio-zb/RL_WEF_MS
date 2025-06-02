@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from environments.utils.funcionesEMS import *
 import copy
-from matplotlib import pyplot as plt
+import random
 
 
 class SimuEnv:
@@ -21,8 +21,12 @@ class SimuEnv:
 
         self.global_weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/extracted_data.csv", index_col=None)
         self.daily_weather_data: pd.DataFrame = None
-        self.ten_min_weather_data: pd.DataFrame = pd.read_csv("environments/Data/EMS/calan_2006.csv")
+        
+        self.ten_min_weather_data: np.ndarray = solar_power(get_rad("ver"), get_temperatura("ver"))
         self.ten_min_demand: np.ndarray = get_demand()
+        
+        self.current_daily_profile: np.ndarray = None
+
         self.days_since_started: int = 0
         self.doy: int = 0
         self.year: int = None
@@ -52,6 +56,7 @@ class SimuEnv:
         v_reqs, v_irrs = None, None
         v_reqs_hist, v_irrs_hist = [], []
         observations = []
+        mg_dis_hist = []
         actions = []
         mg_obs = self.microgrid_env.start()
         while not done:
@@ -64,9 +69,12 @@ class SimuEnv:
             v_reqs = mm_reqs*self.surface_area  # water requirement [m3]
             v_reqs_hist.append(v_reqs)
             
+            self.update_10_min_weather()
+
             for i in range(144):
                 prev_mg_obs = copy.deepcopy(mg_obs)
                 disturbances = self.get_disturbances(self.doy, i)
+                mg_dis_hist.append(disturbances)
                 action = self.ems_policy.get_action(v_reqs, mg_obs, disturbances)
                 mg_obs = self.microgrid_env.next_step(action, disturbances)
                 observations.append(mg_obs)
@@ -94,6 +102,7 @@ class SimuEnv:
         # self.crop_data = [crop.ge for crop in self.cultivate_env.crops]
         self.last_simulation_data = {"cultivate_obs": cultivate_obs_hist,
                                      "mg_obs": observations, #mg_obs_hist,
+                                     "mg_dis": mg_dis_hist,
                                      "wms_actions": np.array(v_reqs_hist),
                                      "end_of_day_samples": end_of_day_samples,
                                      "qp_actions": q_ps,
@@ -101,6 +110,9 @@ class SimuEnv:
         return
 
     def update_daily_weather(self, doy: int) -> dict:
+
+        #np.random.seed(seed)
+        #random.seed(seed)
 
         data = self.daily_weather_data.loc[self.daily_weather_data["doy"] == doy]
         precipitation = data["precipitation"].values[0]
@@ -133,10 +145,9 @@ class SimuEnv:
 
     def get_disturbances(self, doy: int, day_instant: int) -> np.ndarray:
         """
-        vo sai
+        Get the P_pv and P_res disturbances for the microgrid.
         """
-        temp_and_rad = self.ten_min_weather_data.iloc[(doy*114 + day_instant) % len(self.ten_min_weather_data)][['temp', 'dir']].values
-        p_pv = solar_power(temp_and_rad[1], temp_and_rad[0])
+        p_pv = self.current_daily_profile[day_instant]  # solar power [kW]
         p_d = self.ten_min_demand[(144 * doy + day_instant) % len(self.ten_min_demand)]
         disturbances = np.array([p_pv, p_d])
         return disturbances
@@ -146,6 +157,27 @@ class SimuEnv:
 
     def get_soil_data(self):
         return self.soil_data
+    
+    def update_10_min_weather(self):
+        """Pick a weather data time series for an entire day.
+        It uses mixed-up signals for data augmentation."""
+        
+        n_days = self.ten_min_weather_data.shape[0] // 144
+
+        j = random.randint(0, n_days - 1) # pick a random day  
+        jdex = 144*j # index of the start of a daily profile
+        
+        i = random.randint(0, n_days-1)
+        index = 144*i
+
+        lambda_ = random.uniform(0, .2)
+
+        day_val = self.ten_min_weather_data[jdex:jdex+144]
+
+        other_day_val = self.ten_min_weather_data[index:index+144]
+
+        self.current_daily_profile = day_val*(1-lambda_) + other_day_val*(lambda_)
+
 
 def isDone(mg_obs, cultivate_obs) -> bool:
     return False

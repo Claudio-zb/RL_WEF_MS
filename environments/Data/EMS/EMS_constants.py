@@ -14,7 +14,7 @@ Vt_min = 1  # [m3]
 # Batteries Constants
 Pbat_nom: float = 100  # [kW]
 Pbat_max: float = Pbat_nom  # 100  # [Kw]
-SoE_max: float = 120  # [kWh]
+SoE_max: float = 100  # [kWh]
 SoE_min: float = 0.2 * SoE_max  # [kWh]
 
 # Irrigation Constants

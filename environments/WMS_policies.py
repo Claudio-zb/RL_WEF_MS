@@ -65,14 +65,15 @@ class RLIrrigationPolicy(IrrigationPolicy):
         
         precipitations = self.weather_data.iloc[index:index+self.days_ahead]["precipitation"].values
         obs_array = obs_dict_2_obs_array(obs)
-        obs_array_ = np.zeros(11*self.n_crops + self.days_ahead) 
-        obs_array_[:10*self.n_crops] = obs_array  # assign the observations (length = 10)
-        obs_array_[8] = 0.0 if obs_array_[8] < 3 else 1.0 # normalize the drought indicator
-        obs_array_[9] = obs_array_[9] / 114 # normalize the time component
-        self.relative_yield = self.relative_yield*obs_array[7]
-        obs_array_[10] = self.relative_yield**(1/self.count)
+        obs_array_ = np.zeros(len(obs_array) + 1 + self.days_ahead)
+        for i in range(self.n_crops): 
+            obs_array_[:11*self.n_crops] = obs_array  # assign the observations (length = 11)
+            obs_array_[8] = 0.0 if obs_array_[8] < 3 else 1.0 # normalize the drought indicator
+            obs_array_[9] = obs_array_[9] / 114 # normalize the time component
+            self.relative_yield = self.relative_yield*obs_array[7]
+            obs_array_[11] = self.relative_yield**(1/self.count) # assign relative yield to the 12th component
         
-        obs_array_[11:] = np.abs(precipitations*(1.0 + np.random.randn(self.days_ahead)*0.1)) # add noise to the precipitation predictions
+        obs_array_[-self.days_ahead:] = np.abs(precipitations*(1.0 + np.random.randn(self.days_ahead)*0.1)) # add noise to the precipitation predictions
         action = self.rl_policy.predict(obs_array_, deterministic=True)[0]*20.0/1000
         self.count += 1
         return action

@@ -24,6 +24,7 @@ class EnergyWaterMG:
 
         # drawdown relevant variables
         self.prev_Qps: np.ndarray[np.float32] = np.zeros(n_crops)
+        self.prev_Qirrs: np.ndarray[np.float32] = np.zeros(n_crops)
         self.dQs: list[np.ndarray] = [np.array([0])] * n_crops
         self.e_residual: float = 0.0  # residual energy [kWh]
 
@@ -55,27 +56,31 @@ class EnergyWaterMG:
         # loop over the crops
         for idx, v_tank in enumerate(self.v_tanks):
 
-            if self.drawdowns[idx] > 1.0:  # If the drawdown is too high, we cannot irrigate
-                q_irrs[idx] = 0.0
+            if abs(self.drawdowns[idx]) > 1.0:  # If the drawdown is too high, we cannot extract water
+                q_ps[idx] = 0.0
 
             if self.v_tanks[idx] <= Vt_min:  # If the tank is empty, there is no irrigation
                 q_irrs[idx] = 0.0
 
+            if self.v_tanks[idx] + q_ps[idx]*600/1000 > Vt_max:  # If the tank is full, there is no pumping
+                q_ps[idx] = (Vt_max - self.v_tanks[idx])*1000/600
+
             self.v_tanks[idx] = np.clip(v_tank + (q_ps[idx] - q_irrs[idx]) * 600 / 1000, self.v_tanks_min[idx],
                                         self.v_tanks_max[idx])
             
-            volume_to_extract = q_irrs[idx]*600/1000
-            volume_available = np.max([self.v_tanks[idx] - self.v_tanks_min[idx], 0])
+            # volume_to_extract = q_irrs[idx]*600/1000
+            # volume_available = np.max([self.v_tanks[idx] - self.v_tanks_min[idx], 0])
 
-            if volume_to_extract > volume_available:
-                q_irrs[idx] = volume_available*1000/600
+            # if volume_to_extract > volume_available:
+            #     q_irrs[idx] = volume_available*1000/600
             
             self.v_irrs[idx] = np.clip(self.v_irrs[idx] + q_irrs[idx] * 600 / 1000, 0, np.inf)
             self.drawdowns[idx] = drawdown(self.k + 1, self.dQs[idx] / 1e3)
             self.dQs[idx] = np.append(self.dQs[idx], q_ps[idx] - self.prev_Qps[idx])
             self.prev_Qps[idx] = q_ps[idx]
+            self.prev_Qirrs[idx] = q_irrs[idx]
 
-            self.p_pumps[idx] = get_p_q_p(q_irrs[idx], self.h_0[idx] + self.drawdowns[idx])  # [kW]
+            self.p_pumps[idx] = get_p_q_p(q_ps[idx], self.h_0[idx] + self.drawdowns[idx])  # [kW]
         p_bat, next_soe, self.e_residual = manage_batteries(self.soe, disturbances[0], disturbances[1], self.p_pumps)
         delta_SoE = np.max([p_bat, 0]) * n_c * (dt / 3600) + np.min([p_bat, 0]) / n_d * (dt / 3600)  # [kWh]
         self.soe = np.clip(self.soe + delta_SoE, SoE_min, SoE_max)

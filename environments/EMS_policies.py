@@ -5,7 +5,7 @@ from typing import Callable, Union
 from stable_baselines3.common.base_class import BaseAlgorithm
 from environments.utils.funcionesEMS import *
 from environments.Data.EMS.EMS_constants import *
-from utils.predict_utils import Forecaster
+from environments.utils.predict_utils import Forecaster
 
 class PumpingPolicy(ABC):
     """
@@ -37,10 +37,23 @@ class RBPumpingPolicy(PumpingPolicy):
         
         v_tanks = np.array(observation[0:self.n_crops])
         v_irrs = np.array(observation[self.n_crops:2*self.n_crops])
+        drawdowns = np.array(observation[2*self.n_crops:3*self.n_crops])
+        
         assert len(water_reqs) == self.n_crops, "Water requirements and number of crops do not match"
         
-        q_irrs = np.clip((water_reqs - v_irrs)*1000/3600, 0, 1)
-        q_ps = np.array([q_irrs[idx] if v_tank < self.v_tank_max else 0.0 for idx, v_tank in enumerate(v_tanks)]) 
+        q_irrs = []
+        q_ps = []
+        for idx, v_tank in enumerate(v_tanks):
+            if 1.0 < v_tank:
+                q_irr = np.clip((water_reqs - v_irrs)*1000/600, 0, .5).item()
+            if v_tank < Vt_max and np.abs(drawdowns[idx]) < 1.0:
+                q_p = q_irr
+            else:
+                q_p = 0.0
+            q_ps.append(q_p)
+            q_irrs.append(q_irr)    
+        q_ps = np.array(q_ps)
+        q_irrs = np.array(q_irrs)
         return np.concatenate((q_ps, q_irrs)) 
     
 class RLPumpingPolicy(PumpingPolicy):

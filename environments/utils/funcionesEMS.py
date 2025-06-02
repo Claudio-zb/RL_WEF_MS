@@ -1,11 +1,11 @@
 import pandas as pd
-from typing import Union, Tuple, Iterable
+from typing import Union, Tuple, Iterable, Any
 from environments.Data.EMS.EMS_constants import *
 
 delay = 6 * 6  # 6 hours in 10 minutes intervals
 
 
-def get_demand() -> np.ndarray:
+def get_demand() -> np.ndarray[Any, np.dtype[np.floating]]:
     """
     Read the demand data from the csv file and returns it as a numpy array
     :return: Demand data as a numpy array [kWh]
@@ -20,7 +20,7 @@ def get_demand() -> np.ndarray:
     demand = demand.flatten()
     return demand
 
-def get_demand_2() -> np.ndarray:
+def get_demand_2() -> np.ndarray[Any, np.dtype[np.floating]]:
     """
     Read the demand data from the csv file and returns it as a numpy array
     :return: Demand data as a numpy array [kWh]
@@ -29,7 +29,7 @@ def get_demand_2() -> np.ndarray:
     hourly_demand = np.genfromtxt("environments/Data/EMS/consumption.csv", delimiter=',')
     return hourly_demand.flatten()
 
-def get_temperatura(season: str = 'ver') -> np.ndarray:
+def get_temperatura(season: str = 'ver') -> np.ndarray[Any, np.dtype[np.floating]]:
     """
     Read the temperature data from the csv file and returns it as a numpy array 1 hour sampled
 
@@ -45,7 +45,7 @@ def get_temperatura(season: str = 'ver') -> np.ndarray:
     return temperatura[delay:]
 
 
-def get_rad(season: str = 'ver') -> np.ndarray:
+def get_rad(season: str = 'ver') -> np.ndarray[Any, np.dtype[np.floating]]:
     """
     Read the radiation data from the csv file and returns it as a numpy array
 
@@ -59,18 +59,19 @@ def get_rad(season: str = 'ver') -> np.ndarray:
         file_path = "environments/Data/EMS/data_rad_inv.csv"
 
     rad = pd.read_csv(file_path)
-    rad = rad.values.flatten()
+    rad = np.array(rad.values).flatten()
     return rad[delay:]
 
 
-def get_ref() -> np.ndarray:
+def get_ref() -> np.ndarray[Any, np.dtype[np.floating]]:
     """Read the references data from the csv file and returns it as a numpy array"""
     refs = pd.read_csv('environments/Data/EMS/v_refs.csv')
     refs = refs.values.flatten()
     return refs
 
 
-def solar_power(rad: Union[float, np.ndarray], temp: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+def solar_power(rad: Union[float, np.ndarray[Any, np.dtype[np.floating]]], 
+                temp: Union[float, np.ndarray[Any, np.dtype[np.floating]]]) -> Union[float, np.ndarray[Any, np.dtype[np.floating]]]:
     """
     Computes the solar power in kW given the radiation in W/m2 and the temperature in C.
 
@@ -86,7 +87,9 @@ def solar_power(rad: Union[float, np.ndarray], temp: Union[float, np.ndarray]) -
     return (Pn * rad / 1000.) * (1 + a_fv * (T_cell - Tn))
 
 
-def follow_ref_rew_1(s, a, s_next) -> np.ndarray:
+def follow_ref_rew_1(s:np.ndarray[Any, np.dtype[np.floating]], 
+                     a:np.ndarray[Any, np.dtype[np.floating]], 
+                     s_next:np.ndarray[Any, np.dtype[np.floating]]) -> np.ndarray[Any, np.dtype[np.floating]]:
     """
     Reward function for the follow reference task
     :param s: current state
@@ -164,7 +167,7 @@ def manage_batteries(SoE: float,
 
     return Pbat, next_SoE, E_residual
 
-def generate_t_matrix(n_crops:int, v_ref_max:float=5) -> np.ndarray:
+def generate_t_matrix(n_crops:int, v_ref_max:float=5) -> np.ndarray[Any, np.dtype[np.floating]]:
     """
     Generates the transformation matrix for the observation vector
     returns: t_matrix, the transformation matrix
@@ -189,7 +192,8 @@ def generate_t_matrix(n_crops:int, v_ref_max:float=5) -> np.ndarray:
 
     return t_matrix
 
-def get_p_q_p(q_p: Union[float, np.ndarray], h_p: float) -> np.ndarray:
+def get_p_q_p(q_p: Union[float, np.ndarray[Any, np.dtype[np.floating]]], 
+              h_p: float) -> Union[float, np.ndarray[Any, np.dtype[np.floating]]]:
     """Water pump power [kW]
     :param q_p: flow rate [l/s]
     :param h_p: height [m]
