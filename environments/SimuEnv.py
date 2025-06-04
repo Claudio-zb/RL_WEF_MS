@@ -11,7 +11,11 @@ import random
 
 
 class SimuEnv:
-    def __init__(self, irrigation_policy: Callable, ems_policy: PumpingPolicy):
+    def __init__(self, irrigation_policy: Callable, ems_policy: PumpingPolicy, seed: int = None):
+
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
 
         self.microgrid_env: EnergyWaterMG = EnergyWaterMG()
         self.cultivate_env: Cultivates = Cultivates()
@@ -22,18 +26,20 @@ class SimuEnv:
         self.global_weather_data: pd.DataFrame = pd.read_csv("environments/Data/WMS/extracted_data.csv", index_col=None)
         self.daily_weather_data: pd.DataFrame = None
         
-        self.ten_min_weather_data: np.ndarray = solar_power(get_rad("ver"), get_temperatura("ver"))
-        self.ten_min_demand: np.ndarray = get_demand()
+        self.ten_min_weather_data: np.ndarray[np.floating, int] = solar_power(get_rad("ver"), get_temperatura("ver"))
+        self.ten_min_demand: np.ndarray[np.floating, int] = get_demand()
         
-        self.pv_daily_profile: np.ndarray = None
-        self.prev_pv_daily_profile: np.ndarray = None
-        self.pd_daily_profile: np.ndarray = None
+        self.pv_daily_profile: np.ndarray[np.floating, int] = None
+        self.prev_pv_daily_profile: np.ndarray[np.floating, int] = None
+        self.pd_daily_profile: np.ndarray[np.floating, int] = None
 
         self.days_since_started: int = 0
         self.doy: int = 0
-        self.year: int = None
-        self.last_simulation_data: dict = {}
-        self.soil_data: list[dict] = []
+        self.year: int = 0
+        self.mg_data: dict[str, np.ndarray[np.floating, int]] = {}
+        self.crop_data: dict[str, np.ndarray[np.floating, int]] = {}
+        self.soil_data: dict[str, np.ndarray[np.floating, int]] = {}
+
 
         self.surface_area: float = 1000  # [m2]
         self.update_10_min_weather()
@@ -44,26 +50,28 @@ class SimuEnv:
         self.daily_weather_data = self.global_weather_data[self.global_weather_data["year"] == self.year].copy()
         self.doy = doy
         self.days_since_started = 1
-        self.last_simulation_data = {}
         return self.days_since_started
 
     def run(self, init_doy: int, total_days: int):
 
         self.start(init_doy)
 
-        cultivate_obs_hist, end_of_day_samples = [], []
-        daily_weather_data = self.daily_weather_data[self.daily_weather_data["doy"] == self.doy].iloc[0].to_dict()
+        cultivate_obs_hist = np.zeros((total_days+1, 11), dtype=np.float32)  # 11 crop features
+        end_of_day_samples = np.zeros((total_days, 7), dtype=np.float32)  # 7 microgrid features
+        v_reqs_hist = np.zeros(total_days, dtype=np.float32)
+        v_irrs_hist = np.zeros(total_days, dtype=np.float32)
 
-        cultivate_obs, doy = self.cultivate_env.start()
-        mg_obs, prev_mg_obs = None, None
-        done = False
-        v_reqs, v_irrs = None, None
-        v_reqs_hist, v_irrs_hist = [], []
-        observations = []
-        mg_dis_hist = []
-        actions = []
+
+        cultivate_obs, doy = self.cultivate_env.start()    
+        cultivate_obs_hist[0, :] = copy.deepcopy(cultivate_obs["potato"])    
+        
+        mg_observations = np.zeros((total_days * 144 + 1, 7), dtype=np.float32)  
+        mg_dis_hist = np.zeros((total_days * 144, 2), dtype=np.float32)
+        mg_actions = np.zeros((total_days * 144, 2))
+        
         mg_obs = self.microgrid_env.start()
-        while not done:
+        mg_observations[0, :] = mg_obs
+        for day in range(total_days):
 
             # Get the action from the policies
             weather_data = self.update_daily_weather(self.doy)
@@ -71,46 +79,47 @@ class SimuEnv:
             mm_reqs = self.irrigation_policy.get_action(cultivate_obs, wms_disturbances, doy)  # water requirement [m]
             
             v_reqs = mm_reqs*self.surface_area  # water requirement [m3]
-            v_reqs_hist.append(v_reqs[0])
             
             self.update_10_min_weather()
 
             for i in range(144):
                 prev_mg_obs = copy.deepcopy(mg_obs)
                 disturbances = self.get_disturbances(self.doy, i)
-                mg_dis_hist.append(disturbances)
-                action = self.ems_policy.get_action(v_reqs, mg_obs, disturbances)
-                mg_obs = self.microgrid_env.next_step(action, disturbances)
-                observations.append(mg_obs)
-                actions.append(action)
+                
+                mg_action = self.ems_policy.get_action(v_reqs, mg_obs, disturbances)
+                mg_obs = self.microgrid_env.next_step(mg_action, disturbances)
+
+                mg_observations[day*144 + i + 1, :] = mg_obs
+                mg_dis_hist[day*144 + i, :] = disturbances
+                mg_actions[day*144 + i, :] = mg_action
    
-            _prev_mg_obs = np.array(prev_mg_obs)
+        
+            v_irrs = prev_mg_obs[1]
+            v_irrs_hist[day] = v_irrs
+            v_reqs_hist[day] = v_reqs[0]
+            end_of_day_samples[day, :] = prev_mg_obs
 
-            v_irrs = [prev_mg_obs[1]]
-            v_irrs_hist.append(v_irrs)
-            end_of_day_samples.append(_prev_mg_obs)
-
-            cultivate_obs, doy = self.cultivate_env.step(v_irrs, weather_data)
-            cultivate_obs_hist.append(copy.deepcopy(cultivate_obs))
+            cultivate_obs, doy = self.cultivate_env.step([v_irrs], weather_data)
+            cultivate_obs_hist[day+1,:] = copy.deepcopy(cultivate_obs["potato"])
 
             self.doy = np.clip((self.doy + 1) % 365, 1, 365)
             self.days_since_started += 1
 
-            if self.days_since_started >= total_days:
-                done = True
         end_of_day_samples = np.array(end_of_day_samples)
-        actions = np.array(actions)
-        q_ps = actions[:,0]
-        q_is = actions[:,1]
-        self.soil_data = [crop.soil.get_hist_data() for crop in self.cultivate_env.crops]
+        self.soil_data = self.cultivate_env.crops[0].soil.get_hist_data()
         # self.crop_data = [crop.ge for crop in self.cultivate_env.crops]
-        self.last_simulation_data = {"cultivate_obs": cultivate_obs_hist,
-                                     "mg_obs": observations, #mg_obs_hist,
-                                     "mg_dis": mg_dis_hist,
-                                     "wms_actions": np.array(v_reqs_hist),
-                                     "end_of_day_samples": end_of_day_samples,
-                                     "qp_actions": q_ps,
-                                     "qi_actions": q_is}
+        self.mg_data = {
+                        "mg_obs": mg_observations, 
+                        "mg_dis": mg_dis_hist,
+                        "mg_actions": mg_actions,
+                        "end_of_day_samples": end_of_day_samples
+                        }
+        
+        self.crop_data = {"cultivate_obs": cultivate_obs_hist,
+                          "v_reqs": v_reqs_hist,
+                          "v_irrs": v_irrs_hist
+                          }
+        
         return
 
     def update_daily_weather(self, doy: int) -> dict:
@@ -156,8 +165,12 @@ class SimuEnv:
         disturbances = np.array([p_pv, p_d])
         return disturbances
 
-    def get_simu_data(self):
-        return self.last_simulation_data
+    def get_simu_data(self) -> tuple[dict[str, np.ndarray[np.floating, int]], 
+                                     dict[str, np.ndarray[np.floating, int]], 
+                                     dict[str, np.ndarray[np.floating, int]]]:
+        """Returns the simulation data from the microgrid, crop, and soil."""
+        
+        return self.mg_data, self.crop_data, self.soil_data
 
     def get_soil_data(self):
         return self.soil_data

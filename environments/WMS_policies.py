@@ -32,10 +32,12 @@ class IrrigationPolicy(Policy, metaclass = ABCMeta):
         self.year:int = year
 
     @abstractmethod
-    def get_action(self, obs_dict: dict[str, np.ndarray], disturbances: np.ndarray, doy:int) -> np.ndarray[float]:
+    def get_action(self, obs: dict[str, np.ndarray[np.floating, int]], 
+                   disturbances: np.ndarray[np.floating, int], 
+                   doy:int) -> np.ndarray[np.floating, int]:
 
         """ Returns the irrigation action [m] for each crop in the setup. 
-        :param obs_dict: dictionary with the observations for each crop
+        :param obs: dictionary with the observations for each crop
         :param disturbances: array with the disturbances for each crop
         :param doy: day of the year
         :return: irrigation action [m] for each crop in the setup"""
@@ -59,7 +61,9 @@ class RLIrrigationPolicy(IrrigationPolicy):
         self.weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
         self.days_ahead = days_ahead
     
-    def get_action(self, obs: Dict[str, np.ndarray], disturbances:np.ndarray, doy) -> np.ndarray:
+    def get_action(self, obs: dict[str, np.ndarray[np.floating, int]], 
+                   disturbances: np.ndarray[np.floating, int], 
+                   doy:int) -> np.ndarray[np.floating, int]:
         
         index = int(self.weather_data.loc[(self.weather_data["year"] == self.year) & (self.weather_data["doy"] == doy)].index.values[0])
         
@@ -74,7 +78,9 @@ class RLIrrigationPolicy(IrrigationPolicy):
             obs_array_[11] = self.relative_yield**(1/self.count) # assign relative yield to the 12th component
         
         obs_array_[-self.days_ahead:] = np.abs(precipitations*(1.0 + np.random.randn(self.days_ahead)*0.1)) # add noise to the precipitation predictions
-        action = self.rl_policy.predict(obs_array_, deterministic=True)[0]*20.0/1000
+        action, _ = self.rl_policy.predict(obs_array_, deterministic=True)
+        action = action*20.0/1000 # denormalise the action [m3]
+        assert action.ndim == 1, "Action should be a 1D array"
         self.count += 1
         return action
 
@@ -95,39 +101,17 @@ class RuleBasedIrrigationPolicy(IrrigationPolicy):
         self.mad:float = mad
         self.prev_irrigation:float = 0.0
 
-    def get_action(self, obs: np.ndarray, evapotranspiration, expected_water) -> np.ndarray:
+    def get_action(self, obs_dict: dict[str, np.ndarray[np.floating, int]], 
+                   disturbances: np.ndarray[np.floating, int], 
+                   doy:int) -> np.ndarray[np.floating, int]:
         """
         :param obs: observation array
         :param prev_irrigation: previous irrigation  [m3]
         :param evapotranspiration: evapotranspiration [m3]
         :param expected_water: expected water [m3]
         """
-        if len(obs) > 6:
-            obs_ = np.concatenate((obs[:5], obs[-3:-2]))
-        else:
-            obs_ = obs  
-        obs = np.concatenate((np.array([self.prev_irrigation, evapotranspiration, expected_water]), obs_))
-        theta_a = self.theta_model.predict(torch.tensor(obs, dtype=torch.float32))-.1
-        root_length = self.root_length_model.predict(torch.tensor(obs, dtype=torch.float32)) 
-        threshold = self.theta_fc - self.mad*(self.theta_fc - self.theta_wp)
-        action = 0.0
-        if theta_a < threshold:
-            action = (self.theta_fc - theta_a)*abs(root_length) - expected_water
-
-        self.prev_irrigation = action
-        return action 
+        pass
     
-def rule_based_policy() -> RuleBasedIrrigationPolicy:
-    """
-    Creates a rule-based irrigation policy
-    """
-    theta_models = [torch.load(f"predictive_models/soil_moisture/theta_{5-j}.pth", weights_only=False) for j in range(1, 5)]
-    theta_models = [torch.load("predictive_models/soil_moisture/theta_evp.pth", weights_only=False)] + theta_models
-    root_length_model = torch.load("predictive_models/soil_moisture/root_depth.pth", weights_only=False)
-    theta_a_mdl = NN_soil_mdl(theta_models, root_length_model)
-
-    return RuleBasedIrrigationPolicy(n_crops=1, neural_model=theta_a_mdl, root_length_model=root_length_model)
-
 class RBIrrigationPolicy(IrrigationPolicy):
     def __init__(self, n_crops, model: Cultivates, year:int):
         super().__init__(n_crops, year)
@@ -137,7 +121,9 @@ class RBIrrigationPolicy(IrrigationPolicy):
         self.days_since_plantation:int = 0
         
     
-    def get_action(self, obs, disturbances, doy) -> np.ndarray:
+    def get_action(self, obs: dict[str, np.ndarray[np.floating, int]], 
+                   disturbances: np.ndarray[np.floating, int], 
+                   doy:int) -> np.ndarray[np.floating, int]:
 
         disturbances_dict = self.weather_data.iloc[self.index + self.days_since_plantation].to_dict()
         self.model.set_state(obs, doy)
@@ -199,7 +185,10 @@ class ScheduledIrrigationPolicy(IrrigationPolicy):
         self.days_count += 1
         return irrigation
     
-    def get_action(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+    def get_action(self, obs: dict[str, np.ndarray[np.floating, int]], 
+                   disturbances: np.ndarray[np.floating, int], 
+                   doy:int) -> np.ndarray[np.floating, int]:
+        
         irrigation = self.__call__(obs)  
         return irrigation
 
@@ -219,7 +208,10 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         self.first_index:int = None
         self.days_count:int = 0
     
-    def get_action(self, obs:np.ndarray, disturbances:np.ndarray, doy:int) -> np.ndarray[np.floating]:
+    def get_action(self, obs: dict[str, np.ndarray[np.floating, int]], 
+                   disturbances: np.ndarray[np.floating, int], 
+                   doy:int) -> np.ndarray[np.floating, int]:
+        
         if self.first_index is None:
             self.first_index = int(self.weather_data.loc[(self.weather_data["year"] == self.year) & (self.weather_data["doy"] == doy)].index.values[0])
         timestamp = self.first_index + self.days_count
@@ -277,7 +269,6 @@ class MPCIrrigationPolicy(IrrigationPolicy):
                     delta_Ks = Ks - prev_obs[7] 
                     cost[particle] += -weights[0]*Ks**2 + weights[1]*(delta_Ks)**2 + weights[2]*(action[idx]*1000/20)**2
         return cost
-    
     
     def get_predicted_disturbances(self, measured_disturbances: np.ndarray):
         pass

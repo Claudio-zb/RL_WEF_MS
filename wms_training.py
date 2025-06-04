@@ -75,7 +75,7 @@ indexes = [0,1,2,3,4,5,6,7,8]
 weights_dict = {index: set_of_weights[index] for index in indexes}
 
 #%%
-train = True
+train = False
 if train: 
     for idx, weights in zip(indexes, set_of_weights):
 
@@ -257,5 +257,21 @@ plt.tight_layout()
 plt.savefig("logs/wms/water_usage_comparison.png", dpi=300)
 plt.show()
 
-    #%%
 
+#%%
+
+alg_yields_arr = np.array(alg_yields)
+alg_water_usage_arr = np.array(alg_water_usage)
+min_index = None
+min_value = np.inf
+
+for i in range(len(alg_water_usage_arr)):
+    for j in range(len(alg_water_usage_arr[i])):
+        if alg_yields_arr[i][j] > 0.97 and alg_water_usage_arr[i][j] < min_value:
+            min_value = alg_water_usage_arr[i][j]
+            min_index = (i, j)
+
+print("Index of minimum water usage with yield > 0.95:", min_index)
+
+
+# %%

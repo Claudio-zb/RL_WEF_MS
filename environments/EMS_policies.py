@@ -16,7 +16,9 @@ class PumpingPolicy(ABC):
         self.n_crops = n_crops
 
     @abstractmethod
-    def get_action(self, water_reqs:np.ndarray, observation:np.ndarray, disturbances:np.ndarray) -> np.ndarray:
+    def get_action(self, water_reqs:np.ndarray, 
+                   observation:np.ndarray, 
+                   disturbances:np.ndarray) -> np.ndarray[np.float32, int]:
         """
         Get the action for the given observation.
         :param observation: The observation of the environment.

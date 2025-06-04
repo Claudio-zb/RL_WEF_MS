@@ -31,7 +31,7 @@ class EnergyWaterMG:
         # 10-minutes counter
         self.k: int = 0
 
-    def next_step(self, actions: np.ndarray, disturbances:np.ndarray) -> np.ndarray[np.float32]:
+    def next_step(self, actions: np.ndarray, disturbances:np.ndarray) -> np.ndarray[np.float32, int]:
         """
         note: the pbat action is computed from an external policy
         :param actions: array of actions [q_p, ..., q_irr]
@@ -90,7 +90,7 @@ class EnergyWaterMG:
 
         return self.get_observation()
     
-    def get_observation(self) -> np.ndarray[np.float32]:
+    def get_observation(self) -> np.ndarray[np.float32, int]:
         """ Get the observation of the environment
         Returns: Array of v_tanks, v_irrs, drawdowns, p_pumps, soe, e_residual, k"""
 
@@ -109,7 +109,7 @@ class EnergyWaterMG:
         else:
             self.dQs = [np.array([0])] * self.n_crops
 
-    def start(self) -> np.ndarray[np.float32]:
+    def start(self) -> np.ndarray[np.float32, int]:
         """ Start the model in a certain day of year
         Returns: tuple of (v_tanks, v_irrs, drawdowns, soe, k)"""
         self.k = 0

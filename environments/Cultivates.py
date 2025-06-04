@@ -69,9 +69,9 @@ class Cultivates:
         
     def step(self, irrigations: Union[list, np.ndarray], weather_data: dict) -> tuple[dict, int]:
         """Performance a new step in the simulation, given an action-disturbance pair
-        param: irrigations: the amount of water [m] going in by the evaporation layer
-        param: climate_data: a dictionary with the daily weather data
-        returns: a dictionary with the current state of active crops """
+        :param: irrigations: the amount of water [m] going in by the evaporation layer
+        :param: climate_data: a dictionary with the daily weather data
+        :returns: a dictionary with the current state of active crops """
 
         self.set_climate_data(weather_data)
         for idx, crop in enumerate(self.crops):
@@ -854,7 +854,7 @@ class Soil:
     def get_soil_data(self):
         return np.array(self.hist_data)
 
-    def get_hist_data(self):
+    def get_hist_data(self) -> dict[str, np.ndarray[np.floating, int]]:
         hist_data = {}
         for idx, layer in enumerate(self.layers + [self.evp_layer]):
             for jdx, jtem in enumerate(layer.get_hist_data()[0, :]):
