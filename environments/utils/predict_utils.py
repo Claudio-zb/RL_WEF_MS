@@ -51,6 +51,30 @@ class ETDataset(Dataset):
     
     def __len__(self):
         return len(self.data) - self.x_len - self.pred_steps
+    
+class AprbsHandler:
+    def __init__(self, max_amplitude=1.0, min_amplitude=0.0, t0=1000):
+        self.max_amplitude = max_amplitude
+        self.min_amplitude = min_amplitude
+        self.t0 = t0
+        self.current_amplitude = np.random.uniform(min_amplitude, max_amplitude)
+        self.current_time = 0
+
+    def reset(self):
+        self.current_time = 0
+        self.current_amplitude = np.random.uniform(self.min_amplitude, self.max_amplitude)
+
+    def __call__(self):
+        self.current_time += 1
+        if self.current_time <= self.t0:
+            return self.current_amplitude
+        else:
+            self.reset()
+            return self.current_amplitude
+    def to_zero(self):
+        """Set the current amplitude to zero."""
+        self.current_amplitude = 0.0
+        self.current_time = 0
 
     
 

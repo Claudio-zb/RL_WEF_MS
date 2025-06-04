@@ -9,7 +9,7 @@ import copy
 import pandas as pd
 from environments.Cultivates import Cultivates
 from typing import Any
-from environments.utils.predict_utils import Predictor
+from environments.utils.predict_utils import *
 
 
 def obs_dict_2_obs_array(obs: Dict[str, np.ndarray]) -> np.ndarray:
@@ -214,9 +214,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         self.weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
         self.previous_solution:np.ndarray = np.zeros(self.horizon)
         self.model:Cultivates = model
-        self.et_model: Predictor = Predictor(n_features=1, n_hidden=10, n_layers=1, mean=0.0, std=1.0)
-        self.et_model:Predictor = torch.load("predictive_models/et_model_2.pth", weights_only=False)
-        self.et_model.to("cpu")
+        self.et_model: Forecaster = Forecaster(load_model("predictive_models\et_model.pt"))
         self.reward_weights = reward_weights
         self.first_index:int = None
         self.days_count:int = 0
@@ -237,9 +235,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         bounds = (min_bound, max_bound)
         pred_disturbances = []
         et_regresors = self.weather_data.iloc[timestamp-7:timestamp]["ET_0"].values
-        et_predictions = self.et_model.predict(torch.tensor(et_regresors, dtype=torch.float32).unsqueeze(0), 
-                                               n_steps=self.horizon, 
-                                               isNormalized=False).to("cpu").numpy().flatten()
+        et_predictions = self.et_model.predict(et_regresors, n_steps=self.horizon)
         
         precipitation_preds = self.weather_data.iloc[timestamp:timestamp+self.horizon]["precipitation"].values
         precipitation_preds[0:5] = np.abs(np.random.normal(precipitation_preds[0:5], 0.1*precipitation_preds[0:5]))
@@ -263,7 +259,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         cost, action = optimizer.optimize(cost_fun, iters=20, n_processes=None)
         self.previous_solution = action
         self.days_count += 1
-        return [action[0]]  # [m]
+        return action  # [m]
     
     def cost_function(self, obs: dict[str, np.ndarray], actions: np.ndarray, pred_disturbances: List[dict],
                       weights:np.ndarray = np.array([1.0, 1.0, 1,0])) -> float:

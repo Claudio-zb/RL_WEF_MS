@@ -38,7 +38,7 @@ class RBPumpingPolicy(PumpingPolicy):
         v_tanks = np.array(observation[0:self.n_crops])
         v_irrs = np.array(observation[self.n_crops:2*self.n_crops])
         drawdowns = np.array(observation[2*self.n_crops:3*self.n_crops])
-        
+        water_reqs = water_reqs[:1]
         assert len(water_reqs) == self.n_crops, "Water requirements and number of crops do not match"
         
         q_irrs = []
@@ -72,8 +72,9 @@ class RLPumpingPolicy(PumpingPolicy):
         disturbances: Tuple of (p_fv, p_load)
         return pbat, [[Q_p, Qirr]]"""
         n_crops = self.n_crops
+        
 
-        flattened_state = np.concatenate((water_reqs, observation, disturbances))
+        flattened_state = np.concatenate((water_reqs[0:1], observation, disturbances))
         transformed_state = np.matmul(self.transform, flattened_state)
         actions = self.policy.predict(transformed_state, deterministic=True)[0]
 
@@ -122,12 +123,16 @@ def manage_batteries_ca(SoE: ca.SX,
 
     return Pbat, E_residual
 
-class MPCPumping():
-    def __init__(self, pv_model:Forecaster, pd_model:Forecaster):
+class MPCPumpingPolicy(PumpingPolicy):
+    def __init__(self, pv_model:Forecaster, pd_model:Forecaster, days_ahead:int=0):
+        super().__init__(n_crops=1)
+        
         self.prev_Q = 0.0  # Previous flow rate
         self.pv_model = pv_model
-        self.domestic_model =pd_model
+        self.domestic_model = pd_model
         self.ten_min_counter:int = 0
+        self.days_ahead = days_ahead
+
 
         self.pv:list = None
         self.pd:list = None
@@ -170,7 +175,12 @@ class MPCPumping():
         p_pv_predicted = self.pv_model.predict(np.array(self.pv), N)
         return p_pv_predicted, self.pd_predictions[-N:]
     
-    def get_action(self, observation:np.ndarray, v_req, p_pv:float, p_d:float, N:int = 143):
+    def get_action(self, water_reqs:np.ndarray, observation:np.ndarray, disturbances:np.ndarray) -> np.ndarray:
+        water_reqs = water_reqs[:self.days_ahead + 1]
+        N = (1 + self.days_ahead) * 144 - int(observation[6])  # Control horizon (144 ten-minute intervals in a day)
+        p_pv = disturbances[0]  # PV power
+        p_d = disturbances[1]  # Domestic power
+    
         # Define optimization variables
         U = ca.SX.sym("U", 2, N)  # Control inputs
         X = ca.SX.sym("X", 5, N + 1)  # States
@@ -191,49 +201,52 @@ class MPCPumping():
                     (X[4,0] - self.prev_Q)] # Previous qp
                     
 
-        for k in range(N):
+        for j in range(N):
             # Dynamics constraint
-            constraints.append(X[0,k + 1] - (X[0, k] + (U[0, k]-U[1, k])*dt/1000))  # Vtanks
-            constraints.append(X[1,k + 1] - (X[1, k] + U[1, k]*dt/1000))  # Virrs
-
-            constraints.append(X[2,k + 1] - (1-0.0233)*X[2,k] - 0.1418*U[0,k] + 0.1036*X[4,k]) # Drawdown
-            p_bat, e_res = manage_batteries(X[3, k], float(p_pv_preds[k]), float(p_d_preds[k]), K_p*U[0, k])
-            constraints.append(X[3,k + 1] - (X[3, k] + p_bat*dt/3600))  # SoE
-            constraints.append(X[4,k + 1] - U[0,k])  # Previous qp
+            
+            constraints.append(X[0,j + 1] - (X[0, j] + (U[0, j]-U[1, j])*dt/1000))  # Vtanks
+            constraints.append(
+                X[1, j + 1] - ca.if_else(j == 144, (U[1, j] * dt / 1000), (X[1, j] + U[1, j] * dt / 1000))
+            )  # Virrs
+            constraints.append(X[2,j + 1] - ((1-0.0540)*X[2,j] + 0.0939*U[0,j] - 0.1404*X[4,j])) # Drawdown
+            p_bat, e_res = manage_batteries_ca(X[3, j], float(p_pv_preds[j]), float(p_d_preds[j]), K_p*U[0, j])
+            constraints.append(X[3,j + 1] - (X[3, j] + p_bat*dt/3600))  # SoE
+            constraints.append(X[4,j + 1] - U[0,j])  # Previous qp
             
             # Update 
 
-            constraints.append(X[0,k+1])
-            constraints.append(X[1,k+1])
-            constraints.append(X[2,k+1])
-            constraints.append(X[3,k+1])
-            #constraints.append(X[4,k+1])
+            constraints.append(X[0,j+1])
+            constraints.append(X[1,j+1])
+            constraints.append(X[2,j+1])
+            constraints.append(X[3,j+1])
+            #constraints.append(X[4,j+1])
 
-            constraints.append(U[0,k])
-            constraints.append(U[1,k])
+            constraints.append(U[0,j])
+            constraints.append(U[1,j])
             cost += -e_res
 
         # Define bounds for constraints
         lbg = [0,0,0,0,0]  # Equality constraint for initial condition
         ubg = [0,0,0,0,0]
 
-        for k in range(N):
+        for j in range(N):
             # Equality constraints for dynamics
             lbg.extend([0, 0, 0, 0, 0])  # Lower bounds for dynamics
             ubg.extend([0, 0, 0, 0, 0])  # Upper bounds for dynamics
 
             lbg.extend([1, 0, -1, 20])  # Lower bounds 
-            ubg.extend([5, ca.inf, 0, 100])  # Upper bounds 
+            ubg.extend([5, ca.inf, 1, 100])  # Upper bounds 
 
-            # Inequality constraint for U[0, k] >= 0
+            # Inequality constraint for U[0, j] >= 0
             lbg.extend([0, 0])  # Lower bound
             ubg.extend([1.0, 1.0])  # No upper bound
 
         # Final condition (equality constraint)
-        constraints.append(X[1, N] - v_req)  # Final condition (reference fulfillment)
-        lbg.append(0)
-        ubg.append(0)
+        for i in range(1, self.days_ahead + 2):
+            constraints.append(X[1, N - (i-1)*144] - float(water_reqs[self.days_ahead + 1 - i]))  # Final condition (reference fulfillment)
 
+            lbg.append(0)
+            ubg.append(0)
 
 
         # Combine decision variables into a single vector
@@ -245,10 +258,12 @@ class MPCPumping():
             'g': ca.vertcat(*constraints)  # Constraints
         }
 
+        opts = {'ipopt.print_level':0, 'print_time':0}
+
         # Create the solver
-        solver_control = ca.nlpsol('solver_control', 'ipopt', nlp_control)
+        solver_control = ca.nlpsol('solver_control', 'ipopt', nlp_control, opts)
         #
-        if self.previous_solution is not None:
+        if self.previous_solution is not None and N != (1 + self.days_ahead) * 144:
             x0 = self.previous_solution
         else:
             x0 = np.zeros((5 * (N + 1) + 2 * N,))
@@ -275,7 +290,8 @@ class MPCPumping():
         action_array = np.array(actions)
 
         self.prev_Q = action_array[0, 0]  # Update previous flow rate
-        return action_array
+        return action_array[:,0]
+
 
         
 

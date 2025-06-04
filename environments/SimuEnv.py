@@ -25,15 +25,19 @@ class SimuEnv:
         self.ten_min_weather_data: np.ndarray = solar_power(get_rad("ver"), get_temperatura("ver"))
         self.ten_min_demand: np.ndarray = get_demand()
         
-        self.current_daily_profile: np.ndarray = None
+        self.pv_daily_profile: np.ndarray = None
+        self.prev_pv_daily_profile: np.ndarray = None
+        self.pd_daily_profile: np.ndarray = None
 
         self.days_since_started: int = 0
         self.doy: int = 0
         self.year: int = None
         self.last_simulation_data: dict = {}
-        self.soil_data: list = []
+        self.soil_data: list[dict] = []
 
         self.surface_area: float = 1000  # [m2]
+        self.update_10_min_weather()
+        self.update_10_min_weather()
 
     def start(self, doy: int):
         self.year = 2010
@@ -67,7 +71,7 @@ class SimuEnv:
             mm_reqs = self.irrigation_policy.get_action(cultivate_obs, wms_disturbances, doy)  # water requirement [m]
             
             v_reqs = mm_reqs*self.surface_area  # water requirement [m3]
-            v_reqs_hist.append(v_reqs)
+            v_reqs_hist.append(v_reqs[0])
             
             self.update_10_min_weather()
 
@@ -147,8 +151,8 @@ class SimuEnv:
         """
         Get the P_pv and P_res disturbances for the microgrid.
         """
-        p_pv = self.current_daily_profile[day_instant]  # solar power [kW]
-        p_d = self.ten_min_demand[(144 * doy + day_instant) % len(self.ten_min_demand)]
+        p_pv = self.pv_daily_profile[day_instant]  # solar power [kW]
+        p_d = self.pd_daily_profile[day_instant]  # demand [kW]
         disturbances = np.array([p_pv, p_d])
         return disturbances
 
@@ -172,11 +176,16 @@ class SimuEnv:
 
         lambda_ = random.uniform(0, .2)
 
-        day_val = self.ten_min_weather_data[jdex:jdex+144]
+        pv_day_val = self.ten_min_weather_data[jdex:jdex+144]
+        other_pv_day_val = self.ten_min_weather_data[index:index+144]
 
-        other_day_val = self.ten_min_weather_data[index:index+144]
+        pd_day_val = self.ten_min_demand[jdex:jdex+144]
+        other_pd_day_val = self.ten_min_demand[index:index+144]
 
-        self.current_daily_profile = day_val*(1-lambda_) + other_day_val*(lambda_)
+        self.pv_daily_profile = pv_day_val*(1-lambda_) + other_pv_day_val*(lambda_)
+        self.prev_pv_daily_profile = self.pv_daily_profile
+        
+        self.pd_daily_profile = pd_day_val*(1-lambda_) + other_pd_day_val*(lambda_)
 
 
 def isDone(mg_obs, cultivate_obs) -> bool:
