@@ -18,7 +18,7 @@ import pickle
 
 irrigation_mpc_policy = MPCIrrigationPolicy(1, Cultivates(), year=2018)
 
-wms_rl_model = TD3.load("logs/wms/weights_4/ppo/best_model.zip")
+wms_rl_model = TD3.load("logs/wms/weights_4/td3/best_model.zip")
 irrigation_rl_policy = RLIrrigationPolicy(n_crops=1, rl_policy=wms_rl_model, isNormalized=True, year=2018)
 
 # Bottom level controllers
@@ -78,7 +78,7 @@ for simu, name in zip(simu_cases, simu_names):
     print(f"Running {name} case study...")
     start_time = time.time()    
     np.random.seed(random_seed), random.seed(random_seed)
-    simu.run(init_doy=295, total_days=1) #115-30)
+    simu.run(init_doy=295, total_days=115-30) #115-30)
 
     end_time = time.time()
     print(f"Finished {name} case study in {end_time - start_time:.2f} seconds.")
@@ -132,6 +132,7 @@ for name in simu_names:
     water_usages.append(water_usage)
 
     plt.plot(mg_obs[:,4])
+
     
 #%% Plotting the results in bar plots
 
@@ -157,11 +158,13 @@ plt.savefig(path + "water_usages.png")
 
 # plot the energy purchased
 plt.figure(figsize=(10, 6))
-plt.bar(simu_names, energy_purchased)
+plt.grid(axis='y', alpha=0.75)
+plt.bar(simu_names, np.abs(energy_purchased))
 plt.xlabel('Simulation Cases')
 plt.ylabel('Energy Purchased (kWh)')
 plt.xticks(rotation=45)
 plt.tight_layout()
+
 plt.savefig(path + "energy_purchased.png")
 
 
@@ -169,12 +172,13 @@ plt.savefig(path + "energy_purchased.png")
 plt.figure(figsize=(10, 6))
 plt.bar(simu_names, ref_tracking_error)
 plt.xlabel('Simulation Cases')
-plt.ylabel('Reference Tracking Error')
+plt.ylabel('Reference Tracking Error %')
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig(path + "ref_tracking_error.png")
 
 
-
-
 # %%
+
+plt.plot(crop_data["v_irrs"])
+plt.plot(crop_data["v_reqs"])
