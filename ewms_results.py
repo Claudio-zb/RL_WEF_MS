@@ -35,8 +35,8 @@ simulation_env.run(init_doy=295, total_days=115)
 
 print(f"execution done in: {time.time() - t0} seconds")
 
-data = simulation_env.get_simu_data()
-soil_data = pd.DataFrame(simulation_env.soil_data[0])
+mg_data, crop_data, soil_data = simulation_env.get_simu_data()
+#soil_data = pd.DataFrame(simulation_env.soil_data[0])
 
 #%%
 
@@ -48,15 +48,18 @@ q_ps = data["qp_actions"]
 q_is = data["qi_actions"]
 
 soil_data = pd.DataFrame(simulation_env.soil_data[0])
-mg_obs = np.array(data["mg_obs"])
-mg_obs_144 = data["end_of_day_samples"]
+
+#%%
+#mg_obs = np.array(mg_data[""])
+
+mg_obs_144 = mg_data["end_of_day_samples"]
 #%%
 t = np.arange(0, len(mg_obs_144))
 
 
 
-plt.step(t[:-1], data["wms_actions"][:-1], label = r"$V_{irr}|_{\text{end of the day}}$", where="post" )
-plt.step(t[:-1], mg_obs_144[:-1,1], label=r"$V_{req}$", where="post")
+plt.step(t, crop_data["v_reqs"], label = r"$V_{req}$", where="post" , color = "tab:orange", linewidth=1.5)
+plt.scatter(t[1:], mg_obs_144[:-1,1], label=r"$V_{irr}|_{\text{end of the day}}$", color = "tab:blue")
 plt.xlabel("Time since plantation (days)")
 plt.ylabel("Water volume (m3)")
 plt.grid()

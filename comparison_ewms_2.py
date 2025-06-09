@@ -13,12 +13,15 @@ from environments.utils.predict_utils import Forecaster, Predictor, load_model
 import copy
 import os
 import pickle
+plt.rcParams['text.usetex'] = True
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 #%% Top level controllers  
 
 irrigation_mpc_policy = MPCIrrigationPolicy(1, Cultivates(), year=2018)
 
-wms_rl_model = TD3.load("logs/wms/weights_4/td3/best_model.zip")
+wms_rl_model = SAC.load("logs/wms/weights_5/sac/best_model.zip")
 irrigation_rl_policy = RLIrrigationPolicy(n_crops=1, rl_policy=wms_rl_model, isNormalized=True, year=2018)
 
 # Bottom level controllers
@@ -65,6 +68,9 @@ simu_rl_mpc.ems_policy = copy.deepcopy(ems_mpc_1_day)
 
 simu_cases = [simu_mpc_rl, simu_mpc_rb, simu_mpc_mpc, simu_rl_rl, simu_rl_rb, simu_rl_mpc]
 simu_names = ["mpc_rl", "mpc_rb", "mpc_mpc", "rl_rl", "rl_rb", "rl_mpc"]
+
+simu_cases = [simu_mpc_rl, simu_mpc_rb, simu_rl_rl, simu_rl_rb]
+simu_names = ["mpc_rl", "mpc_rb", "rl_rl", "rl_rb"]
 
 #%% lets prepare the weather data
 doy = simu_mpc_rl.cultivate_env.crops[0].plantation_day
@@ -131,54 +137,64 @@ for name in simu_names:
     ref_tracking_error.append(np.mean(np.abs(errors)/ np.abs(v_reqs)) * 100)  # in percentage
     water_usages.append(water_usage)
 
-    plt.plot(mg_obs[:,4])
+    plt.plot(soil_data["layer_0_0"])
+    plt.plot(soil_data["layer_1_0"])
+    plt.plot(soil_data["layer_2_0"])
+    plt.plot(soil_data["layer_3_0"])
+    plt.plot(soil_data["layer_4_0"])
+    
 
     
 #%% Plotting the results in bar plots
+simu_names = [name.replace("_", "+").upper() for name in simu_names]
 
+#%%
 # plot the relative yields
 
-plt.figure(figsize=(10, 6))
-plt.bar(simu_names, relative_yields)
-plt.xlabel('Simulation Cases')
-plt.ylabel('Relative Yield')
 
+colors = plt.cm.tab10.colors  # Use a colormap to assign different colors
+
+# Plot the relative yields
+plt.figure(figsize=(10, 6))
+plt.bar(simu_names, np.array(relative_yields)*100, color=colors[:len(simu_names)])
+plt.xlabel('Simulation Cases')
+plt.ylabel('Relative Yield \%')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(path + "relative_yields.png")
+plt.savefig(path + "relative_yields.png", dpi=300)
 
-# plot the water usages
+# Plot the water usages
 plt.figure(figsize=(10, 6))
-plt.bar(simu_names, water_usages)
+plt.bar(simu_names, water_usages, color=colors[:len(simu_names)])
 plt.xlabel('Simulation Cases')
 plt.ylabel('Water Usage (m3)')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(path + "water_usages.png")
+plt.savefig(path + "water_usages.png", dpi=300)
 
-# plot the energy purchased
+# Plot the energy purchased
 plt.figure(figsize=(10, 6))
 plt.grid(axis='y', alpha=0.75)
-plt.bar(simu_names, np.abs(energy_purchased))
+plt.bar(simu_names, np.abs(energy_purchased), color=colors[:len(simu_names)])
 plt.xlabel('Simulation Cases')
 plt.ylabel('Energy Purchased (kWh)')
 plt.xticks(rotation=45)
 plt.tight_layout()
+plt.savefig(path + "energy_purchased.png", dpi=300)
 
-plt.savefig(path + "energy_purchased.png")
-
-
-# plot the reference tracking error
+# Plot the reference tracking error
 plt.figure(figsize=(10, 6))
-plt.bar(simu_names, ref_tracking_error)
+plt.bar(simu_names, ref_tracking_error, color=colors[:len(simu_names)])
 plt.xlabel('Simulation Cases')
 plt.ylabel('Reference Tracking Error %')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(path + "ref_tracking_error.png")
+plt.savefig(path + "ref_tracking_error.png", dpi=300)
 
 
 # %%
 
 plt.plot(crop_data["v_irrs"])
 plt.plot(crop_data["v_reqs"])
+
+# %%

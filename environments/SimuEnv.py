@@ -99,7 +99,7 @@ class SimuEnv:
             v_reqs_hist[day] = v_reqs[0]
             end_of_day_samples[day, :] = prev_mg_obs
 
-            cultivate_obs, doy = self.cultivate_env.step([v_irrs], weather_data)
+            cultivate_obs, doy = self.cultivate_env.step([v_irrs/1000], weather_data)
             cultivate_obs_hist[day+1,:] = copy.deepcopy(cultivate_obs["potato"])
 
             self.doy = np.clip((self.doy + 1) % 365, 1, 365)

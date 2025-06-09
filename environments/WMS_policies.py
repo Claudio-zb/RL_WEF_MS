@@ -203,7 +203,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         self.weather_data = pd.read_csv("environments/Data/WMS/extracted_data.csv")
         self.previous_solution:np.ndarray = np.zeros(self.horizon)
         self.model:Cultivates = model
-        self.et_model: Forecaster = Forecaster(load_model("predictive_models\et_model.pt"))
+        self.et_model: Forecaster = Forecaster(load_model("predictive_models/et_model.pt"))
         self.reward_weights = reward_weights
         self.first_index:int = None
         self.days_count:int = 0
@@ -266,8 +266,9 @@ class MPCIrrigationPolicy(IrrigationPolicy):
                     obs_dict, _ = pso_model.step([action[idx]], pred_disturbances[idx])
                     obs_array = obs_dict["potato"]
                     Ks = obs_array[7]
+                    Ky = obs_array[10]
                     delta_Ks = Ks - prev_obs[7] 
-                    cost[particle] += -weights[0]*Ks**2 + weights[1]*(delta_Ks)**2 + weights[2]*(action[idx]*1000/20)**2
+                    cost[particle] += -weights[0]*(1-Ky*(1-Ks))**2 + weights[1]*(delta_Ks)**2 + weights[2]*(action[idx]*1000/20)**2
         return cost
     
     def get_predicted_disturbances(self, measured_disturbances: np.ndarray):

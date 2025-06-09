@@ -79,7 +79,7 @@ train = False
 if train: 
     for idx, weights in zip(indexes, set_of_weights):
 
-        path = f"logs/wms/weights_{idx}/"
+        path = f"logs/wms/weights__{idx}/"
 
         print(f"Training with weights {weights}")
 
@@ -114,6 +114,8 @@ if train:
                   log_path=path+"ppo",
                   eval_env= EvalWMS(NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights)),
                   n_epochs=5)
+        
+        break
 #%%  Compute statistics for the trained models
 
 folders = [f"weights_{index}" for index in indexes]
@@ -214,7 +216,7 @@ for i, alg_name in enumerate(alg_names):
 
 ax.set_ylabel(r"Relative Yield (\%)")
 ax.set_xticks(x + width)
-ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
+ax.set_xticklabels([fr"$\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
 ax.legend(loc = "best")
 #ax.set_ylim(94, 100.9)
 plt.tight_layout()
@@ -237,7 +239,7 @@ ax.axhline(95, color='red', linestyle='--', linewidth=1)
 
 ax.set_ylabel(r"Relative Yield (\%)")
 ax.set_xticks(x + width)
-ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
+ax.set_xticklabels([fr"$\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
 ax.legend(loc = "best")
 ax.set_ylim(94, 100.9)
 plt.tight_layout()
@@ -251,7 +253,7 @@ for i, alg_name in enumerate(alg_names):
 
 ax.set_ylabel("Total Water Usage (m³)")
 ax.set_xticks(x + width)
-ax.set_xticklabels([fr"$\lambda_1 = {weights[0]}$ \\ $\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
+ax.set_xticklabels([fr"$\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
 ax.legend()
 plt.tight_layout()
 plt.savefig("logs/wms/water_usage_comparison.png", dpi=300)

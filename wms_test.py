@@ -29,7 +29,7 @@ def evaluate_mpc(reward_weights:np.ndarray):
         year = 2018 
         cultivates = Cultivates()
         doy = cultivates.crops[0].plantation_day
-        season_duration = 114
+        season_duration = 115-30
         index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
         observations = []
         mpc_policy = MPCIrrigationPolicy(cultivates, n_crops=1, horizon=7, reward_weights=weights)
