@@ -11,7 +11,9 @@ import random
 
 
 class SimuEnv:
-    def __init__(self, irrigation_policy: Callable, ems_policy: PumpingPolicy, seed: int = None):
+    def __init__(self, irrigation_policy: Callable, ems_policy: PumpingPolicy, 
+                 year:int = 2018,
+                 seed: int = None):
 
         if seed is not None:
             np.random.seed(seed)
@@ -39,6 +41,7 @@ class SimuEnv:
         self.mg_data: dict[str, np.ndarray[np.floating, int]] = {}
         self.crop_data: dict[str, np.ndarray[np.floating, int]] = {}
         self.soil_data: dict[str, np.ndarray[np.floating, int]] = {}
+        self.init_year = year
 
 
         self.surface_area: float = 1000  # [m2]
@@ -46,7 +49,7 @@ class SimuEnv:
         self.update_10_min_weather()
 
     def start(self, doy: int):
-        self.year = 2010
+        self.year = self.init_year
         self.daily_weather_data = self.global_weather_data[self.global_weather_data["year"] == self.year].copy()
         self.doy = doy
         self.days_since_started = 1

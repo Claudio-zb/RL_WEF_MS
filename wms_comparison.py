@@ -64,9 +64,6 @@ for alg, algorithm in zip(["sac", "td3"], [SAC, TD3]):
     results_dict[alg].append(relative_yields)
 
 
-    
-
-
 # %%
 
 plt.plot(obs_data[0][:, 7], label="RB Policy")

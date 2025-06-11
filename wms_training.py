@@ -19,6 +19,7 @@ plt.rcParams['font.family'] = 'serif'
 plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 from environments.WMS_env import CultivateEnv, NormalizedWMS, EvalWMS, TestWMS
+from pathlib import Path
 
 action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(1), sigma= .075*np.ones(1)) 
 
@@ -178,6 +179,66 @@ for index, folder in enumerate(folders):
     alg_yields.append(relative_yields)
     alg_water_usage.append(total_water_usage)
     weight_labels.append(weights_dict[index])
+#%%
+alg_yields_arr = np.array(alg_yields)
+alg_water_usage_arr = np.array(alg_water_usage)
+min_index = None
+min_value = np.inf
+
+for i in range(len(alg_water_usage_arr)):
+    for j in range(len(alg_water_usage_arr[i])):
+        if alg_yields_arr[i][j] > 0.97 and alg_water_usage_arr[i][j] < min_value:
+            min_value = alg_water_usage_arr[i][j]
+            min_index = (i, j)
+
+print("Index of minimum water usage with yield > 0.95:", min_index)
+#%%
+def to_latex_table(weight_labels, alg_names, alg_yields, alg_water_usage, min_index):
+    def cell_content(yield_val, water_val, highlight=False, bold=False):
+        content = f"{yield_val*100:.2f} \\\ {water_val:.1f}"
+        if highlight and bold:
+            return r"\cellcolor{lightgray}\makecell{\textbf{" + content + "}}"
+        elif highlight:
+            return r"\cellcolor{lightgray}" + "\makecell{" + content + "}"
+        elif bold:
+            return r"\makecell{\textbf{" + content + "}}"
+        else:
+            return r"\makecell{" + content + "}"
+
+    header = r"""\begin{table}[ht]
+\label{tab:rl_wms_results
+\caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
+\centering
+\definecolor{lightgray}{gray}{0.85}
+\begin{tabular}{l""" + "c"*len(alg_names) + "}\n"
+    header += "Weights & " + " & ".join(name.upper() for name in alg_names) + r" \\" + "\n\\hline\n"
+
+    rows = []
+    for i, weights in enumerate(weight_labels):
+        weight_str = fr"$\lambda_2={weights[1]}$, $\lambda_3={weights[2]}$"
+        row = [weight_str]
+        for j in range(len(alg_names)):
+            yield_val = alg_yields[i][j]
+            water_val = alg_water_usage[i][j]
+            highlight = yield_val > 0.95
+            bold = (i, j) == min_index and highlight
+            row.append(cell_content(yield_val, water_val, highlight, bold))
+        rows.append(" & ".join(row) + r" \\")
+    footer = r"""\end{tabular}
+\caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
+\end{table}
+"""
+    return header + "\n".join(rows) + "\n" + footer
+
+# Find the minimum water usage index with yield > 0.95 (already computed as min_index)
+latex_table = to_latex_table(weight_labels, alg_names, alg_yields, alg_water_usage, min_index)
+
+# Write to file
+output_path = Path("logs/wms/yield_water_table.tex")
+output_path.parent.mkdir(parents=True, exist_ok=True)
+with open(output_path, "w", encoding="utf-8") as f:
+    f.write(latex_table)
+print(f"LaTeX table saved to {output_path}")
 
 #%% plot evaluation curves
 
@@ -262,18 +323,7 @@ plt.show()
 
 #%%
 
-alg_yields_arr = np.array(alg_yields)
-alg_water_usage_arr = np.array(alg_water_usage)
-min_index = None
-min_value = np.inf
 
-for i in range(len(alg_water_usage_arr)):
-    for j in range(len(alg_water_usage_arr[i])):
-        if alg_yields_arr[i][j] > 0.97 and alg_water_usage_arr[i][j] < min_value:
-            min_value = alg_water_usage_arr[i][j]
-            min_index = (i, j)
-
-print("Index of minimum water usage with yield > 0.95:", min_index)
 
 
 # %%

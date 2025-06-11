@@ -16,7 +16,9 @@ class MicrogridEnv(gym.Env):
     Gymnasium environment for the Energy Water Microgrid
     """
 
-    def __init__(self, n_crops: int = 1, render: bool = True):
+    def __init__(self, n_crops: int = 1, 
+                 render: bool = True, 
+                 weights:np.ndarray[float, int] = np.array([1.0, 4.0, 1.0])):
         """
         Initialize the environment
         :param render:
@@ -59,7 +61,7 @@ class MicrogridEnv(gym.Env):
         self.res_energy: float = 0.
         self.day_picked: int = 0
 
-        self.reward_fun = lambda s, a, s_next: default_rwd_fun(s, a, s_next, n_crops=n_crops)
+        self.reward_fun = lambda s, a, s_next: default_rwd_fun(s, a, s_next, n_crops=n_crops, weights=weights)
 
         # Bounds for observations
         obs_low = np.array(n_crops * [0.0] + n_crops * [Vt_min] + 3 * n_crops * [0.0] + [SoE_min, -10., 0, 0., 0.],
@@ -266,7 +268,7 @@ class NormalizationWrapper(gym.Wrapper):
         return t_state, reward, terminated, truncated, info
 
 
-def default_rwd_fun(s, a, s_next, n_crops=1):
+def default_rwd_fun(s, a, s_next, n_crops=1, weights:np.ndarray[float, int] = np.array([1.0, 4.0, 1.0])):
     """ Default reward function 
     :param s: current state
     :param a: action
@@ -279,17 +281,19 @@ def default_rwd_fun(s, a, s_next, n_crops=1):
         reward = np.clip(1 - abs(norm_next_error), -1.0, 1.0)
         if abs(norm_next_error) < 0.05: # bonus for being close to the reference
             reward += 1.0
-        reward += -4 * a[i + 1] if s_next[i + 2 * n_crops] > s[i] else 0.0  # penalize exceeding the irrigation requirement
 
-        reward += -4 * a[i + n_crops] if s[i + n_crops] <= Vt_min and a[
+        # penalisations    
+        reward += -weights[1] * a[i + 1] if s_next[i + 2 * n_crops] > s[i] else 0.0  # penalize exceeding the irrigation requirement
+
+        reward += -weights[1] * a[i + n_crops] if s[i + n_crops] <= Vt_min and a[
             i + n_crops] > 0 else 0.0  # penalize unfeasible action (irrigation is on and tank is empty)
 
-        reward += -4 * a[i] if s[i + n_crops] >= Vt_max and a[
+        reward += -weights[1] * a[i] if s[i + n_crops] >= Vt_max and a[
             i] > 0 else 0.0  # penalize unfeasible action (pump is on and tank is full)
 
-        reward += -4 * a[i] if s[i + 3*n_crops] > 1 else 0.0  # penalize drawdown
+        reward += -weights[1] * a[i] if np.abs(s[i + 3*n_crops]) > 1 else 0.0  # penalize drawdown
 
-    e_balance = s_next[7]
+    e_balance = weights[2]*s_next[7]
 
     reward += e_balance if e_balance < 0 else 0
 

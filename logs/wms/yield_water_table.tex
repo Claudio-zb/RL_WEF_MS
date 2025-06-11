@@ -1,0 +1,20 @@
+\begin{table}[ht]
+\label{tab:rl_wms_results}
+\caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
+\centering
+\definecolor{lightgray}{gray}{0.85}
+\begin{tabular}{lccc}
+Weights & TD3 & SAC & PPO \\
+\hline
+$\lambda_2=2.0$, $\lambda_3=1.0$ & \cellcolor{lightgray}\makecell{97.92 \\ 443.7} & \cellcolor{lightgray}\makecell{98.19 \\ 445.1} & \cellcolor{lightgray}\makecell{96.49 \\ 434.0} \\
+$\lambda_2=1.75$, $\lambda_3=1.0$ & \cellcolor{lightgray}\makecell{99.22 \\ 465.9} & \cellcolor{lightgray}\makecell{98.98 \\ 473.7} & \cellcolor{lightgray}\makecell{99.82 \\ 506.8} \\
+$\lambda_2=1.5$, $\lambda_3=1.0$ & \cellcolor{lightgray}\makecell{99.74 \\ 495.2} & \cellcolor{lightgray}\makecell{98.42 \\ 460.9} & \cellcolor{lightgray}\makecell{99.29 \\ 471.7} \\
+$\lambda_2=1.25$, $\lambda_3=1.0$ & \cellcolor{lightgray}\makecell{99.38 \\ 466.8} & \cellcolor{lightgray}\makecell{\textbf{97.41 \\ 429.9}} & \cellcolor{lightgray}\makecell{97.22 \\ 459.0} \\
+$\lambda_2=1.0$, $\lambda_3=1.0$ & \cellcolor{lightgray}\makecell{98.00 \\ 450.2} & \cellcolor{lightgray}\makecell{98.71 \\ 445.1} & \cellcolor{lightgray}\makecell{98.34 \\ 479.2} \\
+$\lambda_2=1.0$, $\lambda_3=1.25$ & \makecell{87.81 \\ 387.5} & \cellcolor{lightgray}\makecell{98.47 \\ 449.5} & \cellcolor{lightgray}\makecell{99.59 \\ 473.9} \\
+$\lambda_2=1.0$, $\lambda_3=1.5$ & \makecell{94.40 \\ 445.0} & \makecell{94.93 \\ 432.8} & \makecell{94.37 \\ 434.6} \\
+$\lambda_2=1.0$, $\lambda_3=1.75$ & \makecell{76.47 \\ 316.4} & \makecell{94.21 \\ 420.2} & \cellcolor{lightgray}\makecell{97.31 \\ 443.5} \\
+$\lambda_2=1.0$, $\lambda_3=2.0$ & \makecell{58.03 \\ 275.3} & \makecell{81.89 \\ 351.5} & \cellcolor{lightgray}\makecell{97.61 \\ 444.6} \\
+\end{tabular}
+\caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
+\end{table}

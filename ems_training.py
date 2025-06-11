@@ -4,6 +4,7 @@ from stable_baselines3.common.monitor import Monitor
 
 from environments.EMS_env import MicrogridEnv, NormalizationWrapper
 from stable_baselines3.common.noise import OrnsteinUhlenbeckActionNoise
+from stable_baselines3.common.base_class import BaseAlgorithm
 
 import numpy as np
 from stable_baselines3.common.callbacks import EvalCallback
@@ -25,8 +26,8 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(2), sigma=0.1 * np.ones(2))
 
 n_envs = 8
-def create_wrapped_env(log_file=None):
-    env = MicrogridEnv()
+def create_wrapped_env(log_file=None, weights=np.array([1.0, 4.0, 1.0])):
+    env = MicrogridEnv(weights=weights)
     env = NormalizationWrapper(env)
     if log_file is not None:
         env = Monitor(env, log_file)
@@ -36,137 +37,132 @@ def create_wrapped_env(log_file=None):
 # Create the vectorized environment
 
 
-def create_callback(alg_name, environment):
+def create_callback(alg_name, environment, idx):
     return EvalCallback(environment, 
-                        best_model_save_path=f'{location + alg_name}',
-                        log_path=f'{location + alg_name}', 
+                        best_model_save_path=f'{location}weights_{idx}/{alg_name}',
+                        log_path=f'{location}weights_{idx}/{alg_name}', 
                         eval_freq=4*episode_length*16, 
                         deterministic=True, render=False)
 
-episode_length = 144*3
-train = False
+episode_length = 144*4
+
+
+
+set_of_weights = np.array([[1., 4.0, 1.],
+                           [1., 3.0, 1.],
+                           [1., 2.0, 1.],
+                           [1., 1., 1.],
+                            [1., 1., 2.],
+                           [1., 1., 3.],
+                           [1., 1., 4.], 
+                           [1., 2., 2.], 
+                           [1., 4., 4.]])
+
+weights_dict = {index: weight for index, weight in enumerate(set_of_weights)}
+
+train = True
 if train:
-    sac_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs, seed=0)
-    td3_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs, seed=0)
-    ppo_vec_env = make_vec_env(lambda: create_wrapped_env(), n_envs=n_envs, seed=0)
+    for idx, weights in enumerate(set_of_weights):
 
-    sac_env = create_wrapped_env(f"{location}sac/sac_monitor.csv")
-    td3_env = create_wrapped_env(f"{location}td3/td3_monitor.csv")
-    ppo_env = create_wrapped_env(f"{location}ppo/ppo_monitor.csv")
+        path = f"logs/ems/weights_{idx}/"
 
-    sac_model = SAC("MlpPolicy", sac_env, verbose=1, 
-                    train_freq=10, batch_size=512)
-    td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, 
-                    verbose=1, train_freq=10, batch_size=512, target_policy_noise=0.1)
-    ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, 
-                    batch_size=episode_length*8, 
-                    device="cpu", n_steps=episode_length*n_envs*2, 
-                    n_epochs=12,
-                    learning_rate=3e-4, ent_coef=0.0, clip_range=0.12)
+        print(f"Training with weights {weights}")
 
-    models = [sac_model, td3_model, ppo_model]
-    envs = [sac_env, td3_env, ppo_env]
-    models_name = ["sac", "td3", "ppo"]
-    for model, name, env in zip(models, models_name, envs):
-        start_time = time.time()
-        model.learn(total_timesteps=2_000_000, callback=create_callback(name, env))
-        end_time = time.time()
+        sac_vec_env = make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs, seed=0)
+        td3_vec_env = make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs, seed=0)
+        ppo_vec_env = make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs, seed=0)
 
-        print(f"Training {name} took {(end_time - start_time)} seconds")
+        sac_env = create_wrapped_env(path + "sac/sac_monitor.csv", weights=weights)
+        td3_env = create_wrapped_env(path + "td3/td3_monitor.csv", weights=weights)
+        ppo_env = create_wrapped_env(path + "ppo/ppo_monitor.csv", weights=weights)
 
-for name in ["sac", "td3", "ppo"]:
-    evaluation_data = np.load(f"{location + name}/evaluations.npz")
+        sac_model = SAC("MlpPolicy", sac_env, verbose=1, 
+                        train_freq=10, batch_size=512)
+        td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, 
+                        verbose=1, train_freq=10, batch_size=512, target_policy_noise=0.1)
+        ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, 
+                        batch_size=episode_length*8, 
+                        device="cpu", n_steps=episode_length*n_envs*2, 
+                        n_epochs=12,
+                        learning_rate=3e-4, ent_coef=0.1, clip_range=0.12)
 
-    # Extract the arrays
-    timesteps = evaluation_data['timesteps']
-    results = evaluation_data['results']
-    ep_lengths = evaluation_data['ep_lengths']
+        models = [sac_model, td3_model, ppo_model]
+        envs = [sac_env, td3_env, ppo_env]
+        models_name = ["sac", "td3", "ppo"]
+        for model, name, env in zip(models, models_name, envs):
+            start_time = time.time()
+            model.learn(total_timesteps=1_600_000, callback=create_callback(name, env, idx))
+            end_time = time.time()
 
-    # Plot the results
-    
-    plt.plot(timesteps, results.mean(axis=1), label='Mean Return')
-    plt.fill_between(timesteps, 
-                 results.mean(axis=1) - results.std(axis=1), 
-                 results.mean(axis=1) + results.std(axis=1), 
-                 alpha=0.3, label='Std Dev')
-plt.xlabel('Timesteps', fontsize=14)
-plt.ylabel('Mean Return', fontsize=14)
-plt.title('Evaluation Results Over Time', fontsize=16)
-plt.legend()
-plt.grid()
-plt.tight_layout()
-plt.savefig(f"{location}evaluation_plot.png", dpi=300)
-plt.show()
+            print(f"Training {name} took {(end_time - start_time)} seconds")
 
 #%% Plotting the training curves
+
+plot_curves = False
 h = 4
+window = 1
 
 def moving_average(data, window_size):
     return data.rolling(window=window_size).mean()
 
 def moving_std(data, window_size):
     return data.rolling(window=window_size).std()
+if plot_curves:
+    fig, ax = plt.subplots()
+    for name in ["sac"]:
+        df = pd.read_csv(f"{location + name}/{name}_monitor.csv", skiprows=1)
+        df['moving_avg'] = moving_average(df['r'], window)
+        #df['moving_std'] = moving_std(df['r'], window)
+        ax.plot(df.index, df['moving_avg'], label=name.upper())
+        #ax.fill_between(df.index, df['moving_avg'] - df['moving_std'], df['moving_avg'] + df['moving_std'], alpha=0.3)
 
-window = 1
+    ax.set_ylim(-50, 250)
+    ax.set_xlabel(r"Episode", fontsize=14)
+    ax.set_ylabel(r"Mean reward per episode", fontsize=14)
+    #ax.set_title(r"\textbf{RL algorithms training curves}")
+    fig.set_size_inches(h * 2, h)
+    plt.legend(loc = "lower right")
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(f"{location}ems_plot.png", dpi=300)
+    plt.show()
 
-fig, ax = plt.subplots()
-for name in ["sac"]:
-    df = pd.read_csv(f"{location + name}/{name}_monitor.csv", skiprows=1)
-    df['moving_avg'] = moving_average(df['r'], window)
-    #df['moving_std'] = moving_std(df['r'], window)
-    ax.plot(df.index, df['moving_avg'], label=name.upper())
-    #ax.fill_between(df.index, df['moving_avg'] - df['moving_std'], df['moving_avg'] + df['moving_std'], alpha=0.3)
 
-ax.set_ylim(-50, 250)
-ax.set_xlabel(r"Episode", fontsize=14)
-ax.set_ylabel(r"Mean reward per episode", fontsize=14)
-#ax.set_title(r"\textbf{RL algorithms training curves}")
-fig.set_size_inches(h * 2, h)
-plt.legend(loc = "lower right")
-plt.grid()
-plt.tight_layout()
-plt.savefig(f"{location}ems_plot.png", dpi=300)
-plt.show()
+#%% Evaluate trained models
 
-#%% compute mean and std from training curves from episode 200
+for idx, weight in enumerate(set_of_weights):
+    path = f"logs/ems/weights_{idx}/"
+    sac_best_model = SAC.load(path + "sac/best_model")
+    td3_best_model = TD3.load(path + "td3/best_model")
+    ppo_best_model = PPO.load(path + "ppo/best_model")
+    best_models = [sac_best_model, ppo_best_model, td3_best_model]
+    models_name = ["sac", "ppo", "td3"]
 
-for name in ["sac", "td3", "ppo"]:
-    df = pd.read_csv(f"{location + name}_monitor.csv", skiprows=1)
-    print(f"{name}: mean = {df['r'].mean()}, std = {df['r'].std()}")
+    def eval_policy(observation:np.ndarray, rl_model:BaseAlgorithm):
+        return rl_model.predict(observation, deterministic=True)[0]
 
-#%%
-# Load the best models
-sac_best_model = SAC.load(f"{location}sac/best_model")
-td3_best_model = TD3.load(f"{location}td3/best_model")
-ppo_best_model = PPO.load(f"{location}ppo/best_model")
-best_models = [td3_best_model]  #[sac_best_model, ppo_best_model, td3_best_model]
-models_name = ["td3"]  #["sac", "ppo", "td3"]
-
-def eval_policy(observation, rl_model):
-    return rl_model.predict(observation, deterministic=True)[0]
-
-simu_days = 3
-mg_env = create_wrapped_env()
-for alg, name in zip(best_models, models_name):
-    policy = lambda observation: eval_policy(observation, alg)
-    x = []
-    a = []
-    rews = []
-    t_obs, obs = mg_env.reset()
-    x.append(obs["state"])
-    for i in range(simu_days * 144):
-        action = policy(t_obs)
-        a.append(action)
-        t_obs, rew, done, _, obs = mg_env.step(action)
+    simu_days = 3
+    mg_env = create_wrapped_env()
+    for alg, name in zip(best_models, models_name):
+        policy = lambda observation: eval_policy(observation, alg)
+        x = []
+        a = []
+        rews = []
+        t_obs, obs = mg_env.reset()
         x.append(obs["state"])
-        rews.append(rew)
-        if done:
-            break
+        for i in range(simu_days * 144):
+            action = policy(t_obs)
+            a.append(action)
+            t_obs, rew, done, _, obs = mg_env.step(action)
+            x.append(obs["state"])
+            rews.append(rew)
+            if done:
+                break
 
-    x = np.array(x)
-    a = np.array(a)
-    rews = np.array(rews)
-    t = np.linspace(0, 24*simu_days, len(x) - 1)
+        x = np.array(x)
+        a = np.array(a)
+        rews = np.array(rews)
+        t = np.linspace(0, 24*simu_days, len(x) - 1)
 
     #%%
     h = 4
