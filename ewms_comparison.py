@@ -21,11 +21,11 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 irrigation_mpc_policy = MPCIrrigationPolicy(1, Cultivates(), year=2018)
 
-wms_rl_model = SAC.load("logs/wms/weights_5/sac/best_model.zip")
+wms_rl_model = SAC.load("logs/wms/weights_5/sac/best_model")
 irrigation_rl_policy = RLIrrigationPolicy(n_crops=1, rl_policy=wms_rl_model, isNormalized=True, year=2018)
 
 # Bottom level controllers
-ems_rl_model = SAC.load("experimental_logs/ems/sac/best_model.zip")
+ems_rl_model = SAC.load("logs/ems/weights_2/sac/best_model")
 pv_model = Forecaster(load_model("predictive_models/pv_model.pt"))
 pd_model = Forecaster(load_model("predictive_models/pd_model.pt"))
 
@@ -77,34 +77,36 @@ year = 2018
 index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
 path = "./simu_results/wef_ms/"
 #%% running the cases
+run = False
+if run:
+    for simu, name in zip(simu_cases, simu_names):
+        print(f"Running {name} case study...")
+        start_time = time.time()    
+        np.random.seed(random_seed), random.seed(random_seed)
+        simu.run(init_doy=295, total_days=115-30) #115-30)
 
-for simu, name in zip(simu_cases, simu_names):
-    print(f"Running {name} case study...")
-    start_time = time.time()    
-    np.random.seed(random_seed), random.seed(random_seed)
-    simu.run(init_doy=295, total_days=115-30) #115-30)
+        end_time = time.time()
+        print(f"Finished {name} case study in {end_time - start_time:.2f} seconds.")
+        
+        mg_data, crop_data, soil_data = simu.get_simu_data()
+        simu_path = path + name
 
-    end_time = time.time()
-    print(f"Finished {name} case study in {end_time - start_time:.2f} seconds.")
-    
-    mg_data, crop_data, soil_data = simu.get_simu_data()
-    simu_path = path + name
+        if not os.path.exists(simu_path):
+            os.makedirs(simu_path)
 
-    if not os.path.exists(simu_path):
-        os.makedirs(simu_path)
+        with open(simu_path + "/mg_data.pkl", "wb") as f:
+            pickle.dump(mg_data, f)
 
-    with open(simu_path + "/mg_data.pkl", "wb") as f:
-        pickle.dump(mg_data, f)
+        with open(simu_path + "/crop_data.pkl", "wb") as f:
+            pickle.dump(crop_data, f)
 
-    with open(simu_path + "/crop_data.pkl", "wb") as f:
-        pickle.dump(crop_data, f)
-
-    with open(simu_path + "/soil_data.pkl", "wb") as f:
-        pickle.dump(soil_data, f)
+        with open(simu_path + "/soil_data.pkl", "wb") as f:
+            pickle.dump(soil_data, f)
 
 #%% compute the metrics
 
 energy_purchased = []
+net_energy = []
 ref_tracking_error = []
 relative_yields = []
 water_usages = []
@@ -126,18 +128,22 @@ for name in simu_names:
     crop_obs = crop_data["cultivate_obs"]
     k_s = crop_obs[:, 7]
     k_y = crop_obs[:, 10]
+    energy_balance = np.sum(mg_obs[:, 5])  # energy balance
+    net_energy.append(energy_balance)
 
     relative_yield = np.exp(np.mean(np.log(1 - k_y * (1 - k_s))))
     relative_yields.append(relative_yield)
     water_usage = np.sum(mg_obs_144[:,1])
     errors = v_reqs - mg_obs_144[:, 1]  # water requirements vs actual water usage
+    print(errors[:5])
 
-    ref_tracking_error.append(np.mean(np.abs(errors)/ np.abs(v_reqs)) * 100)  # in percentage
+    
+    ref_tracking_error.append(np.mean(np.abs(errors)))  # in percentage
     water_usages.append(water_usage)
 
     
 #%% Plotting the results in bar plots
-simu_names = [name.replace("_", "+").upper() for name in simu_names]
+simu_names2 = [name.replace("_", "+").upper() for name in simu_names]
 
 #%%
 # plot the relative yields
@@ -146,17 +152,17 @@ simu_names = [name.replace("_", "+").upper() for name in simu_names]
 colors = plt.cm.tab10.colors  # Use a colormap to assign different colors
 
 # Plot the relative yields
-plt.figure(figsize=(10, 6))
-plt.bar(simu_names, np.array(relative_yields)*100, color=colors[:len(simu_names)])
-plt.xlabel('Simulation Cases')
+plt.figure(figsize=(8, 4))
+plt.bar(simu_names2, np.array(relative_yields)*100, color=colors[:len(simu_names)])
+#plt.xlabel('Simulation Cases')
 plt.ylabel('Relative Yield \%')
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig(path + "relative_yields.png", dpi=300)
 
 # Plot the water usages
-plt.figure(figsize=(10, 6))
-plt.bar(simu_names, water_usages, color=colors[:len(simu_names)])
+plt.figure(figsize=(8, 4))
+plt.bar(simu_names2, water_usages, color=colors[:len(simu_names)])
 plt.xlabel('Simulation Cases')
 plt.ylabel('Water Usage (m3)')
 plt.xticks(rotation=45)
@@ -164,18 +170,27 @@ plt.tight_layout()
 plt.savefig(path + "water_usages.png", dpi=300)
 
 # Plot the energy purchased
-plt.figure(figsize=(10, 6))
+plt.figure(figsize=(8, 4))
 plt.grid(axis='y', alpha=0.75)
-plt.bar(simu_names, np.abs(energy_purchased), color=colors[:len(simu_names)])
-plt.xlabel('Simulation Cases')
-plt.ylabel('Energy Purchased (kWh)')
+plt.bar(simu_names2, np.abs(energy_purchased), color=colors[:len(simu_names)])
+#plt.xlabel('Simulation Cases')
+plt.ylabel('Energy Purchased (kWh)', fontsize=12)
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig(path + "energy_purchased.png", dpi=300)
 
+plt.figure(figsize=(8, 4))
+plt.grid(axis='y', alpha=0.75)
+plt.bar(simu_names2, net_energy, color=colors[:len(simu_names)])
+#plt.xlabel('Simulation Cases')
+plt.ylabel('Energy Purchased (kWh)', fontsize=12)
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.savefig(path + "net_energy.png", dpi=300)
+
 # Plot the reference tracking error
-plt.figure(figsize=(10, 6))
-plt.bar(simu_names, ref_tracking_error, color=colors[:len(simu_names)])
+plt.figure(figsize=(8, 4))
+plt.bar(simu_names2, ref_tracking_error, color=colors[:len(simu_names)])
 plt.xlabel('Simulation Cases')
 plt.ylabel('Reference Tracking Error %')
 plt.xticks(rotation=45)
