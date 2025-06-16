@@ -1,0 +1,20 @@
+\begin{table}[ht]
+\label{tab:rl_wms_results}
+\caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
+\centering
+\definecolor{lightgray}{gray}{0.85}
+\begin{tabular}{c|ccc}
+    Weights & TD3 & SAC & PPO \\
+    \hline
+    $\lambda_1=2.00$, $\lambda_2=1.00$ & \cellcolor{lightgray}97.91 / 452.3 & \cellcolor{lightgray}98.19 / 454.0 & \cellcolor{lightgray}95.94 / 434.0 \\
+    $\lambda_1=1.75$, $\lambda_2=1.00$ & \cellcolor{lightgray}99.54 / 462.4 & \cellcolor{lightgray}98.86 / 469.7 & \cellcolor{lightgray}99.83 / 505.3 \\
+    $\lambda_1=1.50$, $\lambda_2=1.00$ & \cellcolor{lightgray}99.78 / 498.2 & \cellcolor{lightgray}98.51 / 457.5 & \cellcolor{lightgray}99.16 / 473.2 \\
+    $\lambda_1=1.25$, $\lambda_2=1.00$ & \cellcolor{lightgray}99.51 / 464.2 & \cellcolor{lightgray}\textbf{97.14 / 437.0} & \cellcolor{lightgray}97.21 / 458.8 \\
+    $\lambda_1=1.00$, $\lambda_2=1.00$ & \cellcolor{lightgray}98.23 / 443.2 & \cellcolor{lightgray}98.72 / 464.6 & \cellcolor{lightgray}99.44 / 470.8 \\
+    $\lambda_1=1.00$, $\lambda_2=1.25$ & 89.88 / 376.1 & \cellcolor{lightgray}97.91 / 455.0 & \cellcolor{lightgray}99.59 / 474.4 \\
+    $\lambda_1=1.00$, $\lambda_2=1.50$ & 93.98 / 421.9 & \cellcolor{lightgray}95.24 / 433.5 & \cellcolor{lightgray}95.34 / 429.7 \\
+    $\lambda_1=1.00$, $\lambda_2=1.75$ & 73.76 / 319.9 & 92.28 / 427.8 & 94.03 / 451.3 \\
+    $\lambda_1=1.00$, $\lambda_2=2.00$ & 59.18 / 264.8 & 79.86 / 356.8 & \cellcolor{lightgray}97.14 / 447.0 \\
+\end{tabular}
+\caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
+\end{table}

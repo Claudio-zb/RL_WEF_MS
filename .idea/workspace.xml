@@ -4,9 +4,24 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="&quot;cleaning in the project&quot;">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.vscode/launch.json" beforeDir="false" />
+    <list default="true" id="502f8e29-c3b6-4608-910c-de708c6b7bcd" name="Changes" comment="soil moisture models">
+      <change beforePath="$PROJECT_DIR$/RL_algorithms/PPO2.py" beforeDir="false" afterPath="$PROJECT_DIR$/RL_algorithms/PPO2.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/Cultivates.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/Cultivates.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/environments/WMS_policies.py" beforeDir="false" afterPath="$PROJECT_DIR$/environments/WMS_policies.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/relative_yield_comparison.png" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/relative_yield_comparison.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/water_usage_comparison.png" beforeDir="false" afterPath="$PROJECT_DIR$/logs/wms/water_usage_comparison.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_0/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_0/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_1/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_1/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_2/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_2/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_3/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_3/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_4/ppo/CultivateEnv/evaluations.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logs/wms/weights_4/ppo/CultivateEnv/ppo_CultivateEnv_best.pth" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/predict_et.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/predict_et.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/wms_training.py" beforeDir="false" afterPath="$PROJECT_DIR$/wms_training.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -20,6 +35,17 @@
       </list>
     </option>
   </component>
+  <component name="FlaskConsoleOptions" custom-start-script="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))">
+    <envs>
+      <env key="FLASK_APP" value="app" />
+    </envs>
+    <option name="myCustomStartScript" value="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))" />
+    <option name="myEnvs">
+      <map>
+        <entry key="FLASK_APP" value="app" />
+      </map>
+    </option>
+  </component>
   <component name="Git.Settings">
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
@@ -27,6 +53,7 @@
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="UPDATE_TYPE" value="REBASE" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
   &quot;lastFilter&quot;: {
@@ -34,12 +61,12 @@
     &quot;assignee&quot;: &quot;Claudio-zb&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/Claudio-zb/RL_EMS.git&quot;,
-    &quot;accountId&quot;: &quot;922d3e20-ac81-4016-8757-2b06ed891434&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Claudio-zb/RL_EMS.git",
+    "accountId": "c2e83655-631c-46d6-9388-ffed9e66ff8e"
   }
-}</component>
+}]]></component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="CurrentFile" />
   </component>
@@ -52,37 +79,109 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.Quad_env.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.WMS_env.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.main2.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.main2.py.executor&quot;: &quot;Debug&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;sb__irr__mwthod&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/lyapunov/Documents/RL_EMS/environments&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.Quad_env.executor": "Debug",
+    "Python.WMS_env.executor": "Coverage",
+    "Python.ems_training.executor": "Run",
+    "Python.ewms_results.executor": "Debug",
+    "Python.main.executor": "Run",
+    "Python.main2.executor": "Debug",
+    "Python.main2.py.executor": "Run",
+    "Python.proando.executor": "Debug",
+    "Python.soil_moisture_model.executor": "Debug",
+    "Python.wms_test.executor": "Debug",
+    "Python.wms_training.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "principal",
+    "last_opened_file_path": "/home/lyapunov/Documents/RL_EMS",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "reference.settings.ide.settings.notifications",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
+  <component name="PyConsoleOptionsProvider">
+    <option name="myPythonConsoleState">
+      <console-settings module-name="RL_EMS" is-module-sdk="true">
+        <envs>
+          <env key="PATH" value="$USER_HOME$/anaconda3/bin:/home/equipo5/anaconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin" />
+        </envs>
+        <option name="myUseModuleSdk" value="true" />
+        <option name="myModuleName" value="RL_EMS" />
+        <option name="myEnvs">
+          <map>
+            <entry key="PATH" value="$USER_HOME$/anaconda3/bin:/home/equipo5/anaconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin" />
+          </map>
+        </option>
+      </console-settings>
+    </option>
+  </component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+      <recent name="$PROJECT_DIR$/logs" />
       <recent name="$PROJECT_DIR$/environments" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/predictive_models/soil_moisture" />
+      <recent name="$PROJECT_DIR$/predictive_models/soil_moisture/theta_layers" />
+      <recent name="$PROJECT_DIR$/logs" />
+      <recent name="$PROJECT_DIR$/logs/ems" />
       <recent name="$PROJECT_DIR$/environments/docs" />
-      <recent name="$PROJECT_DIR$/environments/Data/GH" />
-      <recent name="$PROJECT_DIR$/environments/Data/EMS" />
-      <recent name="$PROJECT_DIR$/environments/Data/WMS" />
-      <recent name="$PROJECT_DIR$/environments" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.main2.py">
+    <configuration name="WMS_env" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="RL_EMS" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/environments" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/environments/WMS_env.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="WMS_env" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="RL_EMS" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/environments" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/environments/WMS_env.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="main2.py" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="RL_EMS" />
       <option name="ENV_FILES" value="" />
@@ -97,7 +196,30 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main2.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/wms_training.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="main2.py" type="PythonConfigurationType" factoryName="Python" temporary="true">
+      <module name="RL_EMS" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/wms_training.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -108,6 +230,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.WMS_env" />
         <item itemvalue="Python.main2.py" />
       </list>
     </recent_temporary>
@@ -115,8 +238,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-1d06a55b98c1-0b3e54e931b4-JavaScript-PY-241.18034.82" />
-        <option value="bundled-python-sdk-975db3bf15a3-2767605e8bc2-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.18034.82" />
+        <option value="bundled-js-predefined-d6986cc7102b-1632447f56bf-JavaScript-PY-243.25659.43" />
+        <option value="bundled-python-sdk-181015f7ab06-4df51de95216-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.25659.43" />
       </set>
     </attachedChunks>
   </component>
@@ -156,6 +279,64 @@
       <workItem from="1724691605887" duration="2669000" />
       <workItem from="1724763517439" duration="167000" />
       <workItem from="1724797738587" duration="23014000" />
+      <workItem from="1730817695822" duration="1115000" />
+      <workItem from="1730819853239" duration="409000" />
+      <workItem from="1730820270969" duration="2555000" />
+      <workItem from="1730914265553" duration="2430000" />
+      <workItem from="1730916956022" duration="4265000" />
+      <workItem from="1730981309549" duration="8637000" />
+      <workItem from="1730991748109" duration="18265000" />
+      <workItem from="1731092587454" duration="1055000" />
+      <workItem from="1731329010624" duration="6642000" />
+      <workItem from="1731335797254" duration="4130000" />
+      <workItem from="1731340476562" duration="1288000" />
+      <workItem from="1731343408728" duration="345000" />
+      <workItem from="1731344547992" duration="573000" />
+      <workItem from="1731345529077" duration="310000" />
+      <workItem from="1731348361353" duration="1820000" />
+      <workItem from="1731354164397" duration="770000" />
+      <workItem from="1731356958903" duration="1821000" />
+      <workItem from="1731415704826" duration="3953000" />
+      <workItem from="1731437303725" duration="4511000" />
+      <workItem from="1732023668601" duration="9430000" />
+      <workItem from="1732044414090" duration="1774000" />
+      <workItem from="1732193032948" duration="33005000" />
+      <workItem from="1732623048104" duration="6471000" />
+      <workItem from="1732648533958" duration="7213000" />
+      <workItem from="1732718926855" duration="6229000" />
+      <workItem from="1732799295326" duration="22212000" />
+      <workItem from="1733682300733" duration="9087000" />
+      <workItem from="1733707478807" duration="3213000" />
+      <workItem from="1733755778280" duration="5123000" />
+      <workItem from="1734441670199" duration="5305000" />
+      <workItem from="1734559373138" duration="1696000" />
+      <workItem from="1734617037038" duration="3892000" />
+      <workItem from="1735054903988" duration="55128000" />
+      <workItem from="1735669125576" duration="797000" />
+      <workItem from="1736016170378" duration="4102000" />
+      <workItem from="1736166617079" duration="1732000" />
+      <workItem from="1736169773702" duration="2099000" />
+      <workItem from="1736172493904" duration="14620000" />
+      <workItem from="1736195908747" duration="3968000" />
+      <workItem from="1736207902395" duration="64789000" />
+      <workItem from="1736415821479" duration="6190000" />
+      <workItem from="1736444604849" duration="3305000" />
+      <workItem from="1736517236013" duration="20057000" />
+      <workItem from="1736774789554" duration="1080000" />
+      <workItem from="1736775915583" duration="28929000" />
+      <workItem from="1736878782415" duration="1831000" />
+      <workItem from="1736880994965" duration="5359000" />
+      <workItem from="1736891915566" duration="1273000" />
+      <workItem from="1737337319016" duration="3357000" />
+      <workItem from="1737378733252" duration="16968000" />
+      <workItem from="1737426245912" duration="29744000" />
+      <workItem from="1737907919072" duration="42190000" />
+      <workItem from="1737980301759" duration="13605000" />
+      <workItem from="1738068738028" duration="451000" />
+      <workItem from="1738069366874" duration="4956000" />
+      <workItem from="1738175624040" duration="5486000" />
+      <workItem from="1741033205896" duration="803000" />
+      <workItem from="1745600979613" duration="595000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;soil dynamic included&quot;">
       <option name="closed" value="true" />
@@ -173,7 +354,87 @@
       <option name="project" value="LOCAL" />
       <updated>1724936646818</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="&quot;improvements in multicrop implementation&quot;">
+      <option name="closed" value="true" />
+      <created>1731092695923</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1731092695923</updated>
+    </task>
+    <task id="LOCAL-00004" summary="matrix_transformation">
+      <option name="closed" value="true" />
+      <created>1731357079592</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1731357079592</updated>
+    </task>
+    <task id="LOCAL-00005" summary="sac results">
+      <option name="closed" value="true" />
+      <created>1731700570552</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1731700570552</updated>
+    </task>
+    <task id="LOCAL-00006" summary="&quot;solved normalized environment&quot;">
+      <option name="closed" value="true" />
+      <created>1731954904716</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1731954904716</updated>
+    </task>
+    <task id="LOCAL-00007" summary="&quot;trying to use the monitor&quot;">
+      <option name="closed" value="true" />
+      <created>1732125549481</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1732125549481</updated>
+    </task>
+    <task id="LOCAL-00008" summary="&quot;results of training&quot;">
+      <option name="closed" value="true" />
+      <created>1732306959080</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1732306959081</updated>
+    </task>
+    <task id="LOCAL-00009" summary="&quot;setting up wms environment&quot;">
+      <option name="closed" value="true" />
+      <created>1732653891009</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1732653891009</updated>
+    </task>
+    <task id="LOCAL-00010" summary="&quot;setting up wms environment 2&quot;">
+      <option name="closed" value="true" />
+      <created>1732656234423</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1732656234423</updated>
+    </task>
+    <task id="LOCAL-00011" summary="wms agents training">
+      <option name="closed" value="true" />
+      <created>1737392334570</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1737392334570</updated>
+    </task>
+    <task id="LOCAL-00012" summary="soil moisture models">
+      <option name="closed" value="true" />
+      <created>1737392453211</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1737392453211</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -199,23 +460,70 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="&quot;soil dynamic included&quot;" />
     <MESSAGE value="&quot;cleaning in the project&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;cleaning in the project&quot;" />
+    <MESSAGE value="&quot;improvements in multicrop implementation&quot;" />
+    <MESSAGE value="matrix_transformation" />
+    <MESSAGE value="sac results" />
+    <MESSAGE value="&quot;solved normalized environment&quot;" />
+    <MESSAGE value="&quot;trying to use the monitor&quot;" />
+    <MESSAGE value="&quot;results of training&quot;" />
+    <MESSAGE value="&quot;setting up wms environment&quot;" />
+    <MESSAGE value="&quot;setting up wms environment 2&quot;" />
+    <MESSAGE value="wms agents training" />
+    <MESSAGE value="soil moisture models" />
+    <option name="LAST_COMMIT_MESSAGE" value="soil moisture models" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/main2.py</url>
-          <line>59</line>
-          <option name="timeStamp" value="28" />
+          <url>file://$PROJECT_DIR$/environments/WMS_env.py</url>
+          <line>417</line>
+          <option name="timeStamp" value="75" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/wms_test.py</url>
+          <line>47</line>
+          <option name="timeStamp" value="90" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/wms_test.py</url>
+          <line>25</line>
+          <option name="timeStamp" value="93" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/wms_test.py</url>
+          <line>116</line>
+          <option name="timeStamp" value="97" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/proando.py</url>
+          <line>40</line>
+          <option name="timeStamp" value="99" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/ewms_results.py</url>
+          <line>21</line>
+          <option name="timeStamp" value="101" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/ewms_results.py</url>
+          <line>42</line>
+          <option name="timeStamp" value="105" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/RL_EMS$main.coverage" NAME="main Coverage Results" MODIFIED="1732214332805" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$ewms_results.coverage" NAME="ewms_results Coverage Results" MODIFIED="1738179671144" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/RL_EMS$WMS_env.coverage" NAME="WMS_env Coverage Results" MODIFIED="1724121906610" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/environments" />
-    <SUITE FILE_PATH="coverage/RL_EMS$main2_py.coverage" NAME="main2.py Coverage Results" MODIFIED="1724878360723" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/" />
-    <SUITE FILE_PATH="coverage/RL_EMS$Quad_env.coverage" NAME="Quad_env Coverage Results" MODIFIED="1723848193879" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/environments" />
+    <SUITE FILE_PATH="coverage/RL_EMS$wms_test.coverage" NAME="wms_test Coverage Results" MODIFIED="1736800784046" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$proando.coverage" NAME="proando Coverage Results" MODIFIED="1737381124089" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$main2_py.coverage" NAME="main2.py Coverage Results" MODIFIED="1736178261660" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/" />
+    <SUITE FILE_PATH="coverage/RL_EMS$wms_training.coverage" NAME="wms_training Coverage Results" MODIFIED="1738010751821" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$soil_moisture_model.coverage" NAME="soil_moisture_model Coverage Results" MODIFIED="1736545669246" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/RL_EMS$main2.coverage" NAME="main2 Coverage Results" MODIFIED="1724189551275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$ems_training.coverage" NAME="ems_training Coverage Results" MODIFIED="1737638656068" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RL_EMS$Quad_env.coverage" NAME="Quad_env Coverage Results" MODIFIED="1723848193879" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/environments" />
   </component>
 </project>

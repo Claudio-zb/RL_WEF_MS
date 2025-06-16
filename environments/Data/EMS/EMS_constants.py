@@ -14,8 +14,8 @@ Vt_min = 1  # [m3]
 # Batteries Constants
 Pbat_nom: float = 100  # [kW]
 Pbat_max: float = Pbat_nom  # 100  # [Kw]
-SoE_max: float = Pbat_nom  # [kWh]
-SoE_min: float = 0.2 * Pbat_nom  # [kWh]
+SoE_max: float = 100  # [kWh]
+SoE_min: float = 0.2 * SoE_max  # [kWh]
 
 # Irrigation Constants
 
@@ -50,8 +50,9 @@ T_matrix = np.array([[1/4., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                      [0, 0, 0, 0, 0, 0, 0, 0, 0, 1/143, 0],
                      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]], dtype=np.float32)
 
+
 # aquifer constants 
 
 T = 35.1062/(24*60*60)  # [m2/s]
 S = 0.19  # [1/m]
-r_pozos = 0.1270  # [m]
+r_wells = 0.1270  # [m]
