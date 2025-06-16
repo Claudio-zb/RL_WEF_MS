@@ -14,7 +14,6 @@ from stable_baselines3.common.env_util import make_vec_env
 import matplotlib.pyplot as plt
 import time
 
-
 isExperimental = True
 
 location = "experimental_logs/ems/" if isExperimental else "logs/ems/"

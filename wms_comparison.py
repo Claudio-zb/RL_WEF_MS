@@ -71,7 +71,6 @@ if run:
             pickle.dump(soil_data, f)
 
 
-
 #%% Load the data
 relative_yields = []
 water_usages = []

@@ -195,27 +195,27 @@ print("Index of minimum water usage with yield > 0.95:", min_index)
 #%%
 def to_latex_table(weight_labels, alg_names, alg_yields, alg_water_usage, min_index):
     def cell_content(yield_val, water_val, highlight=False, bold=False):
-        content = f"{yield_val*100:.2f} \\\ {water_val:.1f}"
+        content = f"{yield_val*100:.2f} / {water_val:.1f}"
         if highlight and bold:
-            return r"\cellcolor{lightgray}\makecell{\textbf{" + content + "}}"
+            return r"\cellcolor{lightgray}\textbf{" + content + "}"
         elif highlight:
-            return r"\cellcolor{lightgray}" + "\makecell{" + content + "}"
+            return r"\cellcolor{lightgray}" +  content 
         elif bold:
-            return r"\makecell{\textbf{" + content + "}}"
+            return r"\textbf{" + content
         else:
-            return r"\makecell{" + content + "}"
+            return content
 
     header = r"""\begin{table}[ht]
-\label{tab:rl_wms_results
-\caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
-\centering
-\definecolor{lightgray}{gray}{0.85}
-\begin{tabular}{l""" + "c"*len(alg_names) + "}\n"
+                    \label{tab:rl_wms_results}
+                    \caption{Relative yield (\%) and total water usage (m$^3$) for each algorithm and weight configuration. Cells with yield $>95\%$ are highlighted. The best trade-off (highest yield $>95\%$ and lowest water usage) is in bold.}
+                    \centering
+                    \definecolor{lightgray}{gray}{0.85}
+                    \begin{tabular}{c|""" + "c"*len(alg_names) + "}\n"
     header += "Weights & " + " & ".join(name.upper() for name in alg_names) + r" \\" + "\n\\hline\n"
 
     rows = []
     for i, weights in enumerate(weight_labels):
-        weight_str = fr"$\lambda_2={weights[1]}$, $\lambda_3={weights[2]}$"
+        weight_str = fr"$\lambda_1={weights[1]:.2f}$, $\lambda_2={weights[2]:.2f}$"
         row = [weight_str]
         for j in range(len(alg_names)):
             yield_val = alg_yields[i][j]
@@ -239,6 +239,7 @@ output_path.parent.mkdir(parents=True, exist_ok=True)
 with open(output_path, "w", encoding="utf-8") as f:
     f.write(latex_table)
 print(f"LaTeX table saved to {output_path}")
+
 
 #%% plot evaluation curves
 
@@ -265,65 +266,3 @@ for index, folder in enumerate(folders):
     plt.show()
 
 
-#%% Plot relative yields
-x = np.arange(len(weight_labels))  # Label locations
-width = 0.25  # Bar width
-colors = ["tab:blue", "tab:orange", "tab:green"]
-alg_yields = np.array(alg_yields)
-
-fig, ax = plt.subplots(figsize=(8, 4))
-for i, alg_name in enumerate(alg_names):
-    ax.bar(x + i * width, [ry[i] for ry in alg_yields*100], width, color = colors[i], label=alg_name.upper())   
-
-ax.set_ylabel(r"Relative Yield (\%)")
-ax.set_xticks(x + width)
-ax.set_xticklabels([fr"$\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
-ax.legend(loc = "best")
-#ax.set_ylim(94, 100.9)
-plt.tight_layout()
-plt.savefig("logs/wms/relative_yield_comparison_1.png", dpi=300)
-plt.show()
-
-#%% Plot relative yields
-x = np.arange(len(weight_labels))  # Label locations
-width = 0.25  # Bar width
-colors = ["tab:blue", "tab:orange", "tab:green"]
-alg_yields = np.array(alg_yields)
-
-fig, ax = plt.subplots(figsize=(8, 4))
-for i, alg_name in enumerate(alg_names):
-    ax.bar(x + i * width, [ry[i] for ry in alg_yields*100], width, color = colors[i], label=alg_name.upper())   
-
-ax.axhline(100, color='red', linestyle='--', linewidth=1)
-ax.axhline(95, color='red', linestyle='--', linewidth=1)
-
-
-ax.set_ylabel(r"Relative Yield (\%)")
-ax.set_xticks(x + width)
-ax.set_xticklabels([fr"$\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
-ax.legend(loc = "best")
-ax.set_ylim(94, 100.9)
-plt.tight_layout()
-plt.savefig("logs/wms/relative_yield_comparison_2.png", dpi=300)
-plt.show()
-
-#%% Plot water usage
-fig, ax = plt.subplots(figsize=(8, 4))
-for i, alg_name in enumerate(alg_names):
-    ax.bar(x + i * width, [wu[i] for wu in alg_water_usage], width, label=alg_name.upper())
-
-ax.set_ylabel("Total Water Usage (m³)")
-ax.set_xticks(x + width)
-ax.set_xticklabels([fr"$\lambda_2 = {weights[1]}$ \\ $\lambda_3 = {weights[2]}$" for weights in weight_labels])
-ax.legend()
-plt.tight_layout()
-plt.savefig("logs/wms/water_usage_comparison.png", dpi=300)
-plt.show()
-
-
-#%%
-
-
-
-
-# %%

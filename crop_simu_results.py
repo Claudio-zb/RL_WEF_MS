@@ -34,7 +34,7 @@ seed = 1
 fig_size = (8, 3)
 
 #%% First lets simulate the irrgated one 
-simu_days = np.sum(potato["stages_duration"])
+simu_days = np.sum(potato["stages_duration"][:-1])
 initial_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
 precipitations = []
 obs, info = cultivate_env.start(seed=seed)
@@ -159,7 +159,7 @@ v0 = -.95
 v1 = .9
 margin = .01
 fig, ax = plt.subplots(1,1)
-fig.set_size_inches(7.5, 3)
+fig.set_size_inches(7, 3)
 ax.set_ylabel("Depth [m]")
 ax.set_title("Root depth")
 layers_depth = np.array([0, .15, .35, .55, .75, .95])
@@ -181,7 +181,7 @@ ax.set_ylim(1.0, -0.02)
 
 #%%
 fig, ax = plt.subplots(1,1)
-fig.set_size_inches(7.5, 3)
+fig.set_size_inches(7, 3)
 ax.plot(simu_time, crop_data["f_c"][1:], color = "gray")
 ax.vlines(t[0], 0, 1, color=color, linestyles="--")
 ax.vlines(t[1], 0, 1, color=color, linestyles="--")
@@ -197,9 +197,6 @@ ax.text((t[1]+t[2])/2, v1, "Mid Season Stage", ha = "center")
 ax.text((t[2]+t[3])/2, v1, "Final Stage", ha = "center")
 fig.tight_layout()
 fig.savefig(plots_path + "coverage.png", dpi=300)
-
-
-
 
 #%%
 #plt.plot(crop_data["Ks"], label=r"$K_{\text{e bound}}$")
@@ -220,7 +217,7 @@ plt.plot(crop_data["ET_p"], label= r"$ET_p$")
 plt.plot(crop_data["ET_0"], label= r"$ET_0$")
 plt.plot(crop_data["ET_a"], label= r"$ET_a$")
 fig = plt.gcf() 
-fig.set_size_inches(7.5,3)
+fig.set_size_inches(7,3)
 plt.legend()
 plt.xlabel("Days since plantation")
 plt.ylabel("Water depth [mm]")
