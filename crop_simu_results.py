@@ -34,7 +34,7 @@ seed = 1
 fig_size = (8, 3)
 
 #%% First lets simulate the irrgated one 
-simu_days = np.sum(potato["stages_duration"][:-1])
+simu_days = np.sum(potato["stages_duration"])
 initial_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
 precipitations = []
 obs, info = cultivate_env.start(seed=seed)
@@ -56,7 +56,7 @@ crop_data_nw, soil_data_nw = cultivate_nw.crops[0].get_hist_data()
 t = np.cumsum([0] + potato["stages_duration"]) 
 v0 = potato["root_depth_max"] +.2
 v1 = potato["f_c"][1] 
-stage_names = ["Initial Stage", "Development Stage", "Mid Season Stage", "Late Stage"]
+stage_names = ["Initial Stage", "Development Stage", "Middle Season Stage", "Late Stage"]
 colors = ["tab:blue", "tab:green", "tab:orange", "tab:red"]
 
 simu_time = np.array(range(simu_days))
@@ -72,9 +72,15 @@ ax.plot(simu_time, crop_data["root_depth"][:-1], label="Irrigation profile 1", a
 #ax.plot(simu_time, crop_data["root_depth"][:-1], label="Irrigation profile 1", marker='o', linestyle='-')
 ax.plot(simu_time2[:-1], crop_data_2["root_depth"][:-1], label="Irrigation profile 2", alpha = .75, marker='o', markersize=2, linestyle='-')
 ax.plot(simu_time_nw, crop_data_nw["root_depth"], label="No Irrigation", alpha = .75, marker='o', markersize=2, linestyle='-')
-ax.set_ylabel("Root Depth (m)")
-ax.set_xlabel("Time since plantation (days)")
+# Add an arrow pointing to the last point of the no irrigation profile
+ax.annotate("Wilting", xy=(simu_time_nw[-1], crop_data_nw["root_depth"][-1]), 
+            xytext=(simu_time_nw[-1] + 10, crop_data_nw["root_depth"][-1] + 0.2),
+            arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=10)
+ax.set_ylabel("Root Depth (m)", fontsize=12)
+ax.set_xlabel("Time since plantation (days)", fontsize=12)
+#ax.hlines(potato["root_depth_max"], 0, simu_days, color="gray", linestyles="--", label="Nominal root depth")
 ax.invert_yaxis()
+ax.grid(axis='y', which="major")
 
 for idx, item in enumerate(t[:-1]):
     a, b = (t[idx], t[idx+1]) 
@@ -86,7 +92,7 @@ ax.legend(loc = "upper right")
 fig.tight_layout()
 fig.savefig(plots_path + "root_depth.png", dpi=300)
 
-#%% plot the coverage 
+#%% plot the foliar coverage 
 vv1 = 100*(v1 *3+ max(crop_data["f_c"][:-1]))/4
 
 fig_1, ax_1 = plt.subplots()
@@ -102,10 +108,26 @@ for idx, item in enumerate(t[:-1]):
 ax_1.plot(simu_time, 100*crop_data["f_c"][:-1], alpha = .5, label = "Irrigation profile 1", marker='o', markersize=2, linestyle='-')
 ax_1.plot(simu_time2[:-1], 100*crop_data_2["f_c"][:-1], alpha = .5, label = "Irrigation profile 2", marker='o', markersize=2, linestyle='-')
 ax_1.plot(simu_time_nw, 100*crop_data_nw["f_c"], alpha = .5, label = "No Irrigation", marker='o', markersize=2, linestyle='-')
+# Find the first point in the late stage where the coverage percentage reaches 0.2
+late_stage_start = t[3]
+late_stage_end = t[4]
+
+first_point_profile_1 = next((i for i in range(late_stage_start, late_stage_end) if crop_data["f_c"][i] <= 0.2), simu_time[-1])
+first_point_profile_2 = next((i for i in range(late_stage_start, late_stage_end) if crop_data_2["f_c"][i] <= 0.2), simu_time2[-1])
+
+# Add arrows pointing to the first points reaching 0.2 in the late stage
+ax_1.annotate("Senescence", xy=(first_point_profile_1, 100 * crop_data["f_c"][first_point_profile_1]), 
+              xytext=(first_point_profile_1 - 15, 100 * crop_data["f_c"][first_point_profile_1] - 10),
+              arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=10)
+
+ax_1.annotate("Senescence", xy=(first_point_profile_2, 100 * crop_data_2["f_c"][first_point_profile_2]), 
+              xytext=(first_point_profile_2 - 15, 100 * crop_data_2["f_c"][first_point_profile_2] - 10),
+              arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=10)
 ax_1.set_ylim(0, 100*v1)
-ax_1.set_ylabel(r"Coverage percentage (\%)")
-ax_1.set_xlabel("Time since plantation (days)")
+ax_1.set_ylabel(r"Coverage percentage (\%)", fontsize=12)
+ax_1.set_xlabel("Time since plantation (days)", fontsize=12)
 ax_1.legend(loc = "best")
+ax_1.grid(axis='y')
 fig_1.tight_layout()
 fig_1.savefig(plots_path + "coverage.png", dpi=300)
 

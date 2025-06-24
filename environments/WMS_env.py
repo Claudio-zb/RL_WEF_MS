@@ -55,7 +55,7 @@ class CultivateEnv(gym.Env):
         array_obs = obs_dict_2_obs_array(dict_obs)
 
         for crop in self.cultivates.crops:
-            if crop.is_active():  # if any crop is active, the episode is not terminated
+            if crop.days_since_plantation < np.sum(crop.stages_duration[:-1]):  # if any crop is active, the episode is not terminated
                 break
             terminated = True  # all crops are inactive, so the episode is terminated
 

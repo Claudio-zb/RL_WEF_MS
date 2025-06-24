@@ -302,7 +302,7 @@ class Crop:
         self.hist_data.append(obs)
         # compute in which stage i am
 
-        if self.days_since_plantation == sum(self.stages_duration[:-1]):
+        if self.days_since_plantation == sum(self.stages_duration):
             self._is_active = False
 
         if np.isclose(self.Ks, 0.0):
@@ -481,7 +481,7 @@ class Crop:
             Ky = self.Ky_list[2]
         elif t <= t3:  # late season
             Kcb = (self.Kcb_list[2] - self.Kcb_list[1]) / (t3 - t2) * (t - t2) + self.Kcb_list[1]
-            self.f_c = np.max([self.f_c + (self.f_c_list[2] - self.f_c_list[1]) / (t3 - t2), 0.1])
+            self.f_c = np.max([self.f_c + (self.f_c_list[2] - self.f_c_list[1]) / (t3 - t2), self.f_c_list[-1]])
             Ky = self.Ky_list[3]
         else:  # goodbye
             Kcb, self.f_c = 0.0, 0.0
