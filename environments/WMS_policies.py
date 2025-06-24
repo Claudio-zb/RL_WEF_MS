@@ -226,7 +226,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         min_bound = np.zeros(self.horizon) 
         bounds = (min_bound, max_bound)
         pred_disturbances = []
-        et_regresors = self.weather_data.iloc[timestamp-7:timestamp]["ET_0"].values
+        et_regresors = self.weather_data.iloc[timestamp-self.horizon:timestamp]["ET_0"].values
         et_predictions = self.et_model.predict(et_regresors, n_steps=self.horizon)
         
         precipitation_preds = self.weather_data.iloc[timestamp:timestamp+self.horizon]["precipitation"].values
@@ -254,7 +254,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
         return action  # [m]
     
     def cost_function(self, obs: dict[str, np.ndarray], actions: np.ndarray, pred_disturbances: List[dict],
-                      weights:np.ndarray = np.array([1.0, 1.0, 1,0])) -> float:
+                      weights:np.ndarray = np.array([1.0, 1.0, 1.25])) -> float:
         """Cost function for the PSO"""
         cost = np.zeros(actions.shape[0])
         prev_obs = obs["potato"]
@@ -269,6 +269,7 @@ class MPCIrrigationPolicy(IrrigationPolicy):
                     Ky = obs_array[10]
                     delta_Ks = Ks - prev_obs[7] 
                     cost[particle] += -weights[0]*(1-Ky*(1-Ks))**2 + weights[1]*(delta_Ks)**2 + weights[2]*(action[idx]*1000/20)**2
+                    prev_obs = obs_array
         return cost
     
     def get_predicted_disturbances(self, measured_disturbances: np.ndarray):
