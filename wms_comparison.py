@@ -29,7 +29,6 @@ rb_policy = RBIrrigationPolicy(n_crops=1, model=deepcopy(potatos), year=year)
 # %%
 doy = potatos.crops[0].plantation_day
 season_duration = 115-30
-
 obs_data = []
 actions_data = []
 seed = 42

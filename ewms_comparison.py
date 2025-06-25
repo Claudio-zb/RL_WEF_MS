@@ -25,7 +25,7 @@ wms_rl_model = SAC.load("logs/wms/weights_5/sac/best_model")
 irrigation_rl_policy = RLIrrigationPolicy(n_crops=1, rl_policy=wms_rl_model, isNormalized=True, year=2018)
 
 # Bottom level controllers
-ems_rl_model = SAC.load("logs/ems/weights_2/sac/best_model")
+ems_rl_model = TD3.load("logs/ems/weights_6/td3/best_model")
 pv_model = Forecaster(load_model("predictive_models/pv_model.pt"))
 pd_model = Forecaster(load_model("predictive_models/pd_model.pt"))
 
@@ -66,8 +66,8 @@ ems_mpc_2_day.init_buffer(pv_data, pd_data)
 simu_mpc_mpc.ems_policy = copy.deepcopy(ems_mpc_2_day)
 simu_rl_mpc.ems_policy = copy.deepcopy(ems_mpc_1_day) 
 
-simu_cases = [simu_mpc_rl, simu_mpc_rb, simu_mpc_mpc, simu_rl_rl, simu_rl_rb, simu_rl_mpc]
-simu_names = ["mpc_rl", "mpc_rb", "mpc_mpc", "rl_rl", "rl_rb", "rl_mpc"]
+simu_cases = [simu_rl_rl, simu_rl_rb, simu_rl_mpc] # [simu_mpc_rl, simu_mpc_rb, simu_mpc_mpc, simu_rl_rl, simu_rl_rb, simu_rl_mpc]
+simu_names = ["rl_rl", "rl_rb", "rl_mpc"] #["mpc_rl", "mpc_rb", "mpc_mpc", "rl_rl", "rl_rb", "rl_mpc"][2:]
 
 
 #%% lets prepare the weather data
@@ -111,7 +111,11 @@ ref_tracking_error = []
 relative_yields = []
 water_usages = []
 
-for name in simu_names:
+plot_days = 3
+
+fig, axs = plt.subplots(3, 1, figsize = (10,6))
+
+for idx, name in enumerate(simu_names):
     simu_path = path + name
     crop_data = pickle.load(open(simu_path + "/crop_data.pkl", "rb"))
     soil_data = pickle.load(open(simu_path + "/soil_data.pkl", "rb"))
@@ -140,8 +144,8 @@ for name in simu_names:
     
     ref_tracking_error.append(np.mean(np.abs(errors)))  # in percentage
     water_usages.append(water_usage)
-
-    
+    axs[0].plot(mg_data["mg_dis"][144:144*(plot_days+1), 0])
+    axs[1].plot(mg_data["mg_actions"][144:144*(plot_days+1), 0],)
 #%% Plotting the results in bar plots
 simu_names2 = [name.replace("_", "+").upper() for name in simu_names]
 
