@@ -34,7 +34,7 @@ actions_data = []
 seed = 42
 policy_names = ["RL-Based", "MPC-Based", "Rule-Based"]
 policies: list[IrrigationPolicy] = [rl_policy, mpc_policy, rb_policy]
-run = True
+run = False
 if run:
     for idx, policy in enumerate(policies):
         index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
@@ -131,6 +131,12 @@ water_usages = []
 mpc_rews = []
 rl_rews = []
 
+preps = weather_data.iloc[index:index+85]["precipitation"].values 
+tt = np.arange(0,85, 1)
+fig, axs = plt.subplots(2,1, gridspec_kw={'height_ratios': [2, 1]}, figsize = (7,3.5))
+colors = ["tab:orange", "tab:green", "tab:purple"]
+#axs[0].step(tt, preps)
+#axs[0].set_title("Precipitations")
 for idx, name in enumerate(policy_names):
     observations = pickle.load(open(f"simu_results/wf_ms/{name}/observations.pkl", "rb"))
     actions = pickle.load(open(f"simu_results/wf_ms/{name}/actions.pkl", "rb"))
@@ -150,11 +156,31 @@ for idx, name in enumerate(policy_names):
     rl_cum_rew = rl_rew2(observations[:-1,:], actions, observations[1:,:], weights=reward_weights)[0]
     mpc_rews.append(mpc_cum_rew)
     rl_rews.append(rl_cum_rew)
+
+    axs[0].step(tt, actions*1000, label = "Irrigation", color=colors[idx] )
+    axs[0].step(tt, preps, label = "Precipitations")
+    #axs[0].step(tt, preps+ actions*1000, color = "tab:green")
+    if name.upper()[:-6] == "RULE":
+        name = "RB      "
+    axs[0].set_title("Infiltration events")
+    axs[0].set_ylabel("Water amount (mm)")
+    axs[0].set_ylim(0,11)
+    axs[0].legend()
+    #axs[idx+1].legend()
+    
     
     print(f"{policy_names[idx]} Total MPC Rewards :", mpc_cum_rew)
     print(f"{policy_names[idx]} Total RL Rewards :", rl_cum_rew)
     print(".................")
+    break
 
+axs[1].step(tt, observations[:-1,8]>=3, color = "black")
+axs[1].set_title("Water stress indicator $t^{stress}$")
+axs[1].set_ylabel("Activation")
+for ax in axs:
+    ax.grid(which = "both")
+fig.tight_layout()
+fig.savefig("Irrigation_rl.png", dpi = 300)
 
 #    fig, ax = plt.subplots(figsize=(8, 4))
 #    ax.plot(soil_data["layer_0_0"])
@@ -168,6 +194,17 @@ relative_yields = np.array(relative_yields)
 water_usages = np.array(water_usages)
 mpc_rews = np.array(mpc_rews)
 rl_rews = np.array(rl_rews)
+
+#%%
+crop_obs = observations
+fig, axs = plt.subplots(observations.shape[1], 1, figsize = (10, 20))
+
+for idx, ax in enumerate(axs):
+    ax.plot(crop_obs[:, idx])
+
+#%%
+
+plt.plot(crop_obs[:, 8]>=3)
 
 
 #%%

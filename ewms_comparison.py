@@ -110,9 +110,13 @@ ref_tracking_error = []
 relative_yields = []
 water_usages = []
 
-plot_days = 3
+plot_days = 2
+tt = np.linspace(0,plot_days*24, plot_days*144)
 
-fig, axs = plt.subplots(3, 1, figsize = (10,6))
+fig, axs = plt.subplots(3, 1, figsize = (7,7))
+fig2, axs2 = plt.subplots(2, 1, figsize = (7,5))
+linestyles = ["-", "-", "-"]#["dashed", "solid", "-."]
+colors = ["tab:blue", "tab:orange", "tab:green"]
 
 for idx, name in enumerate(simu_names):
     simu_path = path + name
@@ -135,17 +139,63 @@ for idx, name in enumerate(simu_names):
     relative_yield = np.exp(np.mean(np.log(1 - k_y * (1 - k_s))))
     relative_yields.append(relative_yield)
     water_usage = np.sum(mg_obs_144[:,1])
-    errors = v_reqs - mg_obs_144[:, 1]  # water requirements vs actual water usage
-    print(errors[:5])
+    mask = v_reqs != 0
+    errors = np.zeros_like(v_reqs)
+    errors[mask] = np.abs((v_reqs[mask] - mg_obs_144[:, 1][mask]) / v_reqs[mask]) * 100  # MAPE for nonzero v_reqs
+    #print(errors[:5])
 
     ref_tracking_error.append(np.mean(np.abs(errors)))  # in percentage
     water_usages.append(water_usage)
     if idx > 2:
-        axs[2].plot(mg_data["mg_obs"][144:144*(plot_days+1), 3],)
+        label = r"$Q_{pump}^{" + f"{name[3:].upper()}" + "}$"
+        label2 = f"Irr. Error {name[3:].upper()}"
+        
+        axs[2].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
+        
+        n_vreqs = np.array([v_reqs[1]]*144 + [v_reqs[2]]*144) 
+        axs2[1].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label2)
     else:
-        axs[1].plot(mg_data["mg_obs"][144:144*(plot_days+1), 3],)
+        label = r"$Q_{pump}^{" + f"{name[4:].upper()}" + "}$"
+        label2 = f"Irr. Error {name[4:].upper()}"
+        axs[1].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
 
-    axs[0].plot(mg_data["mg_dis"][144:144*(plot_days+1), 0])
+
+        n_vreqs = np.array([v_reqs[1]]*144 + [v_reqs[2]]*144) 
+        axs2[0].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label2)
+
+axs[0].plot(tt, mg_data["mg_dis"][144:144*(plot_days+1), 0], color = "tab:purple")
+axs[0].set_title("Solar radiation")
+axs[0].set_ylabel(r"$kW/m^2$")
+#axs[0].plot(mg_data["mg_obs"][144:144*(plot_days+1), 5])
+axs[2].set_title("Water extraction policies under RL-based WF-MS")
+axs[2].set_ylabel(r"$l/s$")
+axs[2].set_xlabel("Time (hours)")
+axs[2].set_ylim(0,1)
+
+axs[1].set_title("Water extraction policies under MPC-based WF-MS")
+axs[1].set_ylabel(r"$l/s$")
+axs[1].set_ylim(0,1)
+
+axs2[0].set_title("Irrigation Error for MPC-based WF-MS")
+axs2[0].legend()
+axs2[1].set_title("Irrigation Error for RL-based WF-MS")
+axs2[1].legend()
+
+axs2[0].set_ylabel(r"$l/s$")
+axs2[1].set_ylabel(r"$l/s$")
+
+axs2[1].set_xlabel(r"Time (hours)")
+
+
+for ax in axs[1:]: ax.legend()
+fig.tight_layout()
+fig2.tight_layout()
+
+fig.savefig("pumpings.png", dpi = 300)
+
+fig2.savefig("errors.png", dpi = 300)
+
+
 #%% Plotting the results in bar plots
 simu_names2 = [name.replace("_", "+").upper() for name in simu_names]
 
