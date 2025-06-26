@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from tabulate import tabulate
 from matplotlib.colors import to_hex
 import pickle
+import seaborn as sns
 
 
 plt.rcParams['text.usetex'] = True
@@ -34,7 +35,7 @@ set_of_weights = np.array([[1., 4.0, 1.],
                            [1., 2., 2.], 
                            [1., 4., 4.]])
 #%%
-run = True
+run = False
 if run:
     stats = np.zeros((3, len(set_of_weights), 2))  # [n agents, n weights, n metrics]
 
@@ -69,7 +70,26 @@ if run:
             stats[jdex, idx, 1] = np.sum(np.clip(mg_obs[:,5], -np.inf, 0)) 
     np.save("logs/ems/stats.npy", stats) 
 # %%
-stats = np.load("logs/ems/stats.npy")
+stats = np.zeros((3, len(set_of_weights), 2))
+for idx, weights in enumerate(set_of_weights):
+    path = f"logs/ems/weights_{idx}/"
+    for jdex, name in zip([0, 1, 2], ["sac", "td3", "ppo"]):
+            
+            simu_data = pickle.load(open(path + f"{name}/" + f"simu_data.pkl", "rb"))
+            mg_data = simu_data["mg_data"]
+            crop_data = simu_data["crop_data"]
+            soil_data = simu_data["soil_data"]
+            
+            mg_obs = mg_data["mg_obs"]
+            mg_obs_144 = mg_data["end_of_day_samples"]
+            v_reqs = crop_data["v_reqs"]
+            errors = v_reqs - mg_obs_144[:, 1]  # water requirements vs actual water usage
+            mape = np.abs(errors) / (np.abs(v_reqs) + 1e-6)
+            stats[jdex, idx, 0] = np.mean(mape)*100 # in percentage
+            stats[jdex, idx, 1] = np.sum(np.clip(mg_obs[:,5], -np.inf, 0))
+
+#%%
+#stats = np.load("logs/ems/stats.npy")
 stats[:,:,1] = np.abs(stats[:, :, 1]) # bought energy in kWh
 
 min_val = np.inf
@@ -102,7 +122,46 @@ latex_table = tabulate(rows, headers=header, tablefmt="latex_raw", stralign="cen
 with open("logs/ems/table.tex", "w") as f:
     f.write(latex_table)
 
+    # Prepare data for heatmap
+    error_matrix = stats[:, :, 0]  # shape: (3, n_weights)
+    energy_matrix = stats[:, :, 1]
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    # Plot SMAPE error heatmap
+    sns.heatmap(error_matrix, annot=True, fmt=".2f", cmap="YlGnBu", 
+                xticklabels=[f"{w[1]:.1f}/{w[2]:.1f}" for w in set_of_weights],
+                yticklabels=algorithms, ax=axes[0], cbar_kws={'label': 'SMAPE (%)'})
+    axes[0].set_title("SMAPE Error (%)")
+    axes[0].set_xlabel("Weights ($\\bar{\\lambda}_1$/$\\bar{\\lambda}_2$)")
+    axes[0].set_ylabel("Algorithm")
+
+    # Plot Energy heatmap
+    sns.heatmap(energy_matrix, annot=True, fmt=".0f", cmap="YlOrRd", 
+                xticklabels=[f"{w[1]:.1f}/{w[2]:.1f}" for w in set_of_weights],
+                yticklabels=algorithms, ax=axes[1], cbar_kws={'label': 'Energy (kWh)'})
+    axes[1].set_title("Bought Energy (kWh)")
+    axes[1].set_xlabel("Weights ($\\bar{\\lambda}_1$/$\\bar{\\lambda}_2$)")
+    axes[1].set_ylabel("Algorithm")
+
+    plt.tight_layout()
+    plt.show()
+
 # %%
-a = "logs/ems/weights_6/td3/simu_data.pkl"
-with open(a, "rb") as f:
-    data = pickle.load(f)
+
+
+fig, axs = plt.subplots(3, 3, squeeze=True, figsize=(7, 8), sharey='row')
+axs = axs.flatten()
+
+plot_training_curves = True
+if plot_training_curves:
+    stats = np.zeros((3, len(set_of_weights), 2))  # [n agents, n weights, n metrics]
+    for idx, weights in enumerate(set_of_weights):
+        path = f"logs/ems/weights_{idx}/"
+        
+        for jdex, name in zip([0, 1, 2], ["sac", "td3", "ppo"]):
+            data = np.load(path + name + "/evaluations.npz")
+            results = np.mean(data["results"], axis=1)
+            
+            axs[idx].plot(results)
+        

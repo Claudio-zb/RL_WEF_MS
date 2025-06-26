@@ -19,10 +19,9 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 #%% Top level controllers  
 
-irrigation_mpc_policy = MPCIrrigationPolicy(1, Cultivates(), year=2018)
-
 wms_rl_model = SAC.load("logs/wms/weights_5/sac/best_model")
 irrigation_rl_policy = RLIrrigationPolicy(n_crops=1, rl_policy=wms_rl_model, isNormalized=True, year=2018)
+irrigation_mpc_policy = MPCIrrigationPolicy(1, Cultivates(), year=2018)
 
 # Bottom level controllers
 ems_rl_model = TD3.load("logs/ems/weights_6/td3/best_model")
@@ -66,8 +65,8 @@ ems_mpc_2_day.init_buffer(pv_data, pd_data)
 simu_mpc_mpc.ems_policy = copy.deepcopy(ems_mpc_2_day)
 simu_rl_mpc.ems_policy = copy.deepcopy(ems_mpc_1_day) 
 
-simu_cases = [simu_rl_rl, simu_rl_rb, simu_rl_mpc] # [simu_mpc_rl, simu_mpc_rb, simu_mpc_mpc, simu_rl_rl, simu_rl_rb, simu_rl_mpc]
-simu_names = ["rl_rl", "rl_rb", "rl_mpc"] #["mpc_rl", "mpc_rb", "mpc_mpc", "rl_rl", "rl_rb", "rl_mpc"][2:]
+simu_cases = [simu_mpc_rl, simu_mpc_rb, simu_mpc_mpc, simu_rl_rl, simu_rl_rb, simu_rl_mpc]
+simu_names = ["mpc_rl", "mpc_rb", "mpc_mpc", "rl_rl", "rl_rb", "rl_mpc"]
 
 
 #%% lets prepare the weather data
@@ -121,8 +120,6 @@ for idx, name in enumerate(simu_names):
     soil_data = pickle.load(open(simu_path + "/soil_data.pkl", "rb"))
     mg_data = pickle.load(open(simu_path + "/mg_data.pkl", "rb"))
 
-    # mg_data.keys = 'mg_obs', 'mg_dis', 'mg_actions', 'end_of_day_samples'
-    # crop_data.keys = 'crop_obs', 'v_reqs', 'v_irrs'
     mg_obs = mg_data["mg_obs"]
     energy_purchased.append(np.sum(np.clip(mg_obs[:,5], -np.inf, 0)))
     
@@ -141,11 +138,14 @@ for idx, name in enumerate(simu_names):
     errors = v_reqs - mg_obs_144[:, 1]  # water requirements vs actual water usage
     print(errors[:5])
 
-    
     ref_tracking_error.append(np.mean(np.abs(errors)))  # in percentage
     water_usages.append(water_usage)
+    if idx > 2:
+        axs[2].plot(mg_data["mg_obs"][144:144*(plot_days+1), 3],)
+    else:
+        axs[1].plot(mg_data["mg_obs"][144:144*(plot_days+1), 3],)
+
     axs[0].plot(mg_data["mg_dis"][144:144*(plot_days+1), 0])
-    axs[1].plot(mg_data["mg_actions"][144:144*(plot_days+1), 0],)
 #%% Plotting the results in bar plots
 simu_names2 = [name.replace("_", "+").upper() for name in simu_names]
 

@@ -59,7 +59,7 @@ set_of_weights = np.array([[1., 4.0, 1.],
 
 weights_dict = {index: weight for index, weight in enumerate(set_of_weights)}
 
-train = True
+train = False
 if train:
     for idx, weights in enumerate(set_of_weights):
 
@@ -97,7 +97,7 @@ if train:
 
 #%% Plotting the training curves
 
-plot_curves = False
+plot_curves = True
 h = 4
 window = 1
 
