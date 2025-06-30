@@ -148,7 +148,8 @@ for idx, name in enumerate(simu_names):
     water_usages.append(water_usage)
     if idx > 2:
         label = r"$Q_{pump}^{" + f"{name[3:].upper()}" + "}$"
-        label2 = f"Irr. Error {name[3:].upper()}"
+        label2 = r"$Q_{irr}^{" + f"{name[3:].upper()}" + "}$"
+        #label2 = r"$\pi_{we}^{" + f"{name[3:].upper()}" + "}$"
         
         axs[2].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
         
@@ -156,7 +157,8 @@ for idx, name in enumerate(simu_names):
         axs2[1].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label2)
     else:
         label = r"$Q_{pump}^{" + f"{name[4:].upper()}" + "}$"
-        label2 = f"Irr. Error {name[4:].upper()}"
+        label2 = r"$Q_{irr}^{" + f"{name[4:].upper()}" + "}$"
+        #label2 = r"$\pi_{we}^{" + f"{name[4:].upper()}" + "}$"
         axs[1].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
 
 
@@ -164,25 +166,29 @@ for idx, name in enumerate(simu_names):
         axs2[0].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label2)
 
 axs[0].plot(tt, mg_data["mg_dis"][144:144*(plot_days+1), 0], color = "tab:purple")
-axs[0].set_title("Solar radiation")
-axs[0].set_ylabel(r"$kW/m^2$")
+axs[0].set_ylabel(r"Solar radiation $(kW/m^2$)")
+axs[0].grid(which = "both")
 #axs[0].plot(mg_data["mg_obs"][144:144*(plot_days+1), 5])
-axs[2].set_title("Water extraction policies under RL-based WF-MS")
-axs[2].set_ylabel(r"$l/s$")
+axs[2].set_title("RL-based WF-MS")
+axs[2].set_ylabel(r"Water extraction $(l/s)$")
 axs[2].set_xlabel("Time (hours)")
 axs[2].set_ylim(0,1)
+axs[2].grid(which = "both")
 
-axs[1].set_title("Water extraction policies under MPC-based WF-MS")
-axs[1].set_ylabel(r"$l/s$")
+axs[1].set_title("MPC-based WF-MS")
+axs[1].set_ylabel(r"Water extraction $(l/s)$")
 axs[1].set_ylim(0,1)
+axs[1].grid(which = "both")
 
-axs2[0].set_title("Irrigation Error for MPC-based WF-MS")
+axs2[0].set_title("MPC-based WF-MS")
 axs2[0].legend()
-axs2[1].set_title("Irrigation Error for RL-based WF-MS")
+axs2[1].set_title("RL-based WF-MS")
 axs2[1].legend()
+axs2[0].grid(which = "both")
+axs2[1].grid(which = "both")
 
-axs2[0].set_ylabel(r"$l/s$")
-axs2[1].set_ylabel(r"$l/s$")
+axs2[0].set_ylabel(r"Irrigation Error $(l/s)$")
+axs2[1].set_ylabel(r"Irrigation Error $(l/s)$")
 
 axs2[1].set_xlabel(r"Time (hours)")
 
@@ -191,9 +197,8 @@ for ax in axs[1:]: ax.legend()
 fig.tight_layout()
 fig2.tight_layout()
 
-fig.savefig("pumpings.png", dpi = 300)
-
-fig2.savefig("errors.png", dpi = 300)
+fig.savefig("pumpings.pdf", dpi=300)
+fig2.savefig("errors.pdf", dpi=300)
 
 
 #%% Plotting the results in bar plots
