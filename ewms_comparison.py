@@ -68,6 +68,8 @@ simu_rl_mpc.ems_policy = copy.deepcopy(ems_mpc_1_day)
 simu_cases = [simu_mpc_rl, simu_mpc_rb, simu_mpc_mpc, simu_rl_rl, simu_rl_rb, simu_rl_mpc]
 simu_names = ["mpc_rl", "mpc_rb", "mpc_mpc", "rl_rl", "rl_rb", "rl_mpc"]
 
+#simu_cases = [simu_rl_rl, simu_rl_rb, simu_rl_mpc, simu_mpc_mpc]
+#simu_names = ["rl_rl", "rl_rb", "rl_mpc", "mpc_mpc"]
 
 #%% lets prepare the weather data
 doy = simu_mpc_rl.cultivate_env.crops[0].plantation_day
@@ -77,12 +79,13 @@ index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy
 path = "./simu_results/wef_ms/"
 #%% running the cases
 run = False
+save_data = False
 if run:
     for simu, name in zip(simu_cases, simu_names):
         print(f"Running {name} case study...")
         start_time = time.time()    
         np.random.seed(random_seed), random.seed(random_seed)
-        simu.run(init_doy=295, total_days=115-30) #115-30)
+        simu.run(init_doy=295, total_days=10)#115-30) #115-30)
 
         end_time = time.time()
         print(f"Finished {name} case study in {end_time - start_time:.2f} seconds.")
@@ -90,17 +93,26 @@ if run:
         mg_data, crop_data, soil_data = simu.get_simu_data()
         simu_path = path + name
 
-        if not os.path.exists(simu_path):
-            os.makedirs(simu_path)
+        if save_data:
 
-        with open(simu_path + "/mg_data.pkl", "wb") as f:
-            pickle.dump(mg_data, f)
+            if not os.path.exists(simu_path):
+                os.makedirs(simu_path)
 
-        with open(simu_path + "/crop_data.pkl", "wb") as f:
-            pickle.dump(crop_data, f)
+            with open(simu_path + "/mg_data.pkl", "wb") as f:
+                pickle.dump(mg_data, f)
 
-        with open(simu_path + "/soil_data.pkl", "wb") as f:
-            pickle.dump(soil_data, f)
+            with open(simu_path + "/crop_data.pkl", "wb") as f:
+                pickle.dump(crop_data, f)
+
+            with open(simu_path + "/soil_data.pkl", "wb") as f:
+                pickle.dump(soil_data, f)
+#%% get inference times 
+
+for simu, name in zip(simu_cases, simu_names):
+    inf_times = simu.get_we_inf_times()
+    print(f"{name} config had a mean inference time of {inf_times.mean()} +- {inf_times.std()} secods")
+
+print("set breakpoint in here")
 
 #%% compute the metrics
 
@@ -113,8 +125,8 @@ water_usages = []
 plot_days = 2
 tt = np.linspace(0,plot_days*24, plot_days*144)
 
-fig, axs = plt.subplots(3, 1, figsize = (7,7))
-fig2, axs2 = plt.subplots(2, 1, figsize = (7,5))
+fig, axs = plt.subplots(3, 1, figsize = (7,6))
+fig2, axs2 = plt.subplots(2, 1, figsize = (7,4))
 linestyles = ["-", "-", "-"]#["dashed", "solid", "-."]
 colors = ["tab:blue", "tab:orange", "tab:green"]
 
@@ -147,8 +159,8 @@ for idx, name in enumerate(simu_names):
     ref_tracking_error.append(np.mean(np.abs(errors)))  # in percentage
     water_usages.append(water_usage)
     if idx > 2:
-        label = r"$Q_{pump}^{" + f"{name[3:].upper()}" + "}$"
-        label2 = r"$Q_{irr}^{" + f"{name[3:].upper()}" + "}$"
+        label = f"{name[3:].upper()}" #r"$Q_{pump}^{" + f"{name[3:].upper()}" + "}$"
+        label2 = f"{name[3:].upper()}" #r"$Q_{irr}^{" + f"{name[3:].upper()}" + "}$"
         #label2 = r"$\pi_{we}^{" + f"{name[3:].upper()}" + "}$"
         
         axs[2].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
@@ -156,8 +168,8 @@ for idx, name in enumerate(simu_names):
         n_vreqs = np.array([v_reqs[1]]*144 + [v_reqs[2]]*144) 
         axs2[1].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label2)
     else:
-        label = r"$Q_{pump}^{" + f"{name[4:].upper()}" + "}$"
-        label2 = r"$Q_{irr}^{" + f"{name[4:].upper()}" + "}$"
+        label = f"{name[4:].upper()}"#r"$Q_{pump}^{" + f"{name[4:].upper()}" + "}$"
+        label2 = f"{name[4:].upper()}"#r"$Q_{irr}^{" + f"{name[4:].upper()}" + "}$"
         #label2 = r"$\pi_{we}^{" + f"{name[4:].upper()}" + "}$"
         axs[1].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
 
@@ -238,7 +250,7 @@ plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig(path + "energy_purchased.png", dpi=300)
 
-plt.figure(figsize=(8, 4))
+plt.figure(figsize=(6.5, 4))
 plt.grid(axis='y', alpha=0.75)
 plt.bar(simu_names2, net_energy, color=colors[:len(simu_names)])
 #plt.xlabel('Simulation Cases')
@@ -248,7 +260,7 @@ plt.tight_layout()
 plt.savefig(path + "net_energy.png", dpi=300)
 
 # Plot the reference tracking error
-plt.figure(figsize=(8, 4))
+plt.figure(figsize=(6.6, 4))
 plt.bar(simu_names2, ref_tracking_error, color=colors[:len(simu_names)])
 plt.xlabel('Simulation Cases')
 plt.ylabel('Reference Tracking Error %')

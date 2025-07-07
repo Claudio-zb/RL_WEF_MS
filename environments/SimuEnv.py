@@ -8,7 +8,7 @@ import numpy as np
 from environments.utils.funcionesEMS import *
 import copy
 import random
-
+import time
 
 class SimuEnv:
     def __init__(self, irrigation_policy: Callable, ems_policy: PumpingPolicy, 
@@ -42,7 +42,10 @@ class SimuEnv:
         self.crop_data: dict[str, np.ndarray[np.floating, int]] = {}
         self.soil_data: dict[str, np.ndarray[np.floating, int]] = {}
         self.init_year = year
-
+        #self.we_inf_times:np.ndarray[np.floating, int] = np.zeros(0) 
+        #self.wf_inf_times:np.ndarray[np.floating, int] = np.zeros(0) 
+        self.we_inf_times:list[np.floating] = [] 
+        self.wf_inf_times:list[np.floating] = [] 
 
         self.surface_area: float = 1000  # [m2]
         self.update_10_min_weather()
@@ -89,7 +92,9 @@ class SimuEnv:
                 prev_mg_obs = copy.deepcopy(mg_obs)
                 disturbances = self.get_disturbances(self.doy, i)
                 
+                t0 = time.time()
                 mg_action = self.ems_policy.get_action(v_reqs, mg_obs, disturbances)
+                self.we_inf_times.append(time.time() - t0)
                 mg_obs = self.microgrid_env.next_step(mg_action, disturbances)
 
                 mg_observations[day*144 + i + 1, :] = mg_obs
@@ -124,6 +129,11 @@ class SimuEnv:
                           }
         
         return
+
+    def get_we_inf_times(self) -> np.ndarray[np.floating, int]:
+        "returns an array with thi inference time of the action computed by the we-ms"
+        inf_times = np.array(self.we_inf_times)
+        return inf_times
 
     def update_daily_weather(self, doy: int) -> dict:
 

@@ -163,7 +163,7 @@ for idx, name in enumerate(policy_names):
     if name.upper()[:-6] == "RULE":
         name = "RB      "
     axs[0].set_title("Infiltration events")
-    axs[0].set_ylabel("Water amount (mm)")
+    axs[0].set_ylabel("Water amount (mm)", fontsize=12)
     axs[0].set_ylim(0,11)
     axs[0].legend()
     #axs[idx+1].legend()
@@ -176,7 +176,7 @@ for idx, name in enumerate(policy_names):
 
 axs[1].step(tt, observations[:-1,8]>=3, color = "black")
 axs[1].set_title("Water stress indicator $t^{stress}$")
-axs[1].set_ylabel("Activation")
+axs[1].set_ylabel("Activation", fontsize = 12)
 for ax in axs:
     ax.grid(which = "both")
 fig.tight_layout()
