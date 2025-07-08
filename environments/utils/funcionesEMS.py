@@ -4,6 +4,44 @@ from environments.Data.EMS.EMS_constants import *
 
 delay = 6 * 6  # 6 hours in 10 minutes intervals
 
+df = pd.read_csv("environments/Data/EMS/CCALAN.csv")
+df = df.ffill()
+
+def get_sept_to_jan(df):
+    # Convert the date column to datetime
+    df = df.copy()
+    df['Fecha Hora (YYYY-MM-DD HH:MM)'] = pd.to_datetime(df['Fecha Hora (YYYY-MM-DD HH:MM)'])
+    # Extract month
+    months = df['Fecha Hora (YYYY-MM-DD HH:MM)'].dt.month
+    # September (9) to January (1), including both
+    mask = (months >= 9) | (months <= 1)
+    return df[mask]
+
+df_sept_to_jan = get_sept_to_jan(df)
+
+# Enumerate how many seasons are in the data (September to January is one "season" per year)
+def get_seasons(df):
+    # Group by year, where season is from September (year N) to January (year N+1)
+    df = df.copy()
+    df['year'] = df['Fecha Hora (YYYY-MM-DD HH:MM)'].dt.year
+    df['month'] = df['Fecha Hora (YYYY-MM-DD HH:MM)'].dt.month
+    # For months Sep-Dec, season is the current year; for Jan, season is previous year
+    df['season'] = np.where(df['month'] == 1, df['year'] - 1, df['year'])
+    seasons = df['season'].unique()
+    return np.sort(seasons)
+
+seasons = get_seasons(df_sept_to_jan)
+
+# Function to select data from a certain season
+def select_season(df, season):
+    df = df.copy()
+    df['year'] = df['Fecha Hora (YYYY-MM-DD HH:MM)'].dt.year
+    df['month'] = df['Fecha Hora (YYYY-MM-DD HH:MM)'].dt.month
+    df['season'] = np.where(df['month'] == 1, df['year'] - 1, df['year'])
+    return df[df['season'] == season]
+
+# Number of seasons: 8
+# Seasons: [2013 2014 2015 2016 2017 2018 2019 2021]
 
 def get_demand() -> np.ndarray[Any, np.dtype[np.floating]]:
     """
@@ -29,46 +67,6 @@ def get_demand_2() -> np.ndarray[Any, np.dtype[np.floating]]:
     hourly_demand = np.genfromtxt("environments/Data/EMS/consumption.csv", delimiter=',')
     return hourly_demand.flatten()
 
-def get_temperatura(season: str = 'ver') -> np.ndarray[Any, np.dtype[np.floating]]:
-    """
-    Read the temperature data from the csv file and returns it as a numpy array 1 hour sampled
-
-    :param season: 'ver' for summer and 'inv' for winter
-    :return: Temperature data as a numpy array
-    """
-    if season == 'ver':
-        file_path = "environments/Data/EMS/data_temp_ver.csv"
-    else:
-        file_path = "environments/Data/EMS/data_temp_inv.csv"
-    temperatura = pd.read_csv(file_path)
-    temperatura = temperatura.interpolate().values.flatten()
-    return temperatura[delay:]
-
-
-def get_rad(season: str = 'ver') -> np.ndarray[Any, np.dtype[np.floating]]:
-    """
-    Read the radiation data from the csv file and returns it as a numpy array
-
-    :param season: 'ver' for summer and 'inv' for winter
-    :return: Radiation data as a numpy array
-
-    """
-    if season == 'ver':
-        file_path = "environments/Data/EMS/data_rad_ver.csv"
-    else:
-        file_path = "environments/Data/EMS/data_rad_inv.csv"
-
-    rad = pd.read_csv(file_path)
-    rad = np.array(rad.values).flatten()
-    return rad[delay:]
-
-
-def get_ref() -> np.ndarray[Any, np.dtype[np.floating]]:
-    """Read the references data from the csv file and returns it as a numpy array"""
-    refs = pd.read_csv('environments/Data/EMS/v_refs.csv')
-    refs = refs.values.flatten()
-    return refs
-
 
 def solar_power(rad: Union[float, np.ndarray[Any, np.dtype[np.floating]]], 
                 temp: Union[float, np.ndarray[Any, np.dtype[np.floating]]]) -> Union[float, np.ndarray[Any, np.dtype[np.floating]]]:
@@ -80,43 +78,12 @@ def solar_power(rad: Union[float, np.ndarray[Any, np.dtype[np.floating]]],
     :return: Solar power in kW
 
     """
-    Pn = 90
+    Pn = 81#90
     a_fv = -.0045
     Tn = 25
     T_cell = temp + rad / 800 * (Tn - 20)
     return (Pn * rad / 1000.) * (1 + a_fv * (T_cell - Tn))
 
-
-def follow_ref_rew_1(s:np.ndarray[Any, np.dtype[np.floating]], 
-                     a:np.ndarray[Any, np.dtype[np.floating]], 
-                     s_next:np.ndarray[Any, np.dtype[np.floating]]) -> np.ndarray[Any, np.dtype[np.floating]]:
-    """
-    Reward function for the follow reference task
-    :param s: current state
-    :param a: action
-    :param s_next: next state
-    :return: reward
-    """
-    reward = 0
-
-    if np.abs(s[0] - s[1]) > np.abs(s[0] - s_next[1]):
-        reward = reward + 1
-
-    elif s[0] < s[1] < s_next[1]:
-        reward = reward - 2
-
-    tank_reward = 0  # (s_next[3])*.8 if s_next[3] <= 5 else 0
-
-    reward = reward + tank_reward
-
-    # unfeasible action penalty
-    if s[3] <= 1 and a[0] > 0:
-        reward = reward - 5
-
-    if s[3] >= 5 and a[1] > 0:
-        reward = reward - 5
-
-    return np.array([reward], dtype=np.float32)
 
 
 def manage_batteries(SoE: float,

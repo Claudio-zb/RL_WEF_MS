@@ -35,20 +35,19 @@ class MicrogridEnv(gym.Env):
         self.time: int = 0
 
         # Load meteorological data and demand
+        self.pv_power_data: np.ndarray = np.zeros(0)
+        self.res_power_data:np.ndarray = np.zeros(0)
 
-        self.radiation_data: np.ndarray = get_rad('ver')
-        self.temperature_data: np.ndarray = get_temperatura('ver')
         self.demand_data: np.ndarray = get_demand()
-        self.L = len(self.temperature_data)  # length(temperatura)
-        self.N_dias: int = 70
+
+        self.N_dias: int = 90
 
         # Data variables 
 
-        self.p_fv: float = None
-        self.temperatura: npt.NDArray[np.float32] = None
-        self.p_load:float = None
-        self.radiation: npt.NDArray[np.float32] = None
-        self.V_refs: npt.NDArray[np.float32] = get_ref()  # V_refs
+        self.p_pv:float = None
+        self.p_res:float = None
+
+        self.V_refs: npt.NDArray[np.float32] = None  # V_refs
 
         # State variables en inputs
 
@@ -61,7 +60,7 @@ class MicrogridEnv(gym.Env):
         self.res_energy: float = 0.
         self.day_picked: int = 0
 
-        self.reward_fun = lambda s, a, s_next: default_rwd_fun(s, a, s_next, n_crops=n_crops, weights=weights)
+        self.reward_fun = lambda s, a, s_next: rwd_fun(s, a, s_next, n_crops=n_crops, weights=weights)
 
         # Bounds for observations
         obs_low = np.array(n_crops * [0.0] + n_crops * [Vt_min] + 3 * n_crops * [0.0] + [SoE_min, -10., 0, 0., 0.],
@@ -100,10 +99,12 @@ class MicrogridEnv(gym.Env):
 
         if options is not None:
             if options["mode"] == "eval":
-                np.random.seed(0)
-                self.day_picked = 0
+                year = 2018 #np.random.randint(2020, 2022) # fix the year
         else:
-            self.day_picked = np.random.randint(0, 70)
+            year = np.random.randint(2013, 2018)
+
+        self._update_solar_power(year)
+        self._update_consumption()
 
         V_tank = [np.minimum((Vt_max - Vt_min) * np.random.random_sample() + Vt_min,
                              (Vt_max - Vt_min) * np.random.random_sample() + Vt_min) for _ in
@@ -116,17 +117,52 @@ class MicrogridEnv(gym.Env):
         dqs=[np.array([0]) for _ in range(self.micro_grid.n_crops)]
         e_residual = 0.0
 
-
-        V_refs = [20.0 * np.random.rand() for _ in range(self.micro_grid.n_crops)]
+        self.V_refs = [20.0 * np.random.rand() for _ in range(self.micro_grid.n_crops)]
 
         SoE = (SoE_max - SoE_min) * np.random.random_sample() + SoE_min
         observation = np.array((V_tank + v_irrs + drawdowns + pbats + [SoE, e_residual, 0]))
         self.micro_grid.set_state(observation, dqs)
 
-        InitialObservation = self.set_initial_conditions(V_refs, 0)
-        info = {}
+        self.k = 0
 
-        return InitialObservation, info
+        self.p_pv, self.p_res = self._get_disturbances()
+        init_obs = self._get_obs()
+
+        return init_obs, {}
+    
+    def _update_solar_power(self, year:int):
+        """updates the solar power profile for a n-steps episodes in a specific year"""
+        
+        
+
+        data = select_season(df_sept_to_jan, year)
+        n_days = len(data)//144 -self.days_per_episode-1
+
+        s_day_1 = np.random.randint(0,n_days)
+        s_day_2 = np.random.randint(0,n_days)
+        rad_1 = data["Radiación Directa Normal (estimado) [mean,W/m2]"][s_day_1*144:(s_day_1+self.days_per_episode)*144+1].values
+        rad_2 = data["Radiación Directa Normal (estimado) [mean,W/m2]"][s_day_1*144:(s_day_1+self.days_per_episode)*144+1].values
+
+        temp_1 = data["Temperatura [mean,C]"][s_day_1*144:(s_day_1+self.days_per_episode)*144+1].values
+        temp_2 = data["Temperatura [mean,C]"][s_day_2*144:(s_day_2+self.days_per_episode)*144+1].values
+        alpha = np.random.rand()*0.2
+        rad = rad_1*alpha + rad_2*(1-alpha)
+        temp = temp_1*alpha + temp_2*(1-alpha)
+    
+        self.pv_power_data = solar_power(rad, temp)
+        return
+    
+    def _update_consumption(self):
+        """updates the residential consuption profile for n-steps episodes"""
+        s_day_1 = np.random.randint(0,95 - self.days_per_episode)
+        s_day_2 = np.random.randint(0,95 - self.days_per_episode)
+
+        profile_1 = self.demand_data[s_day_1*144:(s_day_1+self.days_per_episode)*144+1]
+        profile_2 = self.demand_data[s_day_2*144:(s_day_2+self.days_per_episode)*144+1]
+        alpha = np.random.rand()*0.2
+        self.res_power_data = profile_1*alpha + profile_2*(1-alpha)
+        return
+        
 
     def step(self, action: np.ndarray, mode: str = "train") -> Tuple[np.ndarray, float, bool, bool, dict]:
         """
@@ -137,8 +173,8 @@ class MicrogridEnv(gym.Env):
         """
         # Store the previous values of the variables to compute the reward
         obs = self._get_obs()
-        self.p_fv, self.p_d = self._get_disturbances()
-        _ = self.micro_grid.next_step(actions=action, disturbances=[self.p_fv, self.p_load])
+        self.p_pv, self.p_res = self._get_disturbances()
+        _ = self.micro_grid.next_step(actions=action, disturbances=[self.p_pv, self.p_res])
 
         truncated = False
         terminated = False
@@ -150,11 +186,6 @@ class MicrogridEnv(gym.Env):
 
             self.V_refs = [10.0 * np.random.rand() for _ in range(self.n_crops)]
 
-            if mode == "eval":
-                self.day_picked = (self.day_picked + 1) % 70
-            else:
-                self.day_picked = np.random.randint(0, 70)
-
         if self.k % (self.day_steps*self.days_per_episode) == 0:
             terminated = True
 
@@ -164,46 +195,13 @@ class MicrogridEnv(gym.Env):
 
         return observation_next, reward, terminated, truncated, Info
 
-
-    def _pick_meteorological_data(self, day_picked: int) -> Tuple[np.ndarray, np.ndarray]:
-        """Returns p_fv and p_demanded for a given day"""
-
-        n_steps = self.day_steps  # self.k + self.day_steps
-        start_index = day_picked * self.day_steps  # self.max_steps
-        radiation = self.radiation_data[start_index:start_index + n_steps + 1] + 1e-4 * np.random.randn(n_steps + 1)
-        temperatura = self.temperature_data[start_index:start_index + n_steps + 1] + 1e-2 * np.random.randn(n_steps + 1)
-        p_fv = solar_power(radiation, temperatura) + 1e-4 * np.random.randn(n_steps + 1)
-        p_demanded = self.demand_data[start_index:start_index + n_steps + 1]
-
-        return p_fv, p_demanded
-
     def _get_disturbances(self) -> Tuple[float, float]:
         """Returns the disturbances for the current time step
-        :return: Tuple of (p_fv, p_demanded)"""
-        n_steps = self.day_steps  # (144) # self.k + self.day_steps
-        idx = self.day_picked * n_steps + self.k  # self.max_steps
-        radiation = self.radiation_data[idx] + 1e-4 * np.random.randn()
-        temperatura = self.temperature_data[idx] + 1e-2 * np.random.randn()
-        p_fv = solar_power(radiation, temperatura) + 1e-4 * np.random.randn()
-        p_demanded = self.demand_data[idx]
-
-        return p_fv, p_demanded
-
-
-    def set_initial_conditions(self, v_refs: npt.NDArray[np.float32], instant_k: int):
-        """
-        Set the initial conditions of the environment
-        :param instant_k:
-        :param day_picked:
-        :param v_refs:
-        :return: Initial observation
-        """
-        self.k = instant_k
-        self.V_refs = v_refs
-        self.p_fv, self.p_load = self._get_disturbances()
-
-        init_obs = self._get_obs()
-        return init_obs
+        :return: Tuple of (p_pv, p_demanded)"""
+        
+        p_pv = self.pv_power_data[self.k]
+        p_demanded = self.res_power_data[self.k]
+        return p_pv, p_demanded
 
     def _create_dQ(self, V_req) -> Tuple[list, float]:
         """Returns the dQ sequence from a previous day and the last value for the pump action Q_p"""
@@ -237,9 +235,12 @@ class MicrogridEnv(gym.Env):
 
         observation = np.concatenate((self.V_refs, mg_obs, [p_pv, p_load]))
         return observation
+    
+    
 
 
-class NormalizationWrapper(gym.Wrapper):
+
+class NormalisedMG(gym.Wrapper):
     def __init__(self, env: MicrogridEnv):
         super().__init__(env)
         self.env = env
@@ -266,9 +267,21 @@ class NormalizationWrapper(gym.Wrapper):
         t_state = np.matmul(self.transform, state)
         info = {"state": state}
         return t_state, reward, terminated, truncated, info
+    
+class EvalMG(gym.Wrapper):
+    def __init__(self, env:NormalisedMG):
+        assert isinstance(env, NormalisedMG), "only NormalisedMG can be used with EvalMG"
+        super().__init__(env)
+        self.env:NormalisedMG = env
+
+    def reset(self, seed: int = None, options:dict = None):
+        return self.env.reset(options = {"mode": "eval"})
+    
+    def step(self, action):
+        return self.env.step(action)
 
 
-def default_rwd_fun(s, a, s_next, n_crops=1, weights:np.ndarray[float, int] = np.array([1.0, 4.0, 1.0])):
+def rwd_fun(s, a, s_next, n_crops=1, weights:np.ndarray[float, int] = np.array([1.0, 4.0, 1.0])):
     """ Default reward function 
     :param s: current state
     :param a: action

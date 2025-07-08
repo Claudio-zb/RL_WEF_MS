@@ -2,7 +2,7 @@
 import pandas as pd
 from stable_baselines3.common.monitor import Monitor
 
-from environments.EMS_env import MicrogridEnv, NormalizationWrapper
+from environments.EMS_env import MicrogridEnv, NormalisedMG, EvalMG
 from stable_baselines3.common.noise import OrnsteinUhlenbeckActionNoise
 from stable_baselines3.common.base_class import BaseAlgorithm
 
@@ -13,6 +13,7 @@ from stable_baselines3 import TD3, PPO, SAC
 from stable_baselines3.common.env_util import make_vec_env
 import matplotlib.pyplot as plt
 import time
+import pickle
 
 isExperimental = False
 
@@ -27,10 +28,20 @@ action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(2), sigma=0.1 * np.one
 n_envs = 8
 def create_wrapped_env(log_file=None, weights=np.array([1.0, 4.0, 1.0])):
     env = MicrogridEnv(weights=weights)
-    env = NormalizationWrapper(env)
+    env = NormalisedMG(env)
     if log_file is not None:
         env = Monitor(env, log_file)
     return env
+
+def create_eval_env(log_file=None, weights=None):
+    if weights is not None:
+        env = NormalisedMG(MicrogridEnv())
+    else:
+        env = NormalisedMG(MicrogridEnv(weights=weights))
+    eval_env = EvalMG(env)
+    if log_file is not None:
+        eval_env = Monitor(eval_env, log_file)
+    return eval_env
 
 
 # Create the vectorized environment
@@ -40,10 +51,10 @@ def create_callback(alg_name, environment, idx):
     return EvalCallback(environment, 
                         best_model_save_path=f'{location}weights_{idx}/{alg_name}',
                         log_path=f'{location}weights_{idx}/{alg_name}', 
-                        eval_freq=4*episode_length*16, 
+                        eval_freq=2*episode_length*16, 
                         deterministic=True, render=False)
 
-episode_length = 144*4
+episode_length = 144*3
 
 set_of_weights = np.array([[1., 4.0, 1.],
                            [1., 3.0, 1.],
@@ -56,8 +67,9 @@ set_of_weights = np.array([[1., 4.0, 1.],
                            [1., 4., 4.]])
 
 weights_dict = {index: weight for index, weight in enumerate(set_of_weights)}
+training_times = {}
 
-train = False
+train = True
 if train:
     for idx, weights in enumerate(set_of_weights):
 
@@ -65,13 +77,13 @@ if train:
 
         print(f"Training with weights {weights}")
 
-        sac_vec_env = make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs, seed=0)
         td3_vec_env = make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs, seed=0)
+        sac_vec_env = make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs, seed=0)
         ppo_vec_env = make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs, seed=0)
 
-        sac_env = create_wrapped_env(path + "sac/sac_monitor.csv", weights=weights)
-        td3_env = create_wrapped_env(path + "td3/td3_monitor.csv", weights=weights)
-        ppo_env = create_wrapped_env(path + "ppo/ppo_monitor.csv", weights=weights)
+        sac_env = create_eval_env(path + "sac/sac_monitor.csv", weights=weights)
+        td3_env = create_eval_env(path + "td3/td3_monitor.csv", weights=weights)
+        ppo_env = create_eval_env(path + "ppo/ppo_monitor.csv", weights=weights)
 
         sac_model = SAC("MlpPolicy", sac_env, verbose=1, 
                         train_freq=10, batch_size=512)
@@ -80,21 +92,24 @@ if train:
         ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, 
                         batch_size=episode_length*8, 
                         device="cpu", n_steps=episode_length*n_envs*2, 
-                        n_epochs=12,
-                        learning_rate=3e-4, ent_coef=0.1, clip_range=0.12)
+                        n_epochs=10,
+                        learning_rate=3e-4, ent_coef=0.1, clip_range=0.2)
 
-        models = [sac_model, td3_model, ppo_model]
+        models:list[BaseAlgorithm] = [sac_model, td3_model, ppo_model]
         envs = [sac_env, td3_env, ppo_env]
         models_name = ["sac", "td3", "ppo"]
         for model, name, env in zip(models, models_name, envs):
             start_time = time.time()
-            model.learn(total_timesteps=1_600_000, callback=create_callback(name, env, idx))
+            #model.learn(total_timesteps=1_600_000, callback=create_callback(name, env, idx))
+            model.learn(total_timesteps=1_000_000, callback=create_callback(name, env, idx))
             end_time = time.time()
+            training_times[name+str(weights)] = (end_time - start_time)
 
             print(f"Training {name} took {(end_time - start_time)} seconds")
 
+with open(f"{location}training_times.pkl", "wb") as f:
+    pickle.dump(training_times, f)
 #%% Plotting the training curves
-
 
 fig, axs = plt.subplots(3,3, figsize = (10, 6), sharex='col', sharey='row')
 #axs = axs.flatten()
@@ -118,8 +133,11 @@ for idx, weights in enumerate(set_of_weights):
             ax.set_ylabel("Mean Reward", fontsize=12)
         if (idx == 5):
             ax.set_xlabel("Timesteps", fontsize=12)
+    print(path)
 fig.tight_layout()
 fig.savefig(f"{location}training_curves.png", dpi=300)
 
 
 
+
+# %%
