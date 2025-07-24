@@ -1,8 +1,6 @@
 #%%
-import pandas as pd
 from stable_baselines3.common.monitor import Monitor
-
-from environments.EMS_env import MicrogridEnv, NormalizationWrapper
+from environments.EMS_env import MicrogridEnv, NormalisedMG, EvalMG
 from stable_baselines3.common.noise import OrnsteinUhlenbeckActionNoise
 from stable_baselines3.common.base_class import BaseAlgorithm
 
@@ -24,17 +22,27 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(2), sigma=0.1 * np.ones(2))
 
+
 n_envs = 8
 def create_wrapped_env(log_file=None, weights=np.array([1.0, 4.0, 1.0])):
     env = MicrogridEnv(weights=weights)
-    env = NormalizationWrapper(env)
+    env = NormalisedMG(env)
     if log_file is not None:
         env = Monitor(env, log_file)
     return env
 
+def create_eval_env(log_file=None, weights=None):
+    if weights is not None:
+        env = NormalisedMG(MicrogridEnv(mode="eval"))
+    else:
+        env = NormalisedMG(MicrogridEnv(weights=weights, mode="eval"))
+    eval_env = EvalMG(env)
+    if log_file is not None:
+        eval_env = Monitor(eval_env, log_file)
+    return eval_env
 
 # Create the vectorized environment
-
+episode_length = 144*4
 
 def create_callback(alg_name, environment, idx):
     return EvalCallback(environment, 
@@ -42,8 +50,6 @@ def create_callback(alg_name, environment, idx):
                         log_path=f'{location}weights_{idx}/{alg_name}', 
                         eval_freq=4*episode_length*16, 
                         deterministic=True, render=False)
-
-episode_length = 144*4
 
 set_of_weights = np.array([[1., 4.0, 1.],
                            [1., 3.0, 1.],
@@ -78,7 +84,7 @@ if train:
         td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, 
                         verbose=1, train_freq=10, batch_size=512, target_policy_noise=0.1)
         ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, 
-                        batch_size=episode_length*8, 
+                        batch_size=episode_length*n_envs, 
                         device="cpu", n_steps=episode_length*n_envs*2, 
                         n_epochs=12,
                         learning_rate=3e-4, ent_coef=0.1, clip_range=0.12)
@@ -114,12 +120,14 @@ for idx, weights in enumerate(set_of_weights):
         ax.set_ylim(-50, 850)
         ax.legend(fontsize=8)
 
-        if (idx == 1):
+        if (idx == 1 or idx == 2 or idx == 0):
             ax.set_ylabel("Mean Reward", fontsize=12)
-        if (idx == 5):
+        if (idx == 4 or idx == 5 or idx == 6):
             ax.set_xlabel("Timesteps", fontsize=12)
 fig.tight_layout()
 fig.savefig(f"{location}training_curves.png", dpi=300)
 
 
 
+
+# %%

@@ -40,11 +40,15 @@ precipitations = []
 obs, info = cultivate_env.start(seed=seed)
 obs_2, info_2 = cultivate_env_2.start(seed=seed)
 obs_nw, info_nw = cultivate_nw.start(seed=seed)
+actions1 = []
+actions2 = []
 for i in range(simu_days):
     daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
     precipitations.append(daily_weather_data["precipitation"])
-    obs = cultivate_env.step(irr_policy(obs), daily_weather_data)
-    obs_2 = cultivate_env_2.step(irr_policy_2(obs), daily_weather_data)
+    actions1.append(irr_policy(obs))
+    actions2.append(irr_policy_2(obs_2))
+    obs = cultivate_env.step(actions1[-1], daily_weather_data)
+    obs_2 = cultivate_env_2.step(actions2[-1], daily_weather_data)
     obs_nw = cultivate_nw.step([0.0], daily_weather_data)
 
 crop_data, soil_data = cultivate_env.crops[0].get_hist_data()
@@ -91,6 +95,21 @@ for idx, item in enumerate(t[:-1]):
 ax.legend(loc = "upper right")
 fig.tight_layout()
 fig.savefig(plots_path + "root_depth.png", dpi=300)
+
+#%% Plot the irrigation profiles 
+
+fig, ax = plt.subplots()
+ax.step(simu_time, np.array(actions1)*1000, label="Irrigation profile 1")
+ax.step(simu_time, np.array(actions2)*1000, label="Irrigation profile 2")
+ax.step(simu_time, np.zeros_like(simu_time), label="No Irrigation")
+ax.set_ylabel("Irrigation (mm)", fontsize=14)
+ax.set_xlabel("Time since plantation (days)", fontsize=14)
+ax.set_xlim(0,25)
+ax.grid(axis='y', which="major")
+ax.legend(loc = "upper right", fontsize=12)
+fig.set_size_inches(fig_size)
+fig.tight_layout()
+fig.savefig(plots_path + "irrigation_profiles.pdf", dpi=300)
 
 #%% plot the foliar coverage 
 vv1 = 100*(v1 *3+ max(crop_data["f_c"][:-1]))/4

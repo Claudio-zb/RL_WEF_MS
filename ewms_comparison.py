@@ -147,23 +147,25 @@ for idx, name in enumerate(simu_names):
     ref_tracking_error.append(np.mean(np.abs(errors)))  # in percentage
     water_usages.append(water_usage)
     if idx > 2:
-        label = r"$Q_{pump}^{" + f"{name[3:].upper()}" + "}$"
-        label2 = r"$Q_{irr}^{" + f"{name[3:].upper()}" + "}$"
+        label = f"{name[3:].upper()}"
+        if label == "MPC":
+            label = "MPC-1"
         #label2 = r"$\pi_{we}^{" + f"{name[3:].upper()}" + "}$"
         
         axs[2].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
         
         n_vreqs = np.array([v_reqs[1]]*144 + [v_reqs[2]]*144) 
-        axs2[1].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label2)
+        axs2[1].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label)
     else:
-        label = r"$Q_{pump}^{" + f"{name[4:].upper()}" + "}$"
-        label2 = r"$Q_{irr}^{" + f"{name[4:].upper()}" + "}$"
+        label = f"{name[4:].upper()}"
+        if label == "MPC":
+            label = "MPC-2"
         #label2 = r"$\pi_{we}^{" + f"{name[4:].upper()}" + "}$"
         axs[1].plot(tt, mg_data["mg_actions"][144:144*(plot_days+1), 0],label = label, ls = linestyles[np.mod(idx, 3)])
 
 
         n_vreqs = np.array([v_reqs[1]]*144 + [v_reqs[2]]*144) 
-        axs2[0].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label2)
+        axs2[0].plot(tt, n_vreqs - mg_data["mg_obs"][144+1:144*(plot_days+1)+1, 1], label = label)
 
 axs[0].plot(tt, mg_data["mg_dis"][144:144*(plot_days+1), 0], color = "tab:purple")
 axs[0].set_ylabel(r"Solar radiation $(kW/m^2$)")

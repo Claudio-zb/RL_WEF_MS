@@ -241,28 +241,37 @@ with open(output_path, "w", encoding="utf-8") as f:
 print(f"LaTeX table saved to {output_path}")
 
 
-#%% plot evaluation curves
+#%% Plotting the evaluation curves
 
-for index, folder in enumerate(folders):
+folders = [f"weights_{index}" for index in indexes]
+
+fig, axs = plt.subplots(3,3, figsize = (10, 6), sharex='col', sharey='row')
+#axs = axs.flatten()
+for idx, weights, folder in zip(range(len(set_of_weights)), set_of_weights, folders):
     path = f"logs/wms/{folder}/"
-    fig, ax = plt.subplots(figsize=(8, 4))
-    for alg_name in alg_names:
-        if alg_name == "ppo":
-            data = pd.read_csv(f"{path}{alg_name}/evaluations.csv")
-            ax.plot(data["timestep"], data["reward"], label=alg_name.upper())
+    for name in ["sac", "td3", "ppo"]:
+        ax = axs[np.mod(idx, 3), idx//3]
+        title_1 = r"$\bar{\lambda}_1 = " + f"{weights[0]} \quad$"
+        title_2 = r"$\bar{\lambda}_2 = " + f"{weights[1]}$"
+        ax.set_title(title_1 + title_2)
+
+        if name == "ppo":
+            data = pd.read_csv(f"{path}{name}/evaluations.csv")
+            ax.plot(data["timestep"], data["reward"], label=name.upper())
             ax.fill_between(data["timestep"], data["reward"] - data["std"], data["reward"] + data["std"], alpha=0.2)
         else:
-            data = np.load(f"{path}{alg_name}/evaluations.npz") 
+            data = np.load(f"{path}{name}/evaluations.npz") 
             avg_rews = data["results"].mean(axis=1)
             std_rews = data["results"].std(axis=1)
-            ax.plot(data["timesteps"], avg_rews, label=alg_name.upper())
+            ax.plot(data["timesteps"], avg_rews, label=name.upper())
             ax.fill_between(data["timesteps"], avg_rews - std_rews, avg_rews + std_rews, alpha=0.2)
-    plt.legend()
-    plt.grid()
-    plt.xlabel("Timesteps")
-    plt.ylabel("Episode Reward")
-    plt.tight_layout()
-    plt.savefig(f"{path}evaluation_curves.png", dpi=300)
-    plt.show()
 
-
+        if (idx == 1 or idx == 2 or idx == 0):
+            ax.set_ylabel("Mean Reward", fontsize=12)
+        if (idx == 4 or idx == 5 or idx == 6):
+            ax.set_xlabel("Timesteps", fontsize=12)
+    ax.legend(fontsize=8)
+    ax.grid(which='both')
+fig.tight_layout()
+fig.savefig("./logs/wms/training_curves.pdf", dpi=300)
+# %%
