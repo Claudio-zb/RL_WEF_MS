@@ -35,6 +35,7 @@ seed = 42
 policy_names = ["RL-Based", "MPC-Based", "Rule-Based"]
 policies: list[IrrigationPolicy] = [rl_policy, mpc_policy, rb_policy]
 run = False
+index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
 if run:
     for idx, policy in enumerate(policies):
         index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
@@ -163,7 +164,7 @@ for idx, name in enumerate(policy_names):
     if name.upper()[:-6] == "RULE":
         name = "RB      "
     axs[0].set_title("Infiltration events")
-    axs[0].set_ylabel("Water amount (mm)", fontsize=12)
+    axs[0].set_ylabel("Water amount (mm)")
     axs[0].set_ylim(0,11)
     axs[0].legend()
     #axs[idx+1].legend()
@@ -176,7 +177,7 @@ for idx, name in enumerate(policy_names):
 
 axs[1].step(tt, observations[:-1,8]>=3, color = "black")
 axs[1].set_title("Water stress indicator $t^{stress}$")
-axs[1].set_ylabel("Activation", fontsize = 12)
+axs[1].set_ylabel("Activation")
 for ax in axs:
     ax.grid(which = "both")
 fig.tight_layout()
@@ -205,9 +206,6 @@ for idx, ax in enumerate(axs):
 #%%
 
 plt.plot(crop_obs[:, 8]>=3)
-
-
-#%%
 
 
 #%%
@@ -240,7 +238,7 @@ with open("simu_results/wf_ms/wms_comparison_table.tex", "w") as f:
 
 
 #%%
-fig, ax1 = plt.subplots(figsize=(7, 3.5))
+fig, ax1 = plt.subplots(figsize=(5, 3))
 
 # Bar width
 bar_width = 0.35
@@ -251,7 +249,7 @@ indices = np.arange(len(policies))
 # Plot water usage
 water_bars = ax1.bar(indices - bar_width/2, water_usages, bar_width, label='Water Usage', color='b', alpha=0.7)
 #ax1.set_xlabel('Policies')
-ax1.set_ylabel('Water Usage (m³)', color='b')
+ax1.set_ylabel('Water Usage (m³)', color='b', fontsize=12)
 ax1.tick_params(axis='y', labelcolor='b')
 ax1.set_xticks(indices)
 ax1.set_xticklabels(policy_names)
@@ -266,7 +264,7 @@ ax1.set_ylim(400, max(water_usages) * 1.05)  # Set y-limit for water usage
 # Create a second y-axis for relative yield
 ax2 = ax1.twinx()
 yield_bars = ax2.bar(indices + bar_width/2, [ry * 100 for ry in relative_yields], bar_width, label='Relative Yield', color='g', alpha=0.7)
-ax2.set_ylabel('Relative Yield (\%)', color='g')
+ax2.set_ylabel('Relative Yield (\%)', color='g', fontsize=12)
 ax2.tick_params(axis='y', labelcolor='g')
 
 # Add values on top of relative yield bars

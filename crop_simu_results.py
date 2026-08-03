@@ -31,7 +31,7 @@ irr_policy = ScheduledIrrigationPolicy(n_crops=1, frequency=3, irr_amount=15)
 irr_policy_2 = ScheduledIrrigationPolicy(n_crops=1, frequency=3, irr_amount=5.)
 
 seed = 1
-fig_size = (8, 3)
+fig_size = (6, 3)
 
 #%% First lets simulate the irrgated one 
 simu_days = np.sum(potato["stages_duration"])
@@ -40,11 +40,15 @@ precipitations = []
 obs, info = cultivate_env.start(seed=seed)
 obs_2, info_2 = cultivate_env_2.start(seed=seed)
 obs_nw, info_nw = cultivate_nw.start(seed=seed)
+actions1 = []
+actions2 = []
 for i in range(simu_days):
     daily_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
     precipitations.append(daily_weather_data["precipitation"])
-    obs = cultivate_env.step(irr_policy(obs), daily_weather_data)
-    obs_2 = cultivate_env_2.step(irr_policy_2(obs), daily_weather_data)
+    actions1.append(irr_policy(obs))
+    actions2.append(irr_policy_2(obs_2))
+    obs = cultivate_env.step(actions1[-1], daily_weather_data)
+    obs_2 = cultivate_env_2.step(actions2[-1], daily_weather_data)
     obs_nw = cultivate_nw.step([0.0], daily_weather_data)
 
 crop_data, soil_data = cultivate_env.crops[0].get_hist_data()
@@ -56,7 +60,7 @@ crop_data_nw, soil_data_nw = cultivate_nw.crops[0].get_hist_data()
 t = np.cumsum([0] + potato["stages_duration"]) 
 v0 = potato["root_depth_max"] +.2
 v1 = potato["f_c"][1] 
-stage_names = ["Initial Stage", "Development Stage", "Middle Season Stage", "Late Stage"]
+stage_names = ["Initial Stage", "Development Stage", "Middle Stage", "Late Stage"]
 colors = ["tab:blue", "tab:green", "tab:orange", "tab:red"]
 
 simu_time = np.array(range(simu_days))
@@ -88,9 +92,24 @@ for idx, item in enumerate(t[:-1]):
                         color = colors[idx])
 
     ax.text((a + b)/2, v0, stage_names[idx], ha = "center", va = "bottom")
-ax.legend(loc = "upper right")
+#ax.legend(loc = "upper right")
 fig.tight_layout()
 fig.savefig(plots_path + "root_depth.png", dpi=300)
+
+#%% Plot the irrigation profiles 
+
+fig, ax = plt.subplots()
+ax.step(simu_time, np.array(actions1)*1000, label="Irrigation profile 1")
+ax.step(simu_time, np.array(actions2)*1000, label="Irrigation profile 2")
+ax.step(simu_time, np.zeros_like(simu_time), label="No Irrigation")
+ax.set_ylabel("Irrigation (mm)", fontsize=14)
+ax.set_xlabel("Time since plantation (days)", fontsize=14)
+ax.set_xlim(0,25)
+ax.grid(axis='y', which="major")
+ax.legend(loc = "upper right", fontsize=12)
+fig.set_size_inches(fig_size)
+fig.tight_layout()
+fig.savefig(plots_path + "irrigation_profiles.pdf", dpi=300)
 
 #%% plot the foliar coverage 
 vv1 = 100*(v1 *3+ max(crop_data["f_c"][:-1]))/4
@@ -125,7 +144,7 @@ ax_1.annotate("Senescence", xy=(first_point_profile_2, 100 * crop_data_2["f_c"][
               arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=10)
 ax_1.set_ylim(0, 100*v1)
 ax_1.set_ylabel(r"Coverage percentage (\%)", fontsize=12)
-ax_1.set_xlabel("Time since plantation (days)", fontsize=12)
+#ax_1.set_xlabel("Time since plantation (days)", fontsize=12)
 ax_1.legend(loc = "best")
 ax_1.grid(axis='y')
 fig_1.tight_layout()
@@ -144,62 +163,6 @@ ax_2.grid()
 ax_2.legend()
 fig_2.tight_layout()
 fig_2.savefig(plots_path + "K_s.png", dpi=300)
-
-#%% For the first case, let's plot the water content and the evapotranspiration
-
-    #%%
-color = "red"
-v0 = -.95
-v1 = .9
-margin = .01
-fig, ax = plt.subplots(1,1)
-fig.set_size_inches(7.5, 3)
-ax.set_ylabel("Depth [m]")
-ax.set_xlabel("Time since plantation [days]")
-ax.set_title("Root depth evolution")
-layers_depth = np.array([0, .15, .35, .55, .75, .95])
-layers_name = ["Evp Layer", "Layer 4", "Layer 3", "Layer 2", "Layer 1"]
-for idx, item in enumerate(layers_depth[:-1]):
-    ax.fill_between(simu_time, layers_depth[idx] + margin, layers_depth[idx+1], alpha  =.15, label = layers_name[idx])   
-    #ax.text(t[0]/2, (layers_depth[idx] + layers_depth[idx+1])/2, layers_name[idx], ha = "center", va = "center")
-    ax.vlines(t[idx], 0, layers_depth[-1], color=color, linestyles="--")
-
-ax.scatter(simu_time, crop_data["root_depth"][1:], color = "gray", label="Root depth", s=10)
-ax.scatter(simu_time2, crop_data_nw["root_depth"], color = "blue", label="No irrigation", s=10)
-
-ax.legend(loc = "lower left")
-
-# invert the y axis
-ax.invert_yaxis()
-ax.set_ylim(None, -0.02)
-fig.tight_layout()
-fig.savefig(plots_path + "root_depth.png", dpi=300)
-
-#%% 
-
-v0 = -.95
-v1 = .9
-margin = .01
-fig, ax = plt.subplots(1,1)
-fig.set_size_inches(7, 3)
-ax.set_ylabel("Depth [m]")
-ax.set_title("Root depth")
-layers_depth = np.array([0, .15, .35, .55, .75, .95])
-layers_name = ["Evp Layer", "Layer 4", "Layer 3", "Layer 2", "Layer 1"]
-for idx, item in enumerate(layers_depth[:-1]):
-    ax.vlines(t[idx], 0, 1, color=color, linestyles="--")
-    ax.fill_between(simu_time, layers_depth[idx], layers_depth[idx+1] - margin, alpha  =.2)
-    if idx != 4:
-        ax.text((t[3]+t[4])/2, (layers_depth[idx] + layers_depth[idx+1])/2, layers_name[idx], ha = "center", va = "center")
-    else:
-        ax.text(t[1]/2, (layers_depth[idx] + layers_depth[idx+1])/2, layers_name[idx], ha = "center", va = "center")
-
-ax.plot(simu_time, crop_data["root_depth"][1:], label="root depth")
-
-# invert the y axis
-ax.invert_yaxis()
-fig.tight_layout()
-ax.set_ylim(1.0, -0.02)
 
 #%%
 fig, ax = plt.subplots(1,1)

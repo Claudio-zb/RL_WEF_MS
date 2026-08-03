@@ -6,6 +6,9 @@ from stable_baselines3.common.base_class import BaseAlgorithm
 from environments.utils.funcionesEMS import *
 from environments.Data.EMS.EMS_constants import *
 from environments.utils.predict_utils import Forecaster
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 class PumpingPolicy(ABC):
     """
@@ -100,8 +103,6 @@ def manage_batteries_ca(SoE: ca.SX,
     :param P_pumps: list with the power demanded by the pumps
     :returns: Pbat, next_SoE, E_residual
     """
-    E_surplus = ca.SX(0.0)
-    E_deficit = ca.SX(0.0)
 
     P_residual = P_fv - P_demanded - P_pump
     Pbat = ca.if_else(ca.fabs(P_residual) > Pbat_max, ca.fmin(ca.fmax(P_residual, -Pbat_max), Pbat_max), P_residual)
@@ -204,6 +205,7 @@ class MPCPumpingPolicy(PumpingPolicy):
                     
 
         for j in range(N):
+            v_req = water_reqs[j//144]
             # Dynamics constraint
             
             constraints.append(X[0,j + 1] - (X[0, j] + (U[0, j]-U[1, j])*dt/1000))  # Vtanks
@@ -225,7 +227,12 @@ class MPCPumpingPolicy(PumpingPolicy):
 
             constraints.append(U[0,j])
             constraints.append(U[1,j])
-            cost += -e_res
+            v_req += 1e-6  # to avoid division by zero
+            ref_tracking = ((v_req - X[1, j+1])/v_req)**2
+            e_bought = ca.if_else(e_res > 0, 0, -e_res)
+            # cost += -e_bought**2
+            cost += ref_tracking + e_bought**2
+
 
         # Define bounds for constraints
         lbg = [0,0,0,0,0]  # Equality constraint for initial condition
@@ -237,19 +244,12 @@ class MPCPumpingPolicy(PumpingPolicy):
             ubg.extend([0, 0, 0, 0, 0])  # Upper bounds for dynamics
 
             lbg.extend([1, 0, -1, 20])  # Lower bounds 
-            ubg.extend([5, ca.inf, 1, 100])  # Upper bounds 
+            ubg.extend([5, v_req*1.05, 1, 100])  # Upper bounds
 
             # Inequality constraint for U[0, j] >= 0
             lbg.extend([0, 0])  # Lower bound
             ubg.extend([1.0, 1.0])  # No upper bound
-
-        # Final condition (equality constraint)
-        for i in range(1, self.days_ahead + 2):
-            constraints.append(X[1, N - (i-1)*144] - float(water_reqs[self.days_ahead + 1 - i]))  # Final condition (reference fulfillment)
-
-            lbg.append(0)
-            ubg.append(0)
-
+            
 
         # Combine decision variables into a single vector
         decision_variables = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
@@ -295,21 +295,236 @@ class MPCPumpingPolicy(PumpingPolicy):
         return action_array[:,0]
 
 
+class MPCPumpingPolicy2(PumpingPolicy):
+    def __init__(self, pv_model:Forecaster, pd_model:Forecaster, steps_ahead:int=143, debug_mode:bool=False):
+        super().__init__(n_crops=1)
         
+        self.prev_Q = 0.0  # Previous flow rate
+        self.pv_model = pv_model
+        self.domestic_model = pd_model
+        self.ten_min_counter:int = 0
+        self.days_ahead = steps_ahead
+        self.f_costs = []
+
+        self.pv:list = None
+        self.pd:list = None
+
+        self.pd_predictions:np.ndarray = None
+
+        self.previous_solution:np.ndarray = None
+        self.debug_mode = debug_mode  # Set to True to enable debug mode
+
+    def init_buffer(self, pv:np.ndarray, pd:np.ndarray):
+        """
+        Initialize the buffer with the historical data of the PV and PD
+        """
+        self.pv = pv.tolist()
+        self.pd = pd.tolist()
+        self.ten_min_counter = 0
+        self.f_costs = []
+        self.g_constrains = []
+    
+
+    def get_predictions(self, p_pv:float, p_d:float, N:int):
+        # Define the control horizon
+
+        #update the buffer
+        if self.pv is None or self.pd is None:
+            raise ValueError("Buffer not initialized. Call init_buffer() with historical data.")
+        
+        self.pv.append(p_pv)
+        self.pv.pop(0)
+        
+        if self.ten_min_counter % 6 == 0:  # Every 1 hour
+            self.pd.append(p_d)
+            self.pd.pop(0)
+            # now compute the predictions
+            predictions = self.domestic_model.predict(np.array(self.pd), N//6)
+            preds = [p_d] * 5
+            for value in predictions:
+                preds.extend([value] * 6)
+            self.pd_predictions = np.array(preds)
+        self.ten_min_counter += 1
+        
+        p_pv_predicted = self.pv_model.predict(np.array(self.pv), N)
+        return p_pv_predicted, self.pd_predictions[-N:]
+    
+    def get_action(self, water_req:np.ndarray, observation:np.ndarray, disturbances:np.ndarray) -> np.ndarray:
+        water_reqs = water_req[:self.days_ahead + 2]
+        N = self.days_ahead #(1 + self.days_ahead) * 144 - int(observation[6])  # Control horizon (144 ten-minute intervals in a day)
+        p_pv = disturbances[0]  # PV power
+        p_d = disturbances[1]  # Domestic power
+
+        v_tank, v_irr, drawdown, soe, i = observation[0], observation[1], observation[2], observation[4], int(observation[6])        
+    
+        # Define optimization variables
+        U = ca.SX.sym("U", 2, N)  # Control inputs
+        X = ca.SX.sym("X", 5, N + 1)  # States
+        K_p = 1.0
 
 
-
-         
+        # Define the cost function and constraints
+        cost = 0
+        p_pv_preds, p_d_preds = self.get_predictions(p_pv, p_d, N)
 
         
+        #    ax[0].plot(time, p_pv_preds, label='Predicted PV Power')
+        #    ax[0].set_xlim(0,288)
+        #    ax[0].set_ylim(0, max_power_sun*1.1)
 
+        #    ax[1].plot(time, p_d_preds, label='Predicted Domestic Power', color='orange')
+        #    ax[1].set_ylim(0, max_power_d*1.1)
+        #    ax[1].set_xlim(0,288)
 
+        #    fig.tight_layout()
+        #    code = str(i).zfill(3-len(str(i)))
+        #    fig.savefig(f"./pred_figs/mpc_predictions_{code}.png")
+        #    plt.close(fig)
+        # Initial conditions
+        constraints = [ (X[0,0] - v_tank),  # v_tanks
+                        (X[1,0] - v_irr),   # v_irrs
+                        (X[2,0] - soe),
+                        (X[3,0] - drawdown),
+                        (X[4,0] - self.prev_Q) ]  # previous flow rate
+            
+        # Define bounds for constraints
+        lbg = [0,0,0,0,0]  # Equality constraint for initial condition
+        ubg = [0,0,0,0,0]
+        for j in range(N):
+            # Dynamics constraint
+            daily_req = water_reqs[(i+j)//144]
+            constraints.append(X[0,j + 1] - (X[0, j] + (U[0, j]-U[1, j])*dt/1000))  # Vtanks
+            constraints.append(
+                X[1, j + 1] - ca.if_else(i+j == 144, 
+                                         (U[1, j] * dt / 1000), 
+                                         (X[1, j] + U[1, j] * dt / 1000))
+            )  # Virrs
 
+            p_bat, e_res = manage_batteries_ca(X[2, j], float(p_pv_preds[j]), float(p_d_preds[j]), K_p*U[0, j])
 
+            constraints.append(X[2,j + 1] - (X[2, j] + p_bat*dt/3600))
+            constraints.append(X[3,j + 1] - ((1-0.0540)*X[3,j] + 0.0939*U[0,j] - 0.1404*X[4,j]))
+            constraints.append(X[4,j + 1] - U[0,j])  # previous flow rate 
 
-        
+            # Equality constraints for dynamics
+            lbg.extend([0, 0, 0, 0, 0])  # Lower bounds for dynamics
+            ubg.extend([0, 0, 0, 0, 0])  # Upper bounds for dynamics
+            
+            # Update 
 
+            constraints.append(X[0,j+1])
+            constraints.append(X[1,j+1])
+            constraints.append(X[2,j+1])
+            constraints.append(X[3,j+1])
+            constraints.append(X[4,j+1])
 
+            #lbg.extend([1, 0, -1, 20])  # Lower bounds 
+            #ubg.extend([5, ca.inf, 1, 100])  # Upper bounds 
 
+            lbg.extend([1, 0, 20, -1, 0])  # Lower bounds 
+            ubg.extend([5, daily_req*1.05, 100, 1, 1])  # Upper bounds 
+            # ubg.extend([5, 1e6, 100, 1, 1])  # Upper bounds 
+            
+            # Inequality constraint for U[0, j] >= 0
 
+            constraints.append(U[0, j])
+            #constraints.append(U[0,j] - ca.fmax(0, ca.fmin(1.0, (5 - X[0, j+1])*1000/dt)))
+            constraints.append(U[1, j])
+            lbg.extend([0, 0])  # Lower bound
+            ubg.extend([1.0, 1.0])  # No upper bound
+            
+            
+            e_bought = ca.if_else(e_res > 0, 0, -e_res)
+            daily_req += 1e-6  # to avoid division by zero
+            ref_track = ((daily_req - X[1, j+1])/daily_req)**2
+            cost += ref_track + e_bought**2
 
+        # Combine decision variables into a single vector
+        decision_variables = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
+        # Create the NLP problem
+        nlp_control = {
+            'x': decision_variables,  # Decision variables
+            'f': cost,             # Objective function
+            'g': ca.vertcat(*constraints)  # Constraints
+        }
+        opts = {
+            'ipopt.print_level': 0,
+            'print_time': 0,
+            'ipopt.sb': 'yes'
+        }
+
+        # Create the solver
+        solver_control = ca.nlpsol('solver_control', 'ipopt', nlp_control, opts)
+        #
+        #if self.previous_solution is not None:
+            #x0 = self.previous_solution
+        #else:
+            #x0 = np.zeros((3 * (N+1) + 2 * N,))
+            #x0[:3] = np.array([v_tank, v_irr, soe])
+
+        x0 = np.zeros((5 * (N+1) + 2 * N,))
+
+        solution_control = solver_control(
+            x0=x0,  # Initial guess
+            lbg=lbg,  # Lower bound on constraints
+            ubg=ubg   # Upper bound on constraints
+        )
+
+        # Extract the solution for decision variables
+        solution_values = solution_control['x']
+
+        state_values = ca.reshape(solution_values[:5 * (N + 1)], (5, N + 1))
+        states = np.array(state_values)
+        # Extract the cost value
+        self.f_costs.append(solution_control['f'])
+        actions = ca.reshape(solution_values[5 * (N + 1):], (2, N))
+        actions_ = np.array(actions)
+        # plot the both predictions
+        if self.debug_mode:
+            self.capture_solution(states, actions_, N, i)
+
+        self.g_constrains.append(np.array(constraints).flatten())
+
+        self.previous_solution = ca.vertcat(
+                                            ca.vertcat(ca.reshape(state_values[:, 1:], -1, 1), ca.GenDM_zeros(3,)), 
+                                            ca.vertcat(ca.reshape(actions[:,1:], -1, 1), ca.GenDM_zeros(2,))
+                                            ).toarray()
+        action_array = np.array(actions)
+
+        self.prev_Q = action_array[0, 0]  # Update previous flow rate
+        # Print daily water requirement and curent v_irr
+        v_irr = states[1,1]
+        print('POLICY2')
+        return action_array[:,0]
+    
+
+    def capture_solution(self, states, actions_, N:int, i:int  ):
+        fig, axs = plt.subplots(3, 1, figsize=(10, 6))
+        time = np.arange(i, i+N+1)
+
+        axs[0].plot(time, states[0, :], label='v_tank')
+        axs[0].plot(time, states[1, :], label='v_irr')
+        axs[0].set_xlabel('Time step (10 min)')
+        axs[0].set_ylabel('Volume (m3)')
+        axs[0].legend()
+        axs[0].grid()
+        axs[0].set_ylim(0, 6)
+
+        axs[1].plot(time[:-1], actions_[0, :], label='Q_pump')
+        axs[1].plot(time[:-1], actions_[1, :], label='Q_irr')
+        axs[1].set_xlabel('Time step (10 min)')
+        axs[1].set_ylabel('Flow rate (m3/s)')
+        axs[1].set_ylim(0, 1.1)
+        axs[1].legend()
+        axs[1].grid()
+
+        axs[2].plot(time, states[2, :], label='SoE')
+        axs[2].set_xlabel('Time step (10 min)')
+        axs[2].set_ylabel('State of Energy (kWh)')
+        axs[2].legend()
+        axs[2].grid()
+        axs[2].set_ylim(0, 120)
+        fig.tight_layout()
+        code = str(i).zfill(3-len(str(i)))
+        fig.savefig(f"./pred_figs/mpc_debug_{code}.png")
+        plt.close(fig)
