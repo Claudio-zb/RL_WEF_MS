@@ -37,10 +37,10 @@ def create_wrapped_env(log_file=None, weights=np.array([1.0, 4.0, 1.0])):
 
 
 def create_callback(alg_name, environment, idx):
-    return EvalCallback(environment, 
+    return EvalCallback(environment,
                         best_model_save_path=f'{location}weights_{idx}/{alg_name}',
-                        log_path=f'{location}weights_{idx}/{alg_name}', 
-                        eval_freq=4*episode_length*16, 
+                        log_path=f'{location}weights_{idx}/{alg_name}',
+                        eval_freq=4*episode_length*16,
                         deterministic=True, render=False)
 
 episode_length = 144*4
@@ -51,8 +51,8 @@ set_of_weights = np.array([[1., 4.0, 1.],
                            [1., 1., 1.],
                             [1., 1., 2.],
                            [1., 1., 3.],
-                           [1., 1., 4.], 
-                           [1., 2., 2.], 
+                           [1., 1., 4.],
+                           [1., 2., 2.],
                            [1., 4., 4.]])
 
 weights_dict = {index: weight for index, weight in enumerate(set_of_weights)}
@@ -73,13 +73,13 @@ if train:
         td3_env = create_wrapped_env(path + "td3/td3_monitor.csv", weights=weights)
         ppo_env = create_wrapped_env(path + "ppo/ppo_monitor.csv", weights=weights)
 
-        sac_model = SAC("MlpPolicy", sac_env, verbose=1, 
+        sac_model = SAC("MlpPolicy", sac_env, verbose=1,
                         train_freq=10, batch_size=512)
-        td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise, 
+        td3_model = TD3("MlpPolicy", td3_env, action_noise=action_noise,
                         verbose=1, train_freq=10, batch_size=512, target_policy_noise=0.1)
-        ppo_model = PPO("MlpPolicy", ppo_env, verbose=1, 
-                        batch_size=episode_length*8, 
-                        device="cpu", n_steps=episode_length*n_envs*2, 
+        ppo_model = PPO("MlpPolicy", ppo_env, verbose=1,
+                        batch_size=episode_length*8,
+                        device="cpu", n_steps=episode_length*n_envs*2,
                         n_epochs=12,
                         learning_rate=3e-4, ent_coef=0.1, clip_range=0.12)
 

@@ -54,7 +54,7 @@ ax.plot(observations[:,3])
 #%%
 fig, axs = plt.subplots(2,1)
 axs[0].plot(observations[:,5])
-axs[1].plot(actions[:,0])   
+axs[1].plot(actions[:,0])
 
 # %%
 plt.plot(power_demanded[0:144*3])

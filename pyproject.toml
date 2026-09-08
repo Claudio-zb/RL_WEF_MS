@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rl-ems-research"
+version = "0.1.0"
+description = "Forecasting and control of a water-energy-food microgrid"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["rl_ems*", "environments*", "predictive_models*", "RL_algorithms*", "utils_functions*"]

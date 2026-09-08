@@ -11,8 +11,8 @@ from environments.WMS_policies import MPCIrrigationPolicy, RLIrrigationPolicy, S
 
 set_of_weights = np.array([[.9, .9, 1.2],
                            [.95, .95, 1.1],
-                           [1.0, 1.0, 1.0], 
-                           [1.05, 1.05, 0.9], 
+                           [1.0, 1.0, 1.0],
+                           [1.05, 1.05, 0.9],
                            [1.1, 1.1, 0.8]])
 
 set_of_weights2 = np.array([[0.90, 1.2, 0.90],
@@ -25,8 +25,8 @@ set_of_weights = np.concatenate((set_of_weights, set_of_weights2), axis=0)
 
 def evaluate_mpc(reward_weights:np.ndarray):
     for iteration, weights in enumerate(reward_weights):
-        
-        year = 2018 
+
+        year = 2018
         cultivates = Cultivates()
         doy = cultivates.crops[0].plantation_day
         season_duration = 115-30
@@ -44,7 +44,7 @@ def evaluate_mpc(reward_weights:np.ndarray):
             observations.append(obs_dict["potato"])
         observations = np.array(observations)
 
-        
+
         # save the geenrated data
         relative_yield = np.exp(np.mean(np.log(np.array(observations)[:, 7] + 1e-10)))
         water_usage = np.sum(actions)
@@ -60,9 +60,9 @@ if __name__ == "__main__":
 
 
 
-        
 
 
-            
-        
+
+
+
 

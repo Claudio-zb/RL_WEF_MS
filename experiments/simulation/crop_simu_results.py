@@ -2,10 +2,10 @@
 from environments.Cultivates import *
 from matplotlib import pyplot as plt
 from environments.WMS_policies import ScheduledIrrigationPolicy
-from environments.Data.WMS.WMS_profile import * 
+from environments.Data.WMS.WMS_profile import *
 import pandas as pd
 
-plots_path = "plots/agro_geo_model/"    
+plots_path = "plots/agro_geo_model/"
 plt.rcParams['text.usetex'] = True
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
@@ -33,7 +33,7 @@ irr_policy_2 = ScheduledIrrigationPolicy(n_crops=1, frequency=3, irr_amount=5.)
 seed = 1
 fig_size = (8, 3)
 
-#%% First lets simulate the irrgated one 
+#%% First lets simulate the irrgated one
 simu_days = np.sum(potato["stages_duration"])
 initial_weather_data = weather_data.loc[weather_data["doy"] == cultivate_env.doy].iloc[0].to_dict()
 precipitations = []
@@ -53,9 +53,9 @@ crop_data_nw, soil_data_nw = cultivate_nw.crops[0].get_hist_data()
 
 #prepare the data for plotting
 
-t = np.cumsum([0] + potato["stages_duration"]) 
+t = np.cumsum([0] + potato["stages_duration"])
 v0 = potato["root_depth_max"] +.2
-v1 = potato["f_c"][1] 
+v1 = potato["f_c"][1]
 stage_names = ["Initial Stage", "Development Stage", "Middle Season Stage", "Late Stage"]
 colors = ["tab:blue", "tab:green", "tab:orange", "tab:red"]
 
@@ -73,7 +73,7 @@ ax.plot(simu_time, crop_data["root_depth"][:-1], label="Irrigation profile 1", a
 ax.plot(simu_time2[:-1], crop_data_2["root_depth"][:-1], label="Irrigation profile 2", alpha = .75, marker='o', markersize=2, linestyle='-')
 ax.plot(simu_time_nw, crop_data_nw["root_depth"], label="No Irrigation", alpha = .75, marker='o', markersize=2, linestyle='-')
 # Add an arrow pointing to the last point of the no irrigation profile
-ax.annotate("Wilting", xy=(simu_time_nw[-1], crop_data_nw["root_depth"][-1]), 
+ax.annotate("Wilting", xy=(simu_time_nw[-1], crop_data_nw["root_depth"][-1]),
             xytext=(simu_time_nw[-1] + 10, crop_data_nw["root_depth"][-1] + 0.2),
             arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=10)
 ax.set_ylabel("Root Depth (m)", fontsize=12)
@@ -83,8 +83,8 @@ ax.invert_yaxis()
 ax.grid(axis='y', which="major")
 
 for idx, item in enumerate(t[:-1]):
-    a, b = (t[idx], t[idx+1]) 
-    ax.fill_between(simu_time[a:b], np.zeros_like(simu_time[a:b]), v0*np.ones_like(simu_time[a:b]), alpha = .2, 
+    a, b = (t[idx], t[idx+1])
+    ax.fill_between(simu_time[a:b], np.zeros_like(simu_time[a:b]), v0*np.ones_like(simu_time[a:b]), alpha = .2,
                         color = colors[idx])
 
     ax.text((a + b)/2, v0, stage_names[idx], ha = "center", va = "bottom")
@@ -92,14 +92,14 @@ ax.legend(loc = "upper right")
 fig.tight_layout()
 fig.savefig(plots_path + "root_depth.png", dpi=300)
 
-#%% plot the foliar coverage 
+#%% plot the foliar coverage
 vv1 = 100*(v1 *3+ max(crop_data["f_c"][:-1]))/4
 
 fig_1, ax_1 = plt.subplots()
 
 fig_1.set_size_inches(fig_size)
 for idx, item in enumerate(t[:-1]):
-    a, b = (t[idx], t[idx+1]) 
+    a, b = (t[idx], t[idx+1])
     ax_1.fill_between(simu_time[a:b], np.zeros_like(simu_time[a:b]), 100*v1*np.ones_like(simu_time[a:b]), alpha = .2,
                         color = colors[idx])
 
@@ -116,11 +116,11 @@ first_point_profile_1 = next((i for i in range(late_stage_start, late_stage_end)
 first_point_profile_2 = next((i for i in range(late_stage_start, late_stage_end) if crop_data_2["f_c"][i] <= 0.2), simu_time2[-1])
 
 # Add arrows pointing to the first points reaching 0.2 in the late stage
-ax_1.annotate("Senescence", xy=(first_point_profile_1, 100 * crop_data["f_c"][first_point_profile_1]), 
+ax_1.annotate("Senescence", xy=(first_point_profile_1, 100 * crop_data["f_c"][first_point_profile_1]),
               xytext=(first_point_profile_1 - 15, 100 * crop_data["f_c"][first_point_profile_1] - 10),
               arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=10)
 
-ax_1.annotate("Senescence", xy=(first_point_profile_2, 100 * crop_data_2["f_c"][first_point_profile_2]), 
+ax_1.annotate("Senescence", xy=(first_point_profile_2, 100 * crop_data_2["f_c"][first_point_profile_2]),
               xytext=(first_point_profile_2 - 15, 100 * crop_data_2["f_c"][first_point_profile_2] - 10),
               arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=10)
 ax_1.set_ylim(0, 100*v1)
@@ -160,7 +160,7 @@ ax.set_title("Root depth evolution")
 layers_depth = np.array([0, .15, .35, .55, .75, .95])
 layers_name = ["Evp Layer", "Layer 4", "Layer 3", "Layer 2", "Layer 1"]
 for idx, item in enumerate(layers_depth[:-1]):
-    ax.fill_between(simu_time, layers_depth[idx] + margin, layers_depth[idx+1], alpha  =.15, label = layers_name[idx])   
+    ax.fill_between(simu_time, layers_depth[idx] + margin, layers_depth[idx+1], alpha  =.15, label = layers_name[idx])
     #ax.text(t[0]/2, (layers_depth[idx] + layers_depth[idx+1])/2, layers_name[idx], ha = "center", va = "center")
     ax.vlines(t[idx], 0, layers_depth[-1], color=color, linestyles="--")
 
@@ -175,7 +175,7 @@ ax.set_ylim(None, -0.02)
 fig.tight_layout()
 fig.savefig(plots_path + "root_depth.png", dpi=300)
 
-#%% 
+#%%
 
 v0 = -.95
 v1 = .9
@@ -225,7 +225,7 @@ fig.savefig(plots_path + "coverage.png", dpi=300)
 #plt.plot(crop_data[:,-3], label=r"$K_r$")
 #plt.plot(crop_data[:,-4], label=r"$K_e$")
 plt.plot(crop_data["K_s"], label=r"$K_s$")
-fig = plt.gcf() 
+fig = plt.gcf()
 fig.set_size_inches(6,3)
 plt.xlabel("Time since plantation [days]")
 plt.legend()
@@ -238,7 +238,7 @@ plt.show()
 plt.plot(crop_data["ET_p"], label= r"$ET_p$")
 plt.plot(crop_data["ET_0"], label= r"$ET_0$")
 plt.plot(crop_data["ET_a"], label= r"$ET_a$")
-fig = plt.gcf() 
+fig = plt.gcf()
 fig.set_size_inches(7,3)
 plt.legend()
 plt.xlabel("Days since plantation")
@@ -269,7 +269,7 @@ plt.text(t[1]/2, 0.1, 'Evaporation', color='tab:blue', ha='center')
 plt.text((t[2]+t[3])/2, (crop_evp[(t[2]+t[3])//2] + evaporation[(t[2]+t[3])//2]) / 2, 'Transpiration', color='green', ha='center')
 
 
-fig = plt.gcf() 
+fig = plt.gcf()
 fig.set_size_inches(fig_size)
 plt.legend()
 plt.xlabel("Time since plantation (days)")
@@ -290,7 +290,7 @@ plt.plot(soil_moisture["layer_3_0"], label="Layer 4")
 plt.plot(soil_moisture["layer_2_0"], label="Layer 3")
 plt.plot(soil_moisture["layer_1_0"], label="Layer 2")
 plt.plot(soil_moisture["layer_0_0"], label="Layer 1")
- 
+
 theta_wp = cultivate_env.crops[0].soil.evp_layer.theta_wp
 theta_fc = cultivate_env.crops[0].soil.evp_layer.theta_fc
 theta_sat = cultivate_env.crops[0].soil.evp_layer.theta_sat
@@ -375,7 +375,7 @@ plt.show()
 #%%
 
 plt.step(simu_time, actions[1:]*1000)
-fig = plt.gcf() 
+fig = plt.gcf()
 fig.set_size_inches(7.5, 3)
 plt.ylabel("Irrigated water [mm]")
 plt.xlabel("Day since plantation")
@@ -408,7 +408,7 @@ def gen_ideal_curves(crop:dict) -> tuple[np.ndarray, np.ndarray]:
     for i in range(1, t[-1]):
         if i <= t[1]:
             root_depth[i] = min_depth
-            f_c[i] = f_c_min1 
+            f_c[i] = f_c_min1
         elif i <= t[2]:
             root_depth[i] = min_depth + (max_depth - min_depth) * (i - t[1]) / (t[2] - t[1])
             f_c[i] = f_c_min1 + (f_c_max - f_c_min1) * (i - t[1]) / (t[2] - t[1])
@@ -419,7 +419,7 @@ def gen_ideal_curves(crop:dict) -> tuple[np.ndarray, np.ndarray]:
             root_depth[i] = max_depth
             f_c[i] = f_c_max + (f_c_min2 - f_c_max) * (i - t[3]) / (t[4] - t[3])
     return root_depth, f_c
-        
+
 
 #%%
 root_depth, f_c = gen_ideal_curves(potato)

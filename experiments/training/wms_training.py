@@ -21,7 +21,7 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 from environments.WMS_env import CultivateEnv, NormalizedWMS, EvalWMS, TestWMS
 from pathlib import Path
 
-action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(1), sigma= .075*np.ones(1)) 
+action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(1), sigma= .075*np.ones(1))
 
 def create_wrapped_env(log_file=None, weights=None):
     if weights is not None:
@@ -44,9 +44,9 @@ def create_eval_env(log_file=None, weights=None):
 
 # Create the vectorized environment
 def create_callback(alg_name, environment):
-    return EvalCallback(environment, 
+    return EvalCallback(environment,
                         best_model_save_path=f'{path}{alg_name}',
-                        log_path=f'{path}{alg_name}', 
+                        log_path=f'{path}{alg_name}',
                         eval_freq=episode_length*2,
                         deterministic=True, render=False)
 
@@ -67,8 +67,8 @@ set_of_weights = np.array([[1., 2., 1.],
                            [1., 1.25, 1.],
                             [1., 1., 1.],
                            [1., 1., 1.25],
-                           [1., 1., 1.50], 
-                           [1., 1., 1.75], 
+                           [1., 1., 1.50],
+                           [1., 1., 1.75],
                            [1., 1., 2.]])
 
 indexes = [0,1,2,3,4,5,6,7,8]
@@ -77,7 +77,7 @@ weights_dict = {index: set_of_weights[index] for index in indexes}
 
 #%%
 train = False
-if train: 
+if train:
     for idx, weights in zip(indexes, set_of_weights):
 
         path = f"logs/wms/weights__{idx}/"
@@ -86,17 +86,17 @@ if train:
 
         vec_envs = [make_vec_env(lambda: create_wrapped_env(weights=weights), n_envs=n_envs) for _ in alg_names]
         eval_envs = [create_eval_env(f"{path}{name}/{name}_monitor.csv", weights=weights) for name in alg_names]
-        
-        td3_model: BaseAlgorithm = TD3("MlpPolicy", vec_envs[0], action_noise=action_noise, 
-                                        verbose=1, batch_size=episode_length*5, train_freq=2, 
+
+        td3_model: BaseAlgorithm = TD3("MlpPolicy", vec_envs[0], action_noise=action_noise,
+                                        verbose=1, batch_size=episode_length*5, train_freq=2,
                                         gradient_steps=2)
-        
-        sac_model: BaseAlgorithm = SAC("MlpPolicy", vec_envs[1], 
-                                        verbose=1, batch_size=episode_length*5, train_freq=2, 
+
+        sac_model: BaseAlgorithm = SAC("MlpPolicy", vec_envs[1],
+                                        verbose=1, batch_size=episode_length*5, train_freq=2,
                                         gradient_steps=2)
-        
+
         models:list[BaseAlgorithm] = [td3_model, sac_model]
-        
+
         training_times = []
         for model, name, eval_env in zip(models, alg_names, eval_envs):
             start_time = time.time()
@@ -107,15 +107,15 @@ if train:
             print(f"Training {name} took {end_time - start_time} seconds")
 
         ### ppo training
-        ppo_env = NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights)  
-        ppo_train(ppo_env, 
+        ppo_env = NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights)
+        ppo_train(ppo_env,
                   max_training_timesteps=40_000,
                   update_freq=144*2,
                   eval_freq=144*2,
                   log_path=path+"ppo",
                   eval_env= EvalWMS(NormalizedWMS(CultivateEnv(), days_ahead=1, reward_weigths=weights)),
                   n_epochs=5)
-        
+
         break
 #%%  Compute statistics for the trained models
 
@@ -159,7 +159,7 @@ for index, folder in enumerate(folders):
             done = terminated or truncated
             observations.append(obs)
             rewards.append(reward)
-        
+
         observations = np.array(observations)
         actions = np.array(actions)
         total_water = np.sum(actions)
@@ -199,7 +199,7 @@ def to_latex_table(weight_labels, alg_names, alg_yields, alg_water_usage, min_in
         if highlight and bold:
             return r"\cellcolor{lightgray}\textbf{" + content + "}"
         elif highlight:
-            return r"\cellcolor{lightgray}" +  content 
+            return r"\cellcolor{lightgray}" +  content
         elif bold:
             return r"\textbf{" + content
         else:
@@ -252,7 +252,7 @@ for index, folder in enumerate(folders):
             ax.plot(data["timestep"], data["reward"], label=alg_name.upper())
             ax.fill_between(data["timestep"], data["reward"] - data["std"], data["reward"] + data["std"], alpha=0.2)
         else:
-            data = np.load(f"{path}{alg_name}/evaluations.npz") 
+            data = np.load(f"{path}{alg_name}/evaluations.npz")
             avg_rews = data["results"].mean(axis=1)
             std_rews = data["results"].std(axis=1)
             ax.plot(data["timesteps"], avg_rews, label=alg_name.upper())

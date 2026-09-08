@@ -6,6 +6,7 @@ from environments.WMS_policies import MPCIrrigationPolicy, RLIrrigationPolicy, R
 import numpy as np
 from copy import deepcopy
 from stable_baselines3 import SAC, TD3, PPO
+
 import pandas as pd
 from matplotlib import pyplot as plt
 import os
@@ -35,6 +36,7 @@ seed = 42
 policy_names = ["RL-Based", "MPC-Based", "Rule-Based"]
 policies: list[IrrigationPolicy] = [rl_policy, mpc_policy, rb_policy]
 run = False
+index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
 if run:
     for idx, policy in enumerate(policies):
         index = int(weather_data.loc[(weather_data["year"] == year) & (weather_data["doy"] == doy)].index.values[0])
@@ -68,59 +70,59 @@ if run:
         if idx == 1:
             break
 
-#%% define cost functions 
+#%% define cost functions
 
-def mpc_rew(s:np.ndarray, a:np.ndarray, s_next:np.ndarray, 
+def mpc_rew(s:np.ndarray, a:np.ndarray, s_next:np.ndarray,
             weights: np.ndarray = np.array([1.0, 1.0, 1.0])):
-    
+
     lambda_1 = weights[1]
     lambda_2 = weights[2]
 
     Ky = s_next[10]
     Ks = s_next[7]
     yield_r = 1 - (1 - Ky) * (1 - Ks)
-    delta_yield = np.min((0, Ks - s[7])) 
+    delta_yield = np.min((0, Ks - s[7]))
     water_usage = np.sum(a)
     total_cost = yield_r**2 - lambda_1 * delta_yield**2 - lambda_2 * water_usage**2
     return total_cost
-def rl_rew(s:np.ndarray, a:np.ndarray, s_next:np.ndarray, 
+def rl_rew(s:np.ndarray, a:np.ndarray, s_next:np.ndarray,
            weights: np.ndarray = np.array([1.0, 1.0, 1.0])):
-    
+
     lambda_1 = weights[1]
     lambda_2 = weights[2]
 
     Ky = s_next[10]
     Ks = s_next[7]
     yield_r = 1 - (1 - Ky) * (1 - Ks)
-    delta_yield = np.clip(Ks - s[7], -np.inf, 0) 
+    delta_yield = np.clip(Ks - s[7], -np.inf, 0)
     water_usage = np.sum(a)
     total_cost =  yield_r + lambda_1 * delta_yield - lambda_2 * water_usage
     return total_cost
 
-def mpc_rew2(s:np.ndarray, a:np.ndarray, s_next:np.ndarray, 
+def mpc_rew2(s:np.ndarray, a:np.ndarray, s_next:np.ndarray,
             weights: np.ndarray = np.array([1.0, 1.0, 1.0])):
-    
+
     lambda_1 = weights[1]
     lambda_2 = weights[2]
 
     Ky = s_next[:, 10]
     Ks = s_next[:, 7]
     yield_r = np.sum((1 - (1 - Ky) * (1 - Ks))**2)
-    delta_yield = lambda_1 * np.sum(np.clip(Ks - s[:, 7], -np.inf, 0)**2) 
+    delta_yield = lambda_1 * np.sum(np.clip(Ks - s[:, 7], -np.inf, 0)**2)
     water_usage = lambda_2 * np.sum(a)
     total_cost = yield_r - delta_yield - water_usage
     return total_cost, (yield_r, delta_yield, water_usage)
 
-def rl_rew2(s:np.ndarray, a:np.ndarray, s_next:np.ndarray, 
+def rl_rew2(s:np.ndarray, a:np.ndarray, s_next:np.ndarray,
            weights: np.ndarray = np.array([1.0, 1.0, 1.0])):
-    
+
     lambda_1 = weights[1]
     lambda_2 = weights[2]
 
     Ky = s_next[:, 10]
     Ks = s_next[:, 7]
     yield_r = np.sum((1 - (1 - Ky) * (1 - Ks)))
-    delta_yield = lambda_1 * np.sum(np.clip(Ks - s[:, 7], -np.inf, 0)) 
+    delta_yield = lambda_1 * np.sum(np.clip(Ks - s[:, 7], -np.inf, 0))
     water_usage = lambda_2 * np.sum(a)
     total_cost = yield_r + delta_yield - water_usage
     return total_cost, (yield_r, delta_yield, water_usage)
@@ -131,7 +133,7 @@ water_usages = []
 mpc_rews = []
 rl_rews = []
 
-preps = weather_data.iloc[index:index+85]["precipitation"].values 
+preps = weather_data.iloc[index:index+85]["precipitation"].values
 tt = np.arange(0,85, 1)
 fig, axs = plt.subplots(2,1, gridspec_kw={'height_ratios': [2, 1]}, figsize = (7,3.5))
 colors = ["tab:orange", "tab:green", "tab:purple"]
@@ -148,9 +150,9 @@ for idx, name in enumerate(policy_names):
     print(a)
     print(b)
     water_usage = np.sum(actions)
-    water_usages.append(water_usage*1000) 
+    water_usages.append(water_usage*1000)
     print(f"Total water for {name} is {water_usage} m3")
-    print(f"Relative yield for {name} is {ry}")  
+    print(f"Relative yield for {name} is {ry}")
 
     mpc_cum_rew = a
     rl_cum_rew = rl_rew2(observations[:-1,:], actions, observations[1:,:], weights=reward_weights)[0]
@@ -167,8 +169,8 @@ for idx, name in enumerate(policy_names):
     axs[0].set_ylim(0,11)
     axs[0].legend()
     #axs[idx+1].legend()
-    
-    
+
+
     print(f"{policy_names[idx]} Total MPC Rewards :", mpc_cum_rew)
     print(f"{policy_names[idx]} Total RL Rewards :", rl_cum_rew)
     print(".................")
@@ -177,10 +179,11 @@ for idx, name in enumerate(policy_names):
 axs[1].step(tt, observations[:-1,8]>=3, color = "black")
 axs[1].set_title("Water stress indicator $t^{stress}$")
 axs[1].set_ylabel("Activation", fontsize = 12)
+fig.set_size_inches((6,4))
 for ax in axs:
     ax.grid(which = "both")
 fig.tight_layout()
-fig.savefig("Irrigation_rl.png", dpi = 300)
+fig.savefig("simu_results/figures/Irrigation_rl.png", dpi = 300)
 
 #    fig, ax = plt.subplots(figsize=(8, 4))
 #    ax.plot(soil_data["layer_0_0"])
@@ -240,6 +243,7 @@ with open("simu_results/wf_ms/wms_comparison_table.tex", "w") as f:
 
 
 #%%
+
 fig, ax1 = plt.subplots(figsize=(7, 3.5))
 
 # Bar width
@@ -280,4 +284,47 @@ plt.tight_layout()
 plt.savefig("simu_results/wms_comparison.png", dpi=300)
 plt.show()
 
-# %%  
+# %%
+#%%
+# %%
+fig, ax1 = plt.subplots(figsize=(5, 3))
+
+# Bar width
+bar_width = 0.35
+
+# Indices for the bars (only MPC and RL)
+indices = np.arange(2)
+policy_names_filtered = policy_names[:2]
+water_usages_filtered = water_usages[:2]
+relative_yields_filtered = relative_yields[:2]
+
+# Plot water usage
+water_bars = ax1.bar(indices - bar_width/2, water_usages_filtered, bar_width, label='Water Usage', color='b', alpha=0.7)
+ax1.set_ylabel('Water Usage (m³)', color='b', fontsize=12)
+ax1.tick_params(axis='y', labelcolor='b')
+ax1.set_xticks(indices)
+ax1.set_xticklabels(policy_names_filtered)
+
+# Add values on top of water usage bars
+for bar in water_bars:
+    height = bar.get_height()
+    ax1.text(bar.get_x() + bar.get_width()/2.0, height, f'{height:.1f}', ha='center', va='bottom', color='b')
+
+ax1.set_ylim(400, max(water_usages_filtered) * 1.05)
+
+# Create a second y-axis for relative yield
+ax2 = ax1.twinx()
+yield_bars = ax2.bar(indices + bar_width/2, [ry * 100 for ry in relative_yields_filtered], bar_width, label='Relative Yield', color='g', alpha=0.7)
+ax2.set_ylabel('Relative Yield (\%)', color='g', fontsize=12)
+ax2.tick_params(axis='y', labelcolor='g')
+
+# Add values on top of relative yield bars
+for bar in yield_bars:
+    height = bar.get_height()
+    ax2.text(bar.get_x() + bar.get_width()/2.0, height, f'{height:.1f}%', ha='center', va='bottom', color='g')
+
+ax2.set_ylim(80, max(relative_yields_filtered) * 100 * 1.05)
+
+plt.tight_layout()
+plt.savefig("simu_results/wms_comparison_mpc_rl.png", dpi=300)
+plt.show()

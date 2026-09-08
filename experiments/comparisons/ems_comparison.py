@@ -20,8 +20,8 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 year = 2017
 
-irrigation_policy = RLIrrigationPolicy(n_crops=1, 
-                                       rl_policy=SAC.load("logs/wms/weights_5/sac/best_model.zip"), 
+irrigation_policy = RLIrrigationPolicy(n_crops=1,
+                                       rl_policy=SAC.load("logs/wms/weights_5/sac/best_model.zip"),
                                        year=year)
 
 seed = 42
@@ -31,8 +31,8 @@ set_of_weights = np.array([[1., 4.0, 1.],
                            [1., 1., 1.],
                            [1., 1., 2.],
                            [1., 1., 3.],
-                           [1., 1., 4.], 
-                           [1., 2., 2.], 
+                           [1., 1., 4.],
+                           [1., 2., 2.],
                            [1., 4., 4.]])
 #%%
 run = False
@@ -48,13 +48,13 @@ if run:
         agents = [sac_agent, td3_agent, ppo_agent]
 
         for jdex, name, agent in zip([0, 1, 2], ["sac", "td3", "ppo"], agents):
-            simu_env = SimuEnv(irrigation_policy=irrigation_policy, 
+            simu_env = SimuEnv(irrigation_policy=irrigation_policy,
                             ems_policy=agent,
                             year=year, seed=seed)
             p_day = simu_env.cultivate_env.crops[0].plantation_day
             simu_env.run(init_doy=p_day, total_days=115-30)
 
-            mg_data, crop_data, soil_data = simu_env.get_simu_data()    
+            mg_data, crop_data, soil_data = simu_env.get_simu_data()
             with open(path + f"{name}/" f"simu_data.pkl", "wb") as f:
                 pickle.dump({
                     "mg_data": mg_data,
@@ -67,19 +67,19 @@ if run:
             errors = v_reqs - mg_obs_144[:, 1]  # water requirements vs actual water usage
             smape = np.abs(errors)*2 / (np.abs(v_reqs) + np.abs(mg_obs_144[:, 1]) + 1e-6)
             stats[jdex, idx, 0] = np.mean(smape)*100 # in percentage
-            stats[jdex, idx, 1] = np.sum(np.clip(mg_obs[:,5], -np.inf, 0)) 
-    np.save("logs/ems/stats.npy", stats) 
+            stats[jdex, idx, 1] = np.sum(np.clip(mg_obs[:,5], -np.inf, 0))
+    np.save("logs/ems/stats.npy", stats)
 # %%
 stats = np.zeros((3, len(set_of_weights), 2))
 for idx, weights in enumerate(set_of_weights):
     path = f"logs/ems/weights_{idx}/"
     for jdex, name in zip([0, 1, 2], ["sac", "td3", "ppo"]):
-            
+
             simu_data = pickle.load(open(path + f"{name}/" + f"simu_data.pkl", "rb"))
             mg_data = simu_data["mg_data"]
             crop_data = simu_data["crop_data"]
             soil_data = simu_data["soil_data"]
-            
+
             mg_obs = mg_data["mg_obs"]
             mg_obs_144 = mg_data["end_of_day_samples"]
             v_reqs = crop_data["v_reqs"]
@@ -129,7 +129,7 @@ with open("logs/ems/table.tex", "w") as f:
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # Plot SMAPE error heatmap
-    sns.heatmap(error_matrix, annot=True, fmt=".2f", cmap="YlGnBu", 
+    sns.heatmap(error_matrix, annot=True, fmt=".2f", cmap="YlGnBu",
                 xticklabels=[f"{w[1]:.1f}/{w[2]:.1f}" for w in set_of_weights],
                 yticklabels=algorithms, ax=axes[0], cbar_kws={'label': 'SMAPE (%)'})
     axes[0].set_title("SMAPE Error (%)")
@@ -137,7 +137,7 @@ with open("logs/ems/table.tex", "w") as f:
     axes[0].set_ylabel("Algorithm")
 
     # Plot Energy heatmap
-    sns.heatmap(energy_matrix, annot=True, fmt=".0f", cmap="YlOrRd", 
+    sns.heatmap(energy_matrix, annot=True, fmt=".0f", cmap="YlOrRd",
                 xticklabels=[f"{w[1]:.1f}/{w[2]:.1f}" for w in set_of_weights],
                 yticklabels=algorithms, ax=axes[1], cbar_kws={'label': 'Energy (kWh)'})
     axes[1].set_title("Bought Energy (kWh)")
@@ -158,10 +158,11 @@ if plot_training_curves:
     stats = np.zeros((3, len(set_of_weights), 2))  # [n agents, n weights, n metrics]
     for idx, weights in enumerate(set_of_weights):
         path = f"logs/ems/weights_{idx}/"
-        
+
         for jdex, name in zip([0, 1, 2], ["sac", "td3", "ppo"]):
             data = np.load(path + name + "/evaluations.npz")
             results = np.mean(data["results"], axis=1)
-            
+
             axs[idx].plot(results)
-        
+
+# %%

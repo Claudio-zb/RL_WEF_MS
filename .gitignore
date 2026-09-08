@@ -8,3 +8,15 @@ training_results/ems/*
 training_results/quad-sys/*
 proando.ipynb
 report.log
+
+# Local environment and generated runs
+.DS_Store
+.venv/
+.env
+.env.*
+!.env.example
+*.py[cod]
+outputs/
+*.egg-info/
+.pytest_cache/
+report.log
