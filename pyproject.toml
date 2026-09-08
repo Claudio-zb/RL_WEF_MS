@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rl-ems-research"
+name = "rl-wef-ms"
 version = "0.1.0"
-description = "Forecasting and control of a water-energy-food microgrid"
+description = "RL_WEF_MS: reinforcement learning, forecasting and control for water-energy-food management"
 requires-python = ">=3.12"
 dynamic = ["dependencies"]
 
@@ -14,3 +14,7 @@ dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.packages.find]
 include = ["rl_ems*", "environments*", "predictive_models*", "RL_algorithms*", "utils_functions*"]
+
+[project.urls]
+Repository = "https://github.com/Claudio-zb/RL_WEF_MS"
+Documentation = "https://github.com/Claudio-zb/RL_WEF_MS#readme"

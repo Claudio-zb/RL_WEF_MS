@@ -1,4 +1,6 @@
-# Intelligent control of a water–energy–food microgrid
+# RL_WEF_MS
+
+**Reinforcement Learning for Water–Energy–Food Management Systems**
 
 **How can irrigation, solar generation and energy storage work together?**
 This research project models their interaction and compares reinforcement learning (RL), model predictive control (MPC) and rule-based operation.
@@ -39,13 +41,16 @@ The repository includes SAC, TD3 and PPO experiments, custom RL implementations,
 
 ## Quick start
 
+For platform-specific instructions and troubleshooting, see the [installation guide](docs/installation.md).
+
 Use Python 3.12 and run these commands from the repository root:
 
 ```bash
-git clone https://github.com/Claudio-zb/RL_EMS.git
-cd RL_EMS
+git clone https://github.com/Claudio-zb/RL_WEF_MS.git
+cd RL_WEF_MS
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
 # Two-day simulation with scheduled irrigation and rule-based pumping
